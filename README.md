@@ -45,7 +45,7 @@ Das Monitoring besteht aus drei Bausteinen:
 
 ## ⚙️ So ist das System aufgebaut
 
-```scss
+```plain
 +-------------------+
 |  MediaMTX-Server  |
 |  (streaming API)  |
