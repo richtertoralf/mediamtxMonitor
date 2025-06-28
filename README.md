@@ -18,13 +18,12 @@ Die Lösung besteht aus einem robusten Backend, das Daten sammelt und persistent
 
 Die Lösung ist modular aufgebaut und gliedert sich in folgende Hauptkomponenten:
 
-```mermaid
-graph TD
+```graph TD
     subgraph MediaMTX Server
         MMT[MediaMTX Instance]
     end
 
-    subgraph Monitoring Backend (Dedicated Server/VM)
+    subgraph "Monitoring Backend (Dedicated Server/VM)"
         A[Python Data Collector (APScheduler)] --> B(Requests: MediaMTX API)
         B --> C{Data Aggregation & Processing}
         C --> D[Redis: Store Latest (mediamtx:streams:latest)]
@@ -36,16 +35,17 @@ graph TD
         G -- REST API (historical data) --> E
     end
 
-    subgraph Clients (Web Browsers)
+    subgraph "Clients (Web Browsers)"
         H[HTML/CSS/JS Frontend] -- Initial Data (HTTP GET) --> G
         H -- Realtime Updates (WebSocket) --> G
         H -- Historical Data (HTTP GET) --> G
     end
 
-    subgraph Future: Agent on MediaMTX Host
+    subgraph "Future: Agent on MediaMTX Host"
         I[Python Agent (psutil)] --> E
     end
 
     style D fill:#f9f,stroke:#333,stroke-width:2px
     style E fill:#f9f,stroke:#333,stroke-width:2px
     style F fill:#f9f,stroke:#333,stroke-width:2px
+```
