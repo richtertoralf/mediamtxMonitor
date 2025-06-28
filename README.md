@@ -99,11 +99,11 @@ graph TD
     style E fill:#f9f,stroke:#333,stroke-width:2px
     style F fill:#f9f,stroke:#333,stroke-width:2px
 ```
+### Ablauf auf einen Blick:
 
-
-- Das **Backend** sammelt die Daten.
-- Es speichert sie in Redis und informiert alle Clients per WebSocket.
-- Die **Clients** verbinden sich nur mit dem Backend und zeigen die Daten an.
+Das **Backend** holt die Daten → speichert sie in Redis → sendet Updates per WebSocket an alle Clients.
+Die **Clients** müssen nur das Backend kennen – nicht MediaMTX selbst.
+Das entlastet den MediaMTX-Server und sichert ihn gleichzeitig ab.
 
 ---
 
@@ -120,48 +120,52 @@ graph TD
 
 ---
 
-## 🚀 Geplante Entwicklungsschritte
+## 🚀 Entwicklung in Phasen
 
-1️⃣ **Basis-Backend**  
-   - Holt aktuelle Daten vom MediaMTX-Server.
-   - Speichert sie in Redis.
+1️⃣ **Phase 1 – Basis-Backend**  
+   - Holt aktuelle Daten und speichert sie in Redis.
+   - Schickt Benachrichtigungen über Pub/Sub.
 
-2️⃣ **WebSocket-Backend + Frontend**  
-   - Erstellt ein Dashboard im Browser.
-   - Stellt eine WebSocket-Verbindung her, um aktuelle Daten in Echtzeit anzuzeigen.
+2️⃣ **Phase 2 – WebSocket & Frontend**  
+   - WebSocket-Server und HTML/JS-Dashboard für Live-Anzeige.
 
-3️⃣ **Historische Daten**  
-   - Speichert historische Metriken in Redis Streams.
-   - Zeigt den Verlauf (z. B. RTT oder Bandbreite) im Frontend als Diagramm an.
+3️⃣ **Phase 3 – Historische Daten**  
+   - Speicherung und Abruf von Zeitreihen aus Redis Streams.
+   - Frontend-Visualisierung mit Diagrammen.
 
-4️⃣ **Server-Metriken (später)**  
-   - Ein kleiner Agent auf dem MediaMTX-Host erfasst CPU-, RAM- und Netzwerk-Auslastung.
-   - Diese Daten werden im Dashboard angezeigt.
+4️⃣ **Phase 4 – Server-Metriken-Agent (optional)**  
+   - Kleiner Python-Agent überwacht CPU, RAM und Netzwerk auf dem MediaMTX-Host.
+   - Anzeige der Metriken im Dashboard.
 
 ---
+## 🔧 Komponenten im Detail
 
-## Komponenten im Detail:
+### MediaMTX Server
+- Stellt die API-Endpunkte `/v3/paths/list` und `/v3/srtconns/list` bereit.
+- Muss nicht öffentlich erreichbar sein, wenn das Backend auf demselben Netzwerk läuft.
 
-* **MediaMTX Server:** Die zu überwachende MediaMTX-Instanz. Sie stellt lediglich ihre `v3/paths/list` und `v3/srtconns/list` API-Endpunkte bereit.
+### Monitoring Backend
+- **Python Data Collector (APScheduler):**
+  - Fragt MediaMTX alle 2 Sekunden ab.
+  - Aggregiert und speichert die Daten in Redis.
+- **Redis:**
+  - Speichert aktuelle Daten (`mediamtx:streams:latest`).
+  - Hält historische Daten in **Redis Streams**.
+  - Benutzt **Pub/Sub**, um Clients bei neuen Daten zu informieren.
+- **Python Web Server (FastAPI/Flask):**
+  - Bietet REST-API-Endpunkte.
+  - Stellt einen WebSocket-Server bereit.
+  - Verteilt Echtzeit-Updates und historische Daten an die Clients.
 
-* **Monitoring Backend:**
-    * **Python Data Collector:** Ein Python-Skript, das mittels **[APScheduler](https://apscheduler.readthedocs.io/)** alle 2 Sekunden die MediaMTX-API abfragt. Es aggregiert die Daten und speichert den aktuellen Zustand sowie relevante historische Datenpunkte in Redis.
-    * **Redis:** Dient als Hochleistungs-Datenspeicher.
-        * Speichert den **neuesten aggregierten Zustand** für schnelle Zugriffe (`mediamtx:streams:latest`).
-        * Nutzt **[Redis Streams](https://redis.io/docs/data-types/streams/)** zur effizienten Speicherung von Zeitreihendaten für historische Analysen (z.B. RTT-Verlauf, Bandbreitennutzung).
-        * Verwendet das **[Pub/Sub-Muster](https://redis.io/docs/manual/pubsub/)**, um angeschlossene Clients über neue Daten zu informieren.
-    * **Python Web Server ([FastAPI](https://fastapi.tiangolo.com/) oder [Flask](https://flask.palletsprojects.com/)):** Stellt die Web-Oberfläche und API-Endpunkte bereit.
-        * Bietet einen **REST-API-Endpunkt** für den initialen Abruf der aktuellen Daten durch die Clients.
-        * Implementiert einen **WebSocket-Server**, der sich bei Redis Pub/Sub anmeldet und bei Datenaktualisierungen die neuesten Informationen an alle verbundenen Web-Clients pusht.
-        * Stellt **REST-API-Endpunkte** für den Abruf historischer Daten aus Redis Streams bereit.
+### Clients (Web Browser)
+- HTML/JS-Frontend mit WebSocket-Anbindung.
+- Holt initiale Daten über HTTP.
+- Visualisiert aktuelle und historische Daten (z. B. mit Chart.js).
 
-* **Clients (Web Browser):**
-    * Ein schlankes Frontend, entwickelt mit **HTML, CSS und JavaScript**.
-    * Ruft initial die aktuellen Daten über HTTP ab.
-    * Establishiert eine **WebSocket-Verbindung** für Echtzeit-Updates.
-    * Kann historische Daten über weitere HTTP-Anfragen abrufen und in Diagrammen oder Tabellen visualisieren (ggf. mit Bibliotheken wie **[Chart.js](https://www.chartjs.org/)**).
-
-* **Zukünftiger Agent auf MediaMTX Host:** Ein optionaler, sehr leichtgewichtiger Python-Agent (z.B. basierend auf **[psutil](https://psutil.readthedocs.io/)**), der direkt auf dem MediaMTX-Host läuft und Systemmetriken (CPU, RAM, Netzwerk I/O) erfasst und diese ebenfalls in Redis Streams im Backend speichert.
+### Optional: Agent auf dem MediaMTX-Host
+- Kleines Python-Skript mit **psutil**.
+- Erfasst CPU, RAM und Netzwerk.
+- Schickt die Daten an Redis für die Anzeige im Dashboard.
 
 ---
 
@@ -186,6 +190,8 @@ graph TD
 
 ---
 
-## Erste Schritte (für Entwickler)
+## 🚦 Erste Schritte (für Entwickler)
 
-Detaillierte Anleitungen zur Installation der Abhängigkeiten und zum Start der verschiedenen Komponenten (Backend, Redis, Frontend) werden in Kürze hier hinzugefügt.
+Die detaillierte Anleitung zur Installation, Einrichtung und zum Starten von Backend, Redis und Frontend folgt bald hier.  
+Bleib dran – dieses Projekt wächst ständig weiter! 🚀
+
