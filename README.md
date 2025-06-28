@@ -18,7 +18,8 @@ Die Lösung besteht aus einem robusten Backend, das Daten sammelt und persistent
 
 Die Lösung ist modular aufgebaut und gliedert sich in folgende Hauptkomponenten:
 
-```graph TD
+```mermaid
+graph TD
     subgraph MediaMTX Server
         MMT[MediaMTX Instance]
     end
