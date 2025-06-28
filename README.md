@@ -20,33 +20,33 @@ Die Lösung ist modular aufgebaut und gliedert sich in folgende Hauptkomponenten
 
 ```mermaid
 graph TD
-    subgraph MediaMTX Server
-        MMT[MediaMTX Instance]
+    subgraph "MediaMTX Server"
+        MMT["MediaMTX Instance"]
     end
 
     subgraph "Monitoring Backend (Dedicated Server/VM)"
-        A[Python Data Collector (APScheduler)] --> B(Requests: MediaMTX API)
-        B --> C{Data Aggregation & Processing}
-        C --> D[Redis: Store Latest (mediamtx:streams:latest)]
-        C --> E[Redis Streams: Store History (mediamtx:history:*)]
-        D --> F[Redis: Pub/Sub (mediamtx:updates)]
+        A["Python Data Collector (APScheduler)"] --> B("Requests: MediaMTX API")
+        B --> C{"Data Aggregation & Processing"}
+        C --> D["Redis: Store Latest (mediamtx:streams:latest)"]
+        C --> E["Redis Streams: Store History (mediamtx:history:*)"]
+        D --> F["Redis: Pub/Sub (mediamtx:updates)"]
 
-        G[Python Web Server (FastAPI/Flask)] -- REST API (initial data) --> D
-        G -- WebSocket Server --> F
-        G -- REST API (historical data) --> E
+        G["Python Web Server (FastAPI/Flask)"] -- "REST API (initial data)" --> D
+        G -- "WebSocket Server" --> F
+        G -- "REST API (historical data)" --> E
     end
 
     subgraph "Clients (Web Browsers)"
-        H[HTML/CSS/JS Frontend] -- Initial Data (HTTP GET) --> G
-        H -- Realtime Updates (WebSocket) --> G
-        H -- Historical Data (HTTP GET) --> G
+        H["HTML/CSS/JS Frontend"] -- "Initial Data (HTTP GET)" --> G
+        H -- "Realtime Updates (WebSocket)" --> G
+        H -- "Historical Data (HTTP GET)" --> G
     end
 
     subgraph "Future: Agent on MediaMTX Host"
-        I[Python Agent (psutil)] --> E
+        I["Python Agent (psutil)"] --> E
     end
 
     style D fill:#f9f,stroke:#333,stroke-width:2px
     style E fill:#f9f,stroke:#333,stroke-width:2px
-    style F fill:#f9f,stroke:#333,stroke-width:2px
+    style F fill:#f9f,stroke:#333,stroke-width:2px333,stroke-width:2px
 ```
