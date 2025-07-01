@@ -1,7 +1,37 @@
 # Basis-Backend
 
+```text
++---------------------------+
+|      MediaMTX-Server      |
+|      (streaming API)      |
++------------+--------------+
+             │
+             │  Abfrage der API (alle 2s)
++------------▼--------------+
+|          Backend          |
+|  (Python-Skript + Redis)  |
+|  - Holt MediaMTX-Daten    |
+|  - Aggregiert & speichert |
+|  - Stellt REST/WebSocket  |
+|    für Clients bereit     |
++------------+--------------+
+             │
+             │  Clients rufen REST-API ab
+             │  oder verbinden sich per WebSocket
++------------▼--------------+
+|          Clients          |
+|  (Browser-Dashboard mit   |
+|   HTML/JS Frontend)       |
+|  - Zeigen aktuelle Daten  |
+|  - Empfangen Updates in   |
+|    Echtzeit               |
++---------------------------+
+
+```
+
 ## 🎯 Ziel dieser Phase:
 Ein Python-Skript, das alle 2 Sekunden die MediaMTX-API abfragt, die Daten verarbeitet und in Redis speichert.
+1️⃣ Skript und Redis Direkt testen → 2️⃣ REST/WebSocket entwickeln → 3️⃣ das Backend in Docker packen. -> Fertig :-)
 
 ## Installation als System-User
 
