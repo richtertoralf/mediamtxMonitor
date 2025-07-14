@@ -79,6 +79,7 @@ Ein Python-Skript, das alle 2 Sekunden die MediaMTX-API abfragt, die Daten verar
 
 
 ## ✅ Schritt 1 – Alles ohne Docker testen
+>nochmal im Detail die einzelnen Schritte  
 ### Installation als System-User
 
 1️⃣ System-User anlegen und Redis auf der mediamtx-VM installieren:
