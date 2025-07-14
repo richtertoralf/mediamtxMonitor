@@ -43,6 +43,33 @@
 └── .env                        # Umgebungsvariablen (nicht öffentlich)
 
 ```
+```
+# Systembenutzer anlegen
+sudo useradd -r -s /bin/false mediamtxmon
+
+# Optional (wenn du später eigene Logs oder cron willst):
+sudo mkdir -p /var/log/mediamtxmon
+sudo chown mediamtxmon:mediamtxmon /var/log/mediamtxmon
+
+# Projektstruktur erstellen
+sudo mkdir -p /opt/mediamtx-monitoring-backend/{bin,lib,static,logs} \
+  && sudo touch /opt/mediamtx-monitoring-backend/bin/{mediamtx_collector.py,mediamtx_snapshot.py,mediamtx_api.py,host_metrics_agent.py} \
+  && sudo touch /opt/mediamtx-monitoring-backend/lib/config.py \
+  && sudo touch /opt/mediamtx-monitoring-backend/requirements.txt \
+  && sudo touch /opt/mediamtx-monitoring-backend/.env
+
+# Besitzrechte und Dateizugriffsrechte setzen
+sudo chown -R mediamtxmon:mediamtxmon /opt/mediamtx-monitoring-backend
+sudo chmod +x /opt/mediamtx-monitoring-backend/bin/*.py
+
+# (Optional) virtuelle Umgebung vorbereiten
+sudo -u mediamtxmon python3 -m venv /opt/mediamtx-monitoring-backend/venv
+sudo -u mediamtxmon /opt/mediamtx-monitoring-backend/venv/bin/pip install --upgrade pip
+
+# päter installierst du damit die Abhängigkeiten aus requirements.txt:
+sudo -u mediamtxmon /opt/mediamtx-monitoring-backend/venv/bin/pip install -r /opt/mediamtx-monitoring-backend/requirements.txt
+
+```
 
 ## 🎯 Ziel dieser Phase:
 Ein Python-Skript, das alle 2 Sekunden die MediaMTX-API abfragt, die Daten verarbeitet und in Redis speichert.  
