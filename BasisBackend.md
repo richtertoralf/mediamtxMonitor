@@ -46,7 +46,9 @@
 
 ## 🎯 Ziel dieser Phase:
 Ein Python-Skript, das alle 2 Sekunden die MediaMTX-API abfragt, die Daten verarbeitet und in Redis speichert.
-1️⃣ Skript und Redis Direkt testen → 2️⃣ REST/WebSocket entwickeln → 3️⃣ das Backend in Docker packen. -> Fertig :-)
+1️⃣ Skript und Redis Direkt testen →  
+2️⃣ REST/WebSocket entwickeln →  
+3️⃣ das Backend in Docker packen. -> Fertig :-)
 
 
 ## ✅ Schritt 1 – Alles ohne Docker testen
