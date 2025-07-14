@@ -30,15 +30,17 @@
 ```
 ```
 /opt/mediamtx-monitoring-backend/
-├── bin/                     # Nur ausführbare Hauptskripte
-│   ├── mediamtx_collector.py
-│   └── mediamtx_snapshot.py
-├── lib/                     # Hilfsfunktionen, Module
+├── bin/                        # Nur ausführbare Hauptskripte
+│   ├── mediamtx_collector.py   # Dauerhafte Sammlung und Redis-Speicherung
+│   ├── mediamtx_snapshot.py    # Einmalige Abfrage & Dump → wie ein „Snapshot“
+│   ├── mediamtx_api.py         # REST/WebSocket Backend (Phase 2)
+│   └── host_metrics_agent.py   # (zukünftig) Systemmetriken wie CPU/RAM
+├── lib/                        # Hilfsfunktionen, Module
 │   └── config.py
-├── static/                 # (für später: Web-Frontend, HTML/CSS/JS)
-├── logs/                   # (optional, Logs von Dienst/Daemon)
+├── static/                     # (für später: Web-Frontend, HTML/CSS/JS)
+├── logs/                       # (optional, Logs von Dienst/Daemon)
 ├── requirements.txt
-└── .env                    # Umgebungsvariablen (nicht öffentlich)
+└── .env                        # Umgebungsvariablen (nicht öffentlich)
 
 ```
 
