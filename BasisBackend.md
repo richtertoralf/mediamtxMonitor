@@ -109,76 +109,8 @@ sudo -u mediamtxmon /opt/mediamtx-monitoring-backend/venv/bin/pip install reques
 
 ```
 
-4️⃣ Dein Script collector.py anlegen (z. B. per Editor in /opt/mediamtx-monitoring-backend/mediamtx_collector.py).
-```python
-#!/usr/bin/env python3
+4️⃣ Script mediamtx_collector.py anlegen (in /opt/mediamtx-monitoring-backend/mediamtx_collector.py).
 
-import requests
-import redis
-import json
-import sys
-from apscheduler.schedulers.background import BackgroundScheduler
-import time
-
-MEDIA_MTX_API_URL = "http://localhost:9997"
-REDIS_HOST = "localhost"
-REDIS_PORT = 6379
-REDIS_KEY = "mediamtx:streams:latest"
-
-# Redis-Client aufsetzen
-r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
-
-def fetch_and_store():
-    try:
-        paths = requests.get(f"{MEDIA_MTX_API_URL}/v3/paths/list").json()
-        srtconns = requests.get(f"{MEDIA_MTX_API_URL}/v3/srtconns/list").json()
-
-        aggregated = []
-
-        for path in paths.get("items", []):
-            name = path.get("name")
-            source_type = path.get("source", {}).get("type", "unknown")
-            bytes_received = path.get("bytesReceived", 0)
-            readers = len(path.get("readers", []))
-
-            entry = {
-                "name": name,
-                "sourceType": source_type,
-                "bytesReceived": bytes_received,
-                "readers": readers,
-            }
-
-            if source_type == "srtConn":
-                srt_data = next((s for s in srtconns.get("items", []) if s.get("path") == name), None)
-                if srt_data:
-                    entry.update({
-                        "rtt": srt_data.get("msRTT"),
-                        "recvRateMbps": srt_data.get("mbpsReceiveRate"),
-                        "linkCapacityMbps": srt_data.get("mbpsLinkCapacity"),
-                    })
-            aggregated.append(entry)
-
-        # Speichere als JSON-String in Redis
-        r.set(REDIS_KEY, json.dumps(aggregated))
-        print(f"✅ Daten aktualisiert und in Redis gespeichert ({len(aggregated)} Einträge)")
-
-    except Exception as e:
-        print(f"❌ Fehler beim Abrufen oder Speichern: {e}", file=sys.stderr)
-
-if __name__ == "__main__":
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(fetch_and_store, 'interval', seconds=2)
-    scheduler.start()
-
-    print("🔄 Data Collector läuft... (Drücke STRG+C zum Beenden)")
-    try:
-        while True:
-            time.sleep(1)
-    except (KeyboardInterrupt, SystemExit):
-        scheduler.shutdown()
-        print("\n🛑 Data Collector gestoppt.")
-
-```
 
 ### ✅ Systemd-Service anlegen
 So läuft der Collector später sauber und automatisch:
