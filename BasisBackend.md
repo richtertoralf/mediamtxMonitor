@@ -28,6 +28,19 @@
 +---------------------------+
 
 ```
+```
+/opt/mediamtx-monitoring-backend/
+├── bin/                     # Nur ausführbare Hauptskripte
+│   ├── mediamtx_collector.py
+│   └── mediamtx_snapshot.py
+├── lib/                     # Hilfsfunktionen, Module
+│   └── config.py
+├── static/                 # (für später: Web-Frontend, HTML/CSS/JS)
+├── logs/                   # (optional, Logs von Dienst/Daemon)
+├── requirements.txt
+└── .env                    # Umgebungsvariablen (nicht öffentlich)
+
+```
 
 ## 🎯 Ziel dieser Phase:
 Ein Python-Skript, das alle 2 Sekunden die MediaMTX-API abfragt, die Daten verarbeitet und in Redis speichert.
