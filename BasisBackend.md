@@ -65,7 +65,7 @@ sudo -u mediamtxmon /opt/mediamtx-monitoring-backend/venv/bin/pip install reques
 
 ```
 
-4️⃣ Dein Script collector.py anlegen (z. B. per Editor in /opt/mediamtx-monitoring-backend/collector.py).
+4️⃣ Dein Script collector.py anlegen (z. B. per Editor in /opt/mediamtx-monitoring-backend/mediamtx_collector.py).
 ```python
 #!/usr/bin/env python3
 
