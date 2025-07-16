@@ -161,11 +161,13 @@ apscheduler
 ```
 
 ### 🎯 Abschluss Phase 1 – Zusammenfassung
-
-✔️ Der Collector läuft als Dienst  
-✔️ Er ist von der API entkoppelt  
-✔️ Alle aktuellen Streamdaten sind in Redis verfügbar  
-✔️ JSON-Export ist aktiv  
+✅ Der Collector läuft dauerhaft als Dienst unter einem eigenen Systemnutzer (mediamtxmon)  
+✅ Die MediaMTX-API wird alle 2 Sekunden abgefragt – effizient und ressourcenschonend  
+✅ Alle aktuellen Streamdaten werden in Redis gespeichert (mediamtx:streams:latest)  
+✅ Zusätzlich wird eine JSON-Datei unter /tmp/mediamtx_streams.json erzeugt  
+✅ Der Collector ist von der MediaMTX-API entkoppelt – kein direkter API-Zugriff durch Clients nötig  
+✅ Die Projektstruktur ist systemkonform aufgebaut (/opt/…)  
+✅ Die virtuelle Umgebung (venv) ist sauber getrennt – keine Python-Abhängigkeiten im Home-Verzeichnis  
 
 
 ---
