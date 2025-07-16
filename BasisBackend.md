@@ -1,4 +1,4 @@
-# 📡 MediaMTX Stream Monitoring – Phase 1 abgeschlossen
+# 📡 MediaMTX Stream Monitoring
 
 ## 🔎 Ziel des Projekts
 
@@ -57,8 +57,6 @@ Dieses Projekt bietet eine übersichtliche und ressourcenschonende Möglichkeit,
 ### Systemnutzer und Verzeichnisstruktur
 ```bash
 sudo useradd -r -s /bin/false mediamtxmon
-sudo mkdir -p /opt/mediamtx-monitoring-backend/{bin,lib,static,logs}
-sudo chown -R mediamtxmon:mediamtxmon /opt/mediamtx-monitoring-backend
 ```
 ```bash
 sudo mkdir -p /opt/mediamtx-monitoring-backend/{bin,lib,static,logs} \
@@ -66,6 +64,9 @@ sudo mkdir -p /opt/mediamtx-monitoring-backend/{bin,lib,static,logs} \
   && sudo touch /opt/mediamtx-monitoring-backend/lib/config.py \
   && sudo touch /opt/mediamtx-monitoring-backend/requirements.txt \
   && sudo touch /opt/mediamtx-monitoring-backend/.env
+```
+```bash
+sudo chown -R mediamtxmon:mediamtxmon /opt/mediamtx-monitoring-backend
 ```
 ### Redis-Installation
 ```bash
@@ -81,19 +82,18 @@ sudo -u mediamtxmon python3 -m venv /opt/mediamtx-monitoring-backend/venv
 sudo -u mediamtxmon /opt/mediamtx-monitoring-backend/venv/bin/pip install --upgrade pip
 sudo -u mediamtxmon /opt/mediamtx-monitoring-backend/venv/bin/pip install requests redis apscheduler
 ```
+## ✅ Schritt 1 – Daten von der mediamtx API abrufen
+
 ### 🔁 Collector-Skript
 Datei: /opt/mediamtx-monitoring-backend/bin/mediamtx_collector.py  
-Fragt alle 2 Sekunden /v3/paths/list und /v3/srtconns/list ab  
 
-Aggregiert die Informationen zu jedem Stream  
+- Fragt alle 2 Sekunden die Endpunkte `/v3/paths/list` und `/v3/srtconns/list` der MediaMTX-API ab
+- Aggregiert die Informationen zu jedem Stream
+- Speichert die Daten:
+  - in Redis unter `mediamtx:streams:latest`
+  -   - zusätzlich als JSON-Datei unter `/tmp/mediamtx_streams.json`  
+- Kann alternativ einmalig gestartet werden mit `--once`
 
-Speichert:
-
-aktuelle Streams in Redis unter mediamtx:streams:latest
-
-eine JSON-Kopie unter /tmp/mediamtx_streams.json
-
-Kann auch einmalig aufgerufen werden mit --once
 
 #### Testaufruf
 ```bash
@@ -126,7 +126,7 @@ gibt aus, z.B.:
 
 ### 🧩 Systemd-Dienst (optional)
 Datei: /etc/systemd/system/mediamtx-collector.service
-```ìni
+```ini
 [Unit]
 Description=MediaMTX Monitoring Collector
 After=network.target
@@ -157,45 +157,13 @@ apscheduler
 
 ```
 
-## 🎯 Ziel dieser Phase:
-Ein Python-Skript, das alle 2 Sekunden die MediaMTX-API abfragt, die Daten verarbeitet und in Redis speichert.  
-1️⃣ Skript und Redis Direkt testen →  
-2️⃣ REST/WebSocket entwickeln →  
-3️⃣ das Backend in Docker packen. -> Fertig :-)
+### 🎯 Abschluss Phase 1 – Zusammenfassung
 
+✔️ Der Collector läuft als Dienst  
+✔️ Er ist von der API entkoppelt  
+✔️ Alle aktuellen Streamdaten sind in Redis verfügbar  
+✔️ JSON-Export ist aktiv  
 
-### ✅ Systemd-Service anlegen
-So läuft der Collector später sauber und automatisch:
-
-/etc/systemd/system/mediamtx-collector.service
-```ini
-[Unit]
-Description=MediaMTX Monitoring Collector
-After=network.target
-
-[Service]
-Type=simple
-User=mediamtxmon
-WorkingDirectory=/opt/mediamtx-monitoring-backend
-ExecStart=/opt/mediamtx-monitoring-backend/venv/bin/python /opt/mediamtx-monitoring-backend/collector.py
-EnvironmentFile=/etc/mediamtx-monitoring.env
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-
-```
-Dann:
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now mediamtx-collector.service
-
-```
-### ✅ Ergebnis:
-
->Dein Collector läuft als eigener User, sicher isoliert.
->Keine unordentlichen `venvs` im Home oder Arbeitsverzeichnis.
->Saubere Struktur in `/opt`, wie es sich für produktive Linux-Setups gehört.
 
 ---
 
