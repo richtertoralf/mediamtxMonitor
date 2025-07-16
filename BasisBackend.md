@@ -123,9 +123,10 @@ gibt aus, z.B.:
 ]
 
 ```
+
 ### 🧩 Systemd-Dienst (optional)
 Datei: /etc/systemd/system/mediamtx-collector.service
-``ìni
+```ìni
 [Unit]
 Description=MediaMTX Monitoring Collector
 After=network.target
@@ -139,14 +140,15 @@ Restart=always
 
 [Install]
 WantedBy=multi-user.target
-
 ```
+
 #### Aktivieren:
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now mediamtx-collector.service
 
 ```
+
 ### 📦 Abhängigkeiten (requirements.txt)
 ```txt
 requests
