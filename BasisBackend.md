@@ -82,6 +82,9 @@ sudo -u mediamtxmon python3 -m venv /opt/mediamtx-monitoring-backend/venv
 sudo -u mediamtxmon /opt/mediamtx-monitoring-backend/venv/bin/pip install --upgrade pip
 sudo -u mediamtxmon /opt/mediamtx-monitoring-backend/venv/bin/pip install requests redis apscheduler
 ```
+
+---
+
 ## ✅ Schritt 1 – Daten von der mediamtx API abrufen
 
 ### 🔁 Collector-Skript
