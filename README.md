@@ -125,4 +125,8 @@ graph TD
     style F fill:#f9f,stroke:#333,stroke-width:2px
 ```
 
+## 📚 Dokumentation
+
+- [README.md – Übersicht](README.md)
+- [BasisBackend.md – Architektur & Einrichtung](BasisBackend.md)
 
