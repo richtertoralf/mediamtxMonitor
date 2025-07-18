@@ -266,3 +266,7 @@ nutzen, um Clients bei neuen Daten über Redis Pub/Sub automatisch zu benachrich
   Python-Backend-Container
 - Sobald du Docker nutzt, kannst du Portfreigaben, Volumes und Umgebungsvariablen sauber definieren.
   
+## 📚 Dokumentation
+
+- [README.md – Übersicht](README.md)
+- [BasisBackend.md – Architektur & Einrichtung](BasisBackend.md)
