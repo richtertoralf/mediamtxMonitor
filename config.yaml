@@ -1,0 +1,7 @@
+api_base_url: "http://localhost:9997"
+redis:
+  host: "localhost"
+  port: 6379
+  key: "mediamtx:streams:latest"
+output_json_path: "/tmp/mediamtx_streams.json"
+interval_seconds: 2
