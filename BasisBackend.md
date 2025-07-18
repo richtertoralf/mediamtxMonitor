@@ -99,9 +99,8 @@ sudo -u mediamtxmon /opt/mediamtx-monitoring-backend/venv/bin/pip install reques
 ### 🚀 Schritt 1: Collector einrichten
 
 #### 🔁 Collector-Skript
-Datei: /opt/mediamtx-monitoring-backend/bin/mediamtx_collector.py  
-[📄 mediamtx_collector.py](mediamtx_collector.py)
-
+Datei: /opt/mediamtx-monitoring-backend/bin/mediamtx_collector.py 
+[mediamtx_collector.py](mediamtx_collector.py)
 
 - Fragt alle 2 Sekunden die Endpunkte `/v3/paths/list` und `/v3/srtconns/list` der MediaMTX-API ab
 - Aggregiert die Informationen zu jedem Stream
@@ -143,7 +142,8 @@ gibt aus, z.B.:
 
 #### Dauerbetrieb via systemd
 
-🔧 Collector – /etc/systemd/system/mediamtx-collector.service
+🔧 Collector – /etc/systemd/system/mediamtx-collector.service  
+ruft [mediamtx_collector.py](mediamtx_collector.py) auf.
 
 ```ini
 [Unit]
@@ -160,7 +160,8 @@ Restart=always
 WantedBy=multi-user.target
 
 ```
-🌐 Webserver – /etc/systemd/system/mediamtx-api.service
+🌐 Webserver – /etc/systemd/system/mediamtx-api.service  
+ruft [mediamtx_api.py](mediamtx_api.py) auf.
 
 ```ini
 [Unit]
