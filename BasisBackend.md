@@ -53,6 +53,11 @@ Dieses Projekt bietet eine übersichtliche und ressourcenschonende Möglichkeit,
 
 ```
 
+MediaMTX Konfigurationsdatei:
+```bash
+/usr/local/etc/mediamtx.yml
+```
+
 ### 🧑‍💻 Vorbereitung
 
 #### Systemnutzer und Verzeichnisstruktur
@@ -95,6 +100,8 @@ sudo -u mediamtxmon /opt/mediamtx-monitoring-backend/venv/bin/pip install reques
 
 #### 🔁 Collector-Skript
 Datei: /opt/mediamtx-monitoring-backend/bin/mediamtx_collector.py  
+[📄 mediamtx_collector.py](mediamtx_collector.py)
+
 
 - Fragt alle 2 Sekunden die Endpunkte `/v3/paths/list` und `/v3/srtconns/list` der MediaMTX-API ab
 - Aggregiert die Informationen zu jedem Stream
