@@ -48,6 +48,9 @@ Dieses Projekt bietet eine übersichtliche und ressourcenschonende Möglichkeit,
 │   └── __init__.py             ← optional, falls bin/ als Modul genutzt wird
 │   └── __pycache__/            ← automatisch generiert
 │
+├── config/                        
+│   └── collector.yaml
+│
 ├── lib/                        
 │   └── config.py               ← zentrale Konfig (wenn du dort etwas auslagerst)
 │
