@@ -57,7 +57,8 @@ Das Monitoring besteht aus drei Bausteinen:
 - Du kannst später leicht neue Features ergänzen, z. B. Speicherung von Langzeit-Daten oder Anzeige der Server-Auslastung (CPU, RAM, Netzwerk).
 
 ## 🚀 Erste Schritte
-👉 Für Setup, Code-Struktur und geplante Erweiterungen siehe 📄 BasisBackend.md
+👉 Für Setup, Code-Struktur und geplante Erweiterungen siehe [📄 BasisBackend.md](BasisBackend.md)
+
 
 ### 🔧 Toolchain
 - Python 3.11
@@ -77,6 +78,8 @@ BasisBackend.md             ← Detaillierte technische Beschreibung
 README.md                   ← Dieses Dokument
 ```
 
+---
+
 ## 📌 Status
 
 ✅ Live-Ansicht der aktiven Streams
@@ -84,11 +87,6 @@ README.md                   ← Dieses Dokument
 🔜 Historie (Redis Streams)
 
 🔜 Servermetriken (CPU, RAM, Netz)
-
----
-
-
-
 
 ---
 
