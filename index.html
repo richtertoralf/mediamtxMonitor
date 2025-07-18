@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>📡 Mediamtx Stream Monitor</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 2em;
+      background: #f9f9f9;
+    }
+    h1 {
+      font-size: 1.5em;
+    }
+    .stream-card {
+      border-radius: 6px;
+      padding: 1em;
+      margin-bottom: 1em;
+      background-color: #e0ffe0;
+      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+    }
+    .stream-card.warn {
+      background-color: #fff9c4;
+    }
+    .stream-card.error {
+      background-color: #ffcdd2;
+    }
+    .stream-title {
+      font-weight: bold;
+      margin-bottom: .5em;
+    }
+  </style>
+</head>
+<body>
+  <h1>📡 Mediamtx Stream Monitor</h1>
+  <div id="streams">Lade...</div>
+
+  <script>
+    async function fetchStreams() {
+      const container = document.getElementById("streams");
+      try {
+        const res = await fetch("/api/streams");
+        const data = await res.json();
+        container.innerHTML = "";
+
+        if (data.length === 0) {
+          container.textContent = "❌ Keine Streams aktiv.";
+          return;
+        }
+
+        for (const stream of data) {
+          const div = document.createElement("div");
+          div.className = "stream-card";
+
+          if (stream.readers === 0 || stream.recvRateMbps === 0) {
+            div.classList.add("warn");
+          }
+          if (stream.bytesReceived === 0) {
+            div.classList.add("error");
+          }
+
+          div.innerHTML = `
+            <div class="stream-title">${stream.name}</div>
+            <div>Quelle: ${stream.sourceType}</div>
+            <div>Tracks: ${stream.tracks.join(", ")}</div>
+            <div>Leser: ${stream.readers}</div>
+            <div>RTT: ${stream.rtt.toFixed(2)} ms</div>
+            <div>Rate: ${stream.recvRateMbps.toFixed(2)} Mbps</div>
+            <div>Empfangen: ${stream.bytesReceived} Bytes</div>
+          `;
+          container.appendChild(div);
+        }
+      } catch (err) {
+        container.textContent = "⚠️ Fehler beim Laden der Daten.";
+        console.error(err);
+      }
+    }
+
+    fetchStreams();
+    setInterval(fetchStreams, 5000);
+  </script>
+</body>
+</html>
