@@ -7,28 +7,48 @@
     body {
       font-family: sans-serif;
       margin: 2em;
-      background: #f9f9f9;
+      background: #1e1e1e;
+      color: #ffffff;
     }
     h1 {
       font-size: 1.5em;
+      color: #ffffff;
     }
     .stream-card {
-      border-radius: 6px;
+      display: flex;
+      justify-content: space-between;
+      background-color: #2d2d30;
+      border-radius: 8px;
       padding: 1em;
       margin-bottom: 1em;
-      background-color: #e0ffe0;
-      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+      box-shadow: 0 0 5px rgba(0,0,0,0.3);
     }
-    .stream-card.warn {
-      background-color: #fff9c4;
-    }
-    .stream-card.error {
-      background-color: #ffcdd2;
+    .stream-left, .stream-right {
+      width: 48%;
     }
     .stream-title {
       font-weight: bold;
+      font-size: 1.1em;
       margin-bottom: .5em;
+      color: #61dafb;
     }
+    .reader-block {
+      margin-top: 0.5em;
+      padding-top: 0.3em;
+      border-top: 1px solid #444;
+    }
+    .marker-srt, .marker-rtmp, .marker-hls, .marker-webrtc {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      margin-right: 6px;
+      border-radius: 50%;
+      vertical-align: middle;
+    }
+    .marker-srt { background-color: #f44336; }     /* rot */
+    .marker-rtmp { background-color: #ff9800; }    /* orange */
+    .marker-hls { background-color: #2196f3; }     /* blau */
+    .marker-webrtc { background-color: #4caf50; }  /* grün */
   </style>
 </head>
 <body>
@@ -36,6 +56,33 @@
   <div id="streams">Lade...</div>
 
   <script>
+    function renderReader(reader) {
+      const markerClass = {
+        srtConn: "marker-srt",
+        rtmpConn: "marker-rtmp",
+        hlsMuxer: "marker-hls",
+        webRTCSession: "marker-webrtc",
+      }[reader.type] || "";
+
+      let remote = reader.details?.remoteAddr || "-";
+      let rate = reader.details?.mbpsSendRate || 0;
+      let bytes = reader.details?.bytesSent || 0;
+      let info = `
+        <div class="reader-block">
+          <span class="${markerClass}"></span>Typ: ${reader.type}<br/>
+          Remote: ${remote}<br/>
+          Rate: ${rate.toFixed(2)} Mbps<br/>
+          Gesendet: ${bytes.toLocaleString()} Bytes
+      `;
+
+      if (reader.type === "hlsMuxer" && reader.details?.lastRequest) {
+        info += ` (letzter Abruf: ${new Date(reader.details.lastRequest).toLocaleTimeString()})`;
+      }
+
+      info += "</div>";
+      return info;
+    }
+
     async function fetchStreams() {
       const container = document.getElementById("streams");
       try {
@@ -52,22 +99,32 @@
           const div = document.createElement("div");
           div.className = "stream-card";
 
-          if (stream.readers === 0 || stream.recvRateMbps === 0) {
-            div.classList.add("warn");
-          }
-          if (stream.bytesReceived === 0) {
-            div.classList.add("error");
-          }
+          const readersSorted = [...stream.readers || []].sort((a, b) => {
+            const order = { srtConn: 1, rtmpConn: 2, hlsMuxer: 3, webRTCSession: 4 };
+            return (order[a.type] || 99) - (order[b.type] || 99);
+          });
 
-          div.innerHTML = `
-            <div class="stream-title">${stream.name}</div>
-            <div>Quelle: ${stream.sourceType}</div>
-            <div>Tracks: ${stream.tracks.join(", ")}</div>
-            <div>Leser: ${stream.readers}</div>
-            <div>RTT: ${stream.rtt.toFixed(2)} ms</div>
-            <div>Rate: ${stream.recvRateMbps.toFixed(2)} Mbps</div>
-            <div>Empfangen: ${stream.bytesReceived} Bytes</div>
+          const left = `
+            <div class="stream-left">
+              <div class="stream-title">${stream.name}</div>
+              <span class="marker-srt"></span><strong>Publisher (${stream.source?.type})</strong><br/>
+              Remote: ${stream.source?.details?.remoteAddr || "-"}<br/>
+              RTT: ${stream.source?.details?.msRTT?.toFixed(2) || "0"} ms<br/>
+              Rate: ${stream.source?.details?.mbpsReceiveRate?.toFixed(2) || "0"} Mbps<br/>
+              Empfangen: ${stream.source?.details?.bytesReceived?.toLocaleString() || "0"} Bytes<br/>
+              <br/>
+              Tracks: ${stream.tracks?.join(", ") || "-"}
+            </div>
           `;
+
+          const right = `
+            <div class="stream-right">
+              <strong>Readers (${readersSorted.length}):</strong>
+              ${readersSorted.map(renderReader).join("")}
+            </div>
+          `;
+
+          div.innerHTML = left + right;
           container.appendChild(div);
         }
       } catch (err) {
@@ -81,3 +138,4 @@
   </script>
 </body>
 </html>
+
