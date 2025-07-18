@@ -1,6 +1,6 @@
-# 📡 MediaMTX Stream Monitoring
+## 📡 MediaMTX Stream Monitoring
 
-## 🔎 Ziel des Projekts
+### 🔎 Ziel des Projekts
 
 Dieses Projekt bietet eine übersichtliche und ressourcenschonende Möglichkeit, die Aktivität eines MediaMTX-Servers in Echtzeit zu überwachen – mit Fokus auf:
 
@@ -9,7 +9,7 @@ Dieses Projekt bietet eine übersichtliche und ressourcenschonende Möglichkeit,
 - verbundene Zuschauer
 - SRT-spezifische Metriken wie RTT, Linkkapazität und Empfangsrate
 
-## ✅ Architekturüberblick – Basis-Backend
+### 🧱 Architekturüberblick
 
 ```text
 +---------------------------+
@@ -35,7 +35,7 @@ Dieses Projekt bietet eine übersichtliche und ressourcenschonende Möglichkeit,
 
 ```
 
-## 📁 Projektstruktur
+### 📁 Projektstruktur
 
 ```
 /opt/mediamtx-monitoring-backend/
@@ -53,8 +53,10 @@ Dieses Projekt bietet eine übersichtliche und ressourcenschonende Möglichkeit,
 
 ```
 
-## 🧑‍💻 Vorbereitung: Installation & Einrichtung
-### Systemnutzer und Verzeichnisstruktur
+### 🧑‍💻 Vorbereitung
+
+#### Systemnutzer und Verzeichnisstruktur
+
 ```bash
 sudo useradd -r -s /bin/false mediamtxmon
 ```
@@ -68,14 +70,18 @@ sudo mkdir -p /opt/mediamtx-monitoring-backend/{bin,lib,static,logs} \
 ```bash
 sudo chown -R mediamtxmon:mediamtxmon /opt/mediamtx-monitoring-backend
 ```
-### Redis-Installation
+
+#### Redis-Installation
+
 ```bash
 sudo apt update
 sudo apt install redis-server
 sudo systemctl enable --now redis-server
 redis-cli ping   # → PONG
 ```
-### Python-Venv & Abhängigkeiten
+
+#### Python-Venv & Abhängigkeiten
+
 ```bash
 sudo apt install python3-venv
 sudo -u mediamtxmon python3 -m venv /opt/mediamtx-monitoring-backend/venv
@@ -85,16 +91,16 @@ sudo -u mediamtxmon /opt/mediamtx-monitoring-backend/venv/bin/pip install reques
 
 ---
 
-## ✅ Schritt 1 – Daten von der mediamtx API abrufen
+### 🚀 Schritt 1: Collector einrichten
 
-### 🔁 Collector-Skript
+#### 🔁 Collector-Skript
 Datei: /opt/mediamtx-monitoring-backend/bin/mediamtx_collector.py  
 
 - Fragt alle 2 Sekunden die Endpunkte `/v3/paths/list` und `/v3/srtconns/list` der MediaMTX-API ab
 - Aggregiert die Informationen zu jedem Stream
 - Speichert die Daten:
   - in Redis unter `mediamtx:streams:latest`
-  -   - zusätzlich als JSON-Datei unter `/tmp/mediamtx_streams.json`  
+  - zusätzlich als JSON-Datei unter `/tmp/mediamtx_streams.json`
 - Kann alternativ einmalig gestartet werden mit `--once`
 
 
@@ -109,6 +115,7 @@ gibt aus, z.B.:
 ```
 
 #### Beispielausgabe in Redis:
+
 `redis-cli get mediamtx:streams:latest | jq`
 
 ```json
@@ -127,40 +134,63 @@ gibt aus, z.B.:
 
 ```
 
-### 🧩 Systemd-Dienst (optional)
-Datei: /etc/systemd/system/mediamtx-collector.service
+#### Dauerbetrieb via systemd
+
+🔧 Collector – /etc/systemd/system/mediamtx-collector.service
+
 ```ini
 [Unit]
-Description=MediaMTX Monitoring Collector
-After=network.target
+Description=Mediamtx Monitoring Collector
+After=network.target redis.service
 
 [Service]
-Type=simple
 User=mediamtxmon
 WorkingDirectory=/opt/mediamtx-monitoring-backend
-ExecStart=/opt/mediamtx-monitoring-backend/venv/bin/python /opt/mediamtx-monitoring-backend/bin/mediamtx_collector.py
+ExecStart=/opt/mediamtx-monitoring-backend/venv/bin/python3 bin/mediamtx_collector.py
 Restart=always
 
 [Install]
 WantedBy=multi-user.target
+
+```
+🌐 Webserver – /etc/systemd/system/mediamtx-api.service
+
+```ini
+[Unit]
+Description=Mediamtx Monitoring API (FastAPI)
+After=network.target
+
+[Service]
+User=mediamtxmon
+WorkingDirectory=/opt/mediamtx-monitoring-backend
+ExecStart=/opt/mediamtx-monitoring-backend/venv/bin/uvicorn bin.mediamtx_api:app --host 0.0.0.0 --port 8080
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+
 ```
 
-#### Aktivieren:
+📌 Aktivieren & starten:
+
 ```bash
+sudo systemctl daemon-reexec
 sudo systemctl daemon-reload
 sudo systemctl enable --now mediamtx-collector.service
+sudo systemctl enable --now mediamtx-api.service
 
 ```
+#### Test
 
-### 📦 Abhängigkeiten (requirements.txt)
-```txt
-requests
-redis
-apscheduler
+Nach Einrichtung der systemd-Dienste:
 
+```bash
+sudo systemctl status mediamtx-collector.service
+sudo systemctl status mediamtx-api.service
+curl http://localhost:8080/api/streams
 ```
 
-### 🎯 Abschluss Phase 1 – Zusammenfassung
+#### 🎯 Abschluss Phase 1 – Zusammenfassung
 ✅ Der Collector läuft dauerhaft als Dienst unter einem eigenen Systemnutzer (mediamtxmon)  
 ✅ Die MediaMTX-API wird alle 2 Sekunden abgefragt – effizient und ressourcenschonend  
 ✅ Alle aktuellen Streamdaten werden in Redis gespeichert (mediamtx:streams:latest)  
@@ -169,17 +199,18 @@ apscheduler
 ✅ Die Projektstruktur ist systemkonform aufgebaut (/opt/…)  
 ✅ Die virtuelle Umgebung (venv) ist sauber getrennt – keine Python-Abhängigkeiten im Home-Verzeichnis  
 
-
 ---
 
-## ✅ Schritt 2 – REST- und WebSocket-Webserver entwickeln
-🎯 Ziel: Client-Anwendungen sollen aktuelle Daten aus Redis abrufen können.
+### 🚀 Schritt 2 – REST-API & WebSocket
 
-1️⃣ REST-API erstellen:
+🎯 Ziel: Clients sollen über eine REST-API aktuelle Monitoring-Daten abrufen können. In einem späteren Schritt folgt die Erweiterung um WebSocket für Echtzeit-Updates.
+
+1️⃣ REST-API mit FastAPI
+
+Beispiel: mediamtx_api.py
 
 z. B. mit FastAPI in einem eigenen Skript:
 ```python
-
 from fastapi import FastAPI
 import redis, json
 
@@ -192,18 +223,32 @@ def get_latest():
     return json.loads(data) if data else {"error": "no data"}
 
 ```
+
 Server starten:
+
 ```bash
 uvicorn api:app --host 0.0.0.0 --port 8000
 
 ```
-2️⃣ WebSocket hinzufügen:
+👉 Die API ist dann erreichbar unter: http://<host>:8000/api/streams/latest
 
-Später kannst du FastAPI oder ein dediziertes WebSocket-Framework nutzen, um Clients in Echtzeit zu benachrichtigen.
 
-Erst REST zum Abrufen testen – WebSocket-Teil baust du danach.
+2️⃣ WebSocket (später hinzufügen)
 
-## ✅ Schritt 3 – Alles in Docker packen
+Für die WebSocket-Kommunikation kannst du später:
+
+FastAPI (@app.websocket(...)) oder
+
+ein separates WebSocket-Framework
+
+nutzen, um Clients bei neuen Daten über Redis Pub/Sub automatisch zu benachrichtigen.
+
+🛠 Empfehlung: Zuerst die REST-API stabil einsetzen und testen, dann den WebSocket-Teil ergänzen.
+
+---
+
+### 🚀 Schritt 3: Dockerisierung (optional)
+
 🎯 Ziel: Eine portable, leicht aktualisierbare Version, die du auf deinem MediaMTX-Server oder anderen Hosts einsetzen kannst.
 
 - Dockerfile erstellen (für dein Python-Backend).
