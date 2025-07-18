@@ -1,18 +1,35 @@
 # 📡 MediaMTX Stream Monitoring
 
-## 🔎 Was macht dieses Projekt?
+Ein leichtgewichtiges Monitoring-Tool für MediaMTX-Server (vormals `rtsp-simple-server`). Zeigt aktive Streams, Zuschauerzahlen, Bitraten und SRT-Metriken übersichtlich im Browser an – ohne direkte API-Zugriffe durch Clients.
 
-Dieses Projekt hilft dir, deinen **MediaMTX-Server** einfach und übersichtlich zu überwachen. Du siehst in Echtzeit:
-- welche Streams aktiv sind,
-- wie viele Daten übertragen werden,
-- wie viele Zuschauer (Reader) verbunden sind,
-- und bei SRT-Streams zusätzlich wichtige Werte wie RTT und Bandbreite.
+## 🎯 Ziel
 
-So hast du immer den aktuellen Zustand deiner MediaMTX-Instanz im Blick – ohne den Server durch viele einzelne Anfragen zu belasten.
+- **Übersicht:** Aktive Streams und Live-Metriken auf einen Blick
+- **Effizienz:** MediaMTX-API wird nur einmal zentral abgefragt
+- **Sicherheit:** Clients benötigen keinen Zugang zur MediaMTX-Instanz
+- **Modularität:** Einfach erweiterbar für historische Daten oder Servermetriken
 
----
+## 🧱 Architektur
 
-## 🛠️ Wie funktioniert es?
+- **Python Collector:** fragt regelmäßig die MediaMTX-API ab
+- **Redis:** speichert aktuelle (und künftig historische) Daten
+- **FastAPI:** liefert JSON-API, WebSockets und statische HTML/JS-Seiten
+- **Browser-Frontend:** zeigt Daten live und responsiv an
+
+```plain
++-------------+      +------------+      +---------+      +--------------+
+| MediaMTX    +----> | Collector  +----> | Redis   +<---->+  Webserver   |
+| (API)       |      | (Python)   |      | Cache   |      | (FastAPI)    |
++-------------+      +------------+      +---------+      +------+-------+
+                                                               |
+                                                               v
+                                                       +--------+--------+
+                                                       |   Web Frontend  |
+                                                       +-----------------+
+
+```
+
+### 🛠️ Wie funktioniert es?
 
 Das Monitoring besteht aus drei Bausteinen:
 
@@ -30,9 +47,7 @@ Das Monitoring besteht aus drei Bausteinen:
 - Verbindet sich per **WebSocket**, um automatisch aktuelle Infos zu erhalten.
 - Zeigt die Daten übersichtlich in Tabellen oder Diagrammen an.
 
----
-
-## 🏗️ Warum dieser Aufbau?
+### 🏗️ Warum dieser Aufbau?
 
 - Das Backend fragt den MediaMTX-Server nur **einmal** ab, egal wie viele Clients verbunden sind.  
   → Das entlastet den MediaMTX-Server und spart Ressourcen.
@@ -41,31 +56,43 @@ Das Monitoring besteht aus drei Bausteinen:
 - Du kannst **beliebig viele Clients** anschließen, ohne den MediaMTX-Server stärker zu belasten.
 - Du kannst später leicht neue Features ergänzen, z. B. Speicherung von Langzeit-Daten oder Anzeige der Server-Auslastung (CPU, RAM, Netzwerk).
 
+## 🚀 Erste Schritte
+👉 Für Setup, Code-Struktur und geplante Erweiterungen siehe 📄 BasisBackend.md
+
+### 🔧 Toolchain
+- Python 3.11
+- FastAPI + Uvicorn
+- Redis
+- HTML, CSS, Vanilla JS (optional Chart.js)
+
+### 📂 Struktur
+```plaintext
+bin/
+  mediamtx_collector.py     ← Datensammler (MediaMTX → Redis)
+  mediamtx_api.py           ← FastAPI-Server (JSON + Web + WebSocket)
+static/
+  index.html                ← Web-Frontend
+  style.css, app.js         ← Darstellung & WebSocket-Handling
+BasisBackend.md             ← Detaillierte technische Beschreibung
+README.md                   ← Dieses Dokument
+```
+
+## 📌 Status
+
+✅ Live-Ansicht der aktiven Streams
+
+🔜 Historie (Redis Streams)
+
+🔜 Servermetriken (CPU, RAM, Netz)
+
 ---
 
-## ⚙️ So ist das System aufgebaut
 
-```plain
-+-------------------+
-|  MediaMTX-Server  |
-|  (streaming API)  |
-+---------+---------+
-          │
-          │
-+---------▼---------+
-|      Backend      |
-| (Python Script &  |
-|    Redis Cache)   |
-+---------+---------+
-          │
-          │
-+---------▼---------+
-|      Clients      |
-| (Browser Dashboard|
-|   mit HTML/JS)    |
-+-------------------+
 
-```
+
+---
+
+## ⚙️ Ideen
 
 ```mermaid
 graph TD
@@ -99,99 +126,5 @@ graph TD
     style E fill:#f9f,stroke:#333,stroke-width:2px
     style F fill:#f9f,stroke:#333,stroke-width:2px
 ```
-### Ablauf auf einen Blick:
 
-Das **Backend** holt die Daten → speichert sie in Redis → sendet Updates per WebSocket an alle Clients.
-Die **Clients** müssen nur das Backend kennen – nicht MediaMTX selbst.
-Das entlastet den MediaMTX-Server und sichert ihn gleichzeitig ab.
-
----
-
-## 📊 Welche Daten werden überwacht?
-
-- Name des Streams (`name`)
-- Quelle des Streams (`sourceType`, z. B. srtConn)
-- Übertragene Bytes (`bytesReceived`)
-- Anzahl der Zuschauer (`readers`)
-- Bei SRT-Streams zusätzlich:
-  - RTT (`msRTT`)
-  - Empfangsrate (`mbpsReceiveRate`)
-  - Link-Kapazität (`mbpsLinkCapacity`)
-
----
-
-## 🚀 Entwicklung in Phasen
-
-1️⃣ **Phase 1 – Basis-Backend**  
-   - Holt aktuelle Daten und speichert sie in Redis.
-   - Schickt Benachrichtigungen über Pub/Sub.
-
-2️⃣ **Phase 2 – WebSocket & Frontend**  
-   - WebSocket-Server und HTML/JS-Dashboard für Live-Anzeige.
-
-3️⃣ **Phase 3 – Historische Daten**  
-   - Speicherung und Abruf von Zeitreihen aus Redis Streams.
-   - Frontend-Visualisierung mit Diagrammen.
-
-4️⃣ **Phase 4 – Server-Metriken-Agent (optional)**  
-   - Kleiner Python-Agent überwacht CPU, RAM und Netzwerk auf dem MediaMTX-Host.
-   - Anzeige der Metriken im Dashboard.
-
----
-## 🔧 Komponenten im Detail
-
-### MediaMTX Server
-- Stellt die API-Endpunkte `/v3/paths/list` und `/v3/srtconns/list` bereit.
-- Muss nicht öffentlich erreichbar sein, wenn das Backend auf demselben Netzwerk läuft.
-
-### Monitoring Backend
-- **Python Data Collector (APScheduler):**
-  - Fragt MediaMTX alle 2 Sekunden ab.
-  - Aggregiert und speichert die Daten in Redis.
-- **Redis:**
-  - Speichert aktuelle Daten (`mediamtx:streams:latest`).
-  - Hält historische Daten in **Redis Streams**.
-  - Benutzt **Pub/Sub**, um Clients bei neuen Daten zu informieren.
-- **Python Web Server (FastAPI/Flask):**
-  - Bietet REST-API-Endpunkte.
-  - Stellt einen WebSocket-Server bereit.
-  - Verteilt Echtzeit-Updates und historische Daten an die Clients.
-
-### Clients (Web Browser)
-- HTML/JS-Frontend mit WebSocket-Anbindung.
-- Holt initiale Daten über HTTP.
-- Visualisiert aktuelle und historische Daten (z. B. mit Chart.js).
-
-### Optional: Agent auf dem MediaMTX-Host
-- Kleines Python-Skript mit **psutil**.
-- Erfasst CPU, RAM und Netzwerk.
-- Schickt die Daten an Redis für die Anzeige im Dashboard.
-
----
-
-## Geplante Entwicklungsschritte
-
-1.  **Phase 1: Basis-Backend mit Echtzeit-Aggregation und Redis-Speicherung (aktuellste Daten)**
-    * Implementierung des Python-Skripts zum Abfragen und Aggregieren der MediaMTX-API-Daten.
-    * Integration von `APScheduler` für das 2-Sekunden-Intervall.
-    * Speicherung der aggregierten Daten in Redis (`mediamtx:streams:latest`).
-    * Redis Pub/Sub-Integration für Benachrichtigungen.
-2.  **Phase 2: WebSocket-Backend und einfaches Web-Frontend**
-    * Einrichtung eines FastAPI (oder Flask) Web-Servers mit WebSocket-Unterstützung.
-    * Entwicklung des HTML/CSS/JS-Frontends zur Anzeige der Echtzeit-Daten.
-3.  **Phase 3: Historische Daten in Redis Streams**
-    * Erweiterung des Data Collectors um die Speicherung relevanter Metriken in Redis Streams (`mediamtx:history:*`).
-    * Implementierung von REST-API-Endpunkten im Backend zum Abrufen historischer Daten.
-    * Anpassung des Frontends zur Visualisierung historischer Zeitreihen (z.B. mit Chart.js).
-4.  **Phase 4: Server-Metriken-Agent (zukünftig)**
-    * Entwicklung eines kleinen Python-Agenten (psutil-basiert) zur Erfassung von Host-Metriken.
-    * Integration dieser Metriken in Redis Streams.
-    * Anpassung von Backend und Frontend zur Anzeige dieser neuen Daten.
-
----
-
-## 🚦 Erste Schritte (für Entwickler)
-
-Die detaillierte Anleitung zur Installation, Einrichtung und zum Starten von Backend, Redis und Frontend folgt bald hier.  
-Bleib dran – dieses Projekt wächst ständig weiter! 🚀
 
