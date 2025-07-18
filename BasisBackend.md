@@ -37,19 +37,28 @@ Dieses Projekt bietet eine übersichtliche und ressourcenschonende Möglichkeit,
 
 ### 📁 Projektstruktur
 
-```
+```plaintext
+
 /opt/mediamtx-monitoring-backend/
-├── bin/
-│   ├── mediamtx_collector.py     ← läuft im Intervall oder einmalig (--once)
-│   ├── mediamtx_snapshot.py      ← manuelle Dump-Variante (optional)
-│   ├── mediamtx_api.py           ← REST/WebSocket API (Phase 2)
-│   └── host_metrics_agent.py     ← Host-Metriken (Phase 4, geplant)
-├── lib/
-│   └── config.py                 ← zentrale Konfiguration (optional)
-├── static/                       ← später: HTML/JS Frontend
-├── logs/                         ← eigene Log-Dateien (optional)
-├── requirements.txt              ← Python-Abhängigkeiten
-└── .env                          ← Umgebungsvariablen
+├── bin/                         ← ausführbare Python-Skripte
+│   ├── mediamtx_collector.py   ← ✅ Läuft via systemd (Daten abrufen & speichern)
+│   ├── mediamtx_api.py         ← ✅ FastAPI-Server für API + Static Files
+│   ├── mediamtx_snapshot.py    ← ❌ aktuell nicht mehr in Benutzung
+│   ├── host_metrics_agent.py   ← 🔜 geplant für Phase 4
+│   └── __init__.py             ← optional, falls bin/ als Modul genutzt wird
+│   └── __pycache__/            ← automatisch generiert
+│
+├── lib/                        
+│   └── config.py               ← zentrale Konfig (wenn du dort etwas auslagerst)
+│
+├── logs/                       ← 📁 vorgesehen für Log-Dateien (z. B. später per Logging-Modul)
+│
+├── static/
+│   └── index.html              ← ✅ einfaches HTML-Dashboard, wird vom API-Server ausgeliefert
+│
+├── requirements.txt            ← 📄 Python-Abhängigkeiten
+├── venv/                       ← 🔧 virtuelle Umgebung
+
 
 ```
 
