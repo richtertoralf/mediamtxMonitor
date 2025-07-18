@@ -198,6 +198,23 @@ sudo systemctl status mediamtx-api.service
 curl http://localhost:8080/api/streams
 ```
 
+#### 🖥️ Web-Dashboard (HTML-Frontend)
+Zusätzlich zur API wird automatisch ein einfaches Web-Frontend ausgeliefert:  
+📄 Datei: [/opt/mediamtx-monitoring-backend/static/index.html](index.html)  
+
+Zugriff im Browser:
+http://<dein-server>:8080/
+
+Die Seite zeigt:
+
+- Name, Quelle und Leserzahl jedes Streams
+- RTT, Empfangsrate und empfangene Bytes bei SRT-Quellen
+- Farbliche Warnung bei ungewöhnlichen Werten (z. B. 0 Leser)
+- Das Dashboard ruft alle 5 Sekunden die API /api/streams auf.
+
+ℹ️ Die Seite nutzt kein Framework und läuft direkt im Browser – keine weitere Einrichtung nötig.
+
+
 #### 🎯 Abschluss Phase 1 – Zusammenfassung
 ✅ Der Collector läuft dauerhaft als Dienst unter einem eigenen Systemnutzer (mediamtxmon)  
 ✅ Die MediaMTX-API wird alle 2 Sekunden abgefragt – effizient und ressourcenschonend  
