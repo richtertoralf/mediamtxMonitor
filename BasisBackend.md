@@ -211,8 +211,7 @@ curl http://localhost:8080/api/streams
 Zusätzlich zur API wird automatisch ein einfaches Web-Frontend ausgeliefert:  
 📄 Datei: [/opt/mediamtx-monitoring-backend/static/index.html](index.html)  
 
-Zugriff im Browser:
-http://<dein-server>:8080/
+Zugriff im Browser: `http://<dein-server>:8080/`
 
 Die Seite zeigt:
 
