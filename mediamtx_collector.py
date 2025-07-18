@@ -2,110 +2,131 @@
 
 import requests
 import redis
+import yaml
 import json
 import sys
 import time
 import logging
 import argparse
+from pathlib import Path
 from apscheduler.schedulers.background import BackgroundScheduler
 
-# Konfiguration (kann durch .env oder config.py ersetzt werden)
-MEDIA_MTX_API_URL = "http://localhost:9997"
-REDIS_HOST = "localhost"
-REDIS_PORT = 6379
-REDIS_KEY = "mediamtx:streams:latest"
-JSON_OUTPUT_PATH = "/tmp/mediamtx_streams.json"
+# 🔧 Konfiguration laden
+CONFIG_PATH = "/opt/mediamtx-monitoring-backend/config/collector.yaml"
+try:
+    with open(CONFIG_PATH, "r") as f:
+        config = yaml.safe_load(f)
+except Exception as e:
+    print(f"❌ Fehler beim Laden der Konfigurationsdatei: {e}")
+    sys.exit(1)
 
-# Logging
+API_BASE = config["api_base_url"]
+REDIS_HOST = config["redis"]["host"]
+REDIS_PORT = config["redis"]["port"]
+REDIS_KEY = config["redis"]["key"]
+JSON_OUTPUT_PATH = config["output_json_path"]
+INTERVAL = config.get("interval_seconds", 2)
+
+# 📝 Logging
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
+    format="%(asctime)s [%(levelname)s] %(message)s"
 )
 
-# Redis-Verbindung prüfen
+# 🧠 Redis-Verbindung
 try:
     r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
     r.ping()
 except Exception as e:
-    logging.error(f"Verbindung zu Redis fehlgeschlagen: {e}")
+    logging.error(f"❌ Verbindung zu Redis fehlgeschlagen: {e}")
     sys.exit(1)
 
-# API-Daten holen
-def fetch_data(endpoint):
+# 🔎 API-Daten holen
+def fetch(endpoint):
     try:
-        response = requests.get(f"{MEDIA_MTX_API_URL}{endpoint}")
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.ConnectionError:
-        logging.error(f"❌ MediaMTX nicht erreichbar unter {MEDIA_MTX_API_URL}")
-    except requests.exceptions.HTTPError as e:
-        logging.error(f"❌ HTTP-Fehler bei {endpoint}: {e}")
-    except json.decoder.JSONDecodeError:
-        logging.error(f"❌ Ungültiges JSON von {endpoint}")
+        res = requests.get(f"{API_BASE}{endpoint}")
+        res.raise_for_status()
+        return res.json()
     except Exception as e:
-        logging.error(f"❌ Allgemeiner Fehler: {e}")
-    return {}
+        logging.warning(f"⚠️ API-Fehler bei {endpoint}: {e}")
+        return {"items": []}
 
-# Hauptfunktion zum Sammeln und Speichern
+# 🧩 Hauptfunktion
 def collect_and_store():
-    paths = fetch_data("/v3/paths/list")
-    srtconns = fetch_data("/v3/srtconns/list")
+    paths = fetch("/v3/paths/list").get("items", [])
+    srtconns = {s["id"]: s for s in fetch("/v3/srtconns/list").get("items", [])}
+    rtmpconns = {r["id"]: r for r in fetch("/v3/rtmpconns/list").get("items", [])}
+    webrtcs = {w["id"]: w for w in fetch("/v3/webrtcsessions/list").get("items", [])}
+    hlsmuxers = fetch("/v3/hlsmuxers/list").get("items", [])
 
-    if not paths or "items" not in paths:
-        logging.warning("⚠️ Keine 'paths'-Daten erhalten.")
-        return
+    hls_by_path = {h["path"]: h for h in hlsmuxers}
 
     aggregated = []
 
-    for path in paths.get("items", []):
+    for path in paths:
         name = path.get("name")
-        source = path.get("source") or {}
-        source_type = source.get("type", "unknown")
-        tracks = path.get("tracks", [])
-        bytes_received = path.get("bytesReceived", 0)
-        readers = len(path.get("readers", []))
+        source = path.get("source", {})
+        readers = path.get("readers", [])
 
         entry = {
             "name": name,
-            "sourceType": source_type,
-            "tracks": tracks,
-            "bytesReceived": bytes_received,
-            "readers": readers,
+            "source": {
+                "type": source.get("type"),
+                "id": source.get("id"),
+                "details": srtconns.get(source.get("id")) if source.get("type") == "srtConn" else {}
+            },
+            "tracks": path.get("tracks", []),
+            "bytesReceived": path.get("bytesReceived"),
+            "bytesSent": path.get("bytesSent"),
+            "readers": []
         }
 
-        if source_type == "srtConn":
-            srt_data = next((s for s in srtconns.get("items", []) if s.get("path") == name), None)
-            if srt_data:
-                entry.update({
-                    "rtt": srt_data.get("msRTT"),
-                    "recvRateMbps": srt_data.get("mbpsReceiveRate"),
-                    "linkCapacityMbps": srt_data.get("mbpsLinkCapacity"),
-                })
+        for reader in readers:
+            rtype = reader.get("type")
+            rid = reader.get("id")
+
+            if rtype == "srtConn":
+                data = srtconns.get(rid, {})
+            elif rtype == "rtmpConn":
+                data = rtmpconns.get(rid, {})
+            elif rtype == "webRTCSession":
+                data = webrtcs.get(rid, {})
+            elif rtype == "hlsMuxer":
+                data = hls_by_path.get(name, {})
+            else:
+                data = {}
+
+            entry["readers"].append({
+                "type": rtype,
+                "id": rid,
+                "details": data
+            })
 
         aggregated.append(entry)
 
+    # 🔁 Speichern in Redis
     try:
         r.set(REDIS_KEY, json.dumps(aggregated))
-        logging.info(f"✅ {len(aggregated)} Einträge in Redis gespeichert.")
+        logging.info(f"✅ {len(aggregated)} Pfade in Redis gespeichert.")
     except Exception as e:
-        logging.error(f"❌ Fehler beim Speichern in Redis: {e}")
+        logging.error(f"❌ Redis-Fehler: {e}")
 
+    # 💾 JSON-Datei schreiben
     try:
-        with open(JSON_OUTPUT_PATH, "w") as f:
-            json.dump(aggregated, f, indent=2)
-        logging.info(f"💾 JSON-Datei gespeichert: {JSON_OUTPUT_PATH}")
+        Path(JSON_OUTPUT_PATH).write_text(json.dumps(aggregated, indent=2))
+        logging.info(f"💾 JSON gespeichert unter {JSON_OUTPUT_PATH}")
     except Exception as e:
         logging.error(f"❌ Fehler beim Schreiben der JSON-Datei: {e}")
 
-# Main-Loop
+# 🧃 Main-Loop
 def main(run_once=False):
     if run_once:
         collect_and_store()
     else:
         scheduler = BackgroundScheduler()
-        scheduler.add_job(collect_and_store, 'interval', seconds=2)
+        scheduler.add_job(collect_and_store, 'interval', seconds=INTERVAL)
         scheduler.start()
-        logging.info("🔄 Collector läuft alle 2 Sekunden... (STRG+C zum Beenden)")
+        logging.info(f"🔄 Collector läuft alle {INTERVAL} Sekunden...")
         try:
             while True:
                 time.sleep(1)
@@ -113,9 +134,9 @@ def main(run_once=False):
             scheduler.shutdown()
             logging.info("🛑 Collector beendet.")
 
-# Argumente parsen
+# ▶️ Start
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="MediaMTX Stream Collector")
-    parser.add_argument("--once", action="store_true", help="Nur eine einmalige Abfrage")
+    parser = argparse.ArgumentParser(description="MediaMTX Collector")
+    parser.add_argument("--once", action="store_true", help="Nur einmal ausführen")
     args = parser.parse_args()
     main(run_once=args.once)
