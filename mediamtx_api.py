@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 """
 mediamtx_monitor_api.py
 
