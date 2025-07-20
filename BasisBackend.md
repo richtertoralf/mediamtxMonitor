@@ -49,7 +49,7 @@ Dieses Projekt bietet eine übersichtliche und ressourcenschonende Möglichkeit,
 │   └── __pycache__/            ← automatisch generiert
 │
 ├── config/                        
-│   └── collector.yaml
+│   └── collector.yaml        	← YAML-Konfig für Datensammler (URL, Redis, Ausgabe, Takt)
 │
 ├── lib/                        
 │   └── config.py               ← zentrale Konfig (wenn du dort etwas auslagerst)
