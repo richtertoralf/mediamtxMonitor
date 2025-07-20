@@ -1,7 +1,14 @@
+# 🌐 Basis-URL der MediaMTX API (normalerweise Port 9997)
 api_base_url: "http://localhost:9997"
+
+# 🧠 Redis-Konfiguration
 redis:
-  host: "localhost"
-  port: 6379
-  key: "mediamtx:streams:latest"
+  host: "localhost"             # Redis-Host (meist localhost oder redis-server)
+  port: 6379                    # Standardport für Redis
+  key: "mediamtx:streams:latest"  # Redis-Key, unter dem die aggregierten Streamdaten gespeichert werden
+
+# 💾 Speicherort für die JSON-Datei mit allen Streamdaten
 output_json_path: "/tmp/mediamtx_streams.json"
+
+# 🔁 Intervall in Sekunden für das Abrufen und Speichern der Daten
 interval_seconds: 2
