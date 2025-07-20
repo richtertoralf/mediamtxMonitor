@@ -66,18 +66,6 @@ Das Monitoring besteht aus drei Bausteinen:
 - Redis
 - HTML, CSS, Vanilla JS (optional Chart.js)
 
-### 📂 Struktur
-```plaintext
-bin/
-  mediamtx_collector.py     ← Datensammler (MediaMTX → Redis)
-  mediamtx_api.py           ← FastAPI-Server (JSON + Web + WebSocket)
-static/
-  index.html                ← Web-Frontend
-  style.css, app.js         ← Darstellung & WebSocket-Handling
-BasisBackend.md             ← Detaillierte technische Beschreibung
-README.md                   ← Dieses Dokument
-```
-
 ---
 
 ## 📌 Status
