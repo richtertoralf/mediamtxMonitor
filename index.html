@@ -3,17 +3,36 @@
 <head>
   <meta charset="UTF-8" />
   <title>📡 Mediamtx Stream Monitor</title>
+
+  <!-- 
+    🧾 Projekt: Mediamtx Stream Monitor
+    Beschreibung:
+      - Zeigt laufende MediaMTX-Streams übersichtlich an
+      - Nutzt REST-API (GET /api/streams)
+      - Automatische Aktualisierung alle 5 Sekunden
+    Bestandteile:
+      - CSS-Styles für visuelles Layout
+      - JavaScript-Fetch für API-Daten
+      - dynamisches DOM-Rendering
+    Autor: snowgames.live
+    Lizenz: MIT
+  -->
+
   <style>
+    /* 🌒 Dunkles Design mit klarer Struktur */
     body {
       font-family: sans-serif;
       margin: 2em;
       background: #1e1e1e;
       color: #ffffff;
     }
+
     h1 {
       font-size: 1.5em;
       color: #ffffff;
     }
+
+    /* 📦 Einzelne Stream-Karten */
     .stream-card {
       display: flex;
       justify-content: space-between;
@@ -23,20 +42,25 @@
       margin-bottom: 1em;
       box-shadow: 0 0 5px rgba(0,0,0,0.3);
     }
+
     .stream-left, .stream-right {
       width: 48%;
     }
+
     .stream-title {
       font-weight: bold;
       font-size: 1.1em;
       margin-bottom: .5em;
       color: #61dafb;
     }
+
     .reader-block {
       margin-top: 0.5em;
       padding-top: 0.3em;
       border-top: 1px solid #444;
     }
+
+    /* 🟢 Typ-Markierungen für Streamarten */
     .marker-srt, .marker-rtmp, .marker-hls, .marker-webrtc {
       display: inline-block;
       width: 10px;
@@ -51,12 +75,19 @@
     .marker-webrtc { background-color: #4caf50; }  /* grün */
   </style>
 </head>
+
 <body>
   <h1>📡 Mediamtx Stream Monitor</h1>
   <div id="streams">Lade...</div>
 
   <script>
+    /**
+     * ⛳ Rendert einen einzelnen Reader-Block (z. B. SRT-Client, HLS-Player etc.)
+     * @param {Object} reader - Reader-Objekt mit type, id, details
+     * @returns {string} - HTML-Block als String
+     */
     function renderReader(reader) {
+      // 🔘 Farbe je nach Typ wählen
       const markerClass = {
         srtConn: "marker-srt",
         rtmpConn: "marker-rtmp",
@@ -64,9 +95,10 @@
         webRTCSession: "marker-webrtc",
       }[reader.type] || "";
 
-      let remote = reader.details?.remoteAddr || "-";
-      let rate = reader.details?.mbpsSendRate || 0;
-      let bytes = reader.details?.bytesSent || 0;
+      const remote = reader.details?.remoteAddr || "-";
+      const rate = reader.details?.mbpsSendRate || 0;
+      const bytes = reader.details?.bytesSent || 0;
+
       let info = `
         <div class="reader-block">
           <span class="${markerClass}"></span>Typ: ${reader.type}<br/>
@@ -75,6 +107,7 @@
           Gesendet: ${bytes.toLocaleString()} Bytes
       `;
 
+      // ⏱️ Nur bei HLS: letzter Request anzeigen
       if (reader.type === "hlsMuxer" && reader.details?.lastRequest) {
         info += ` (letzter Abruf: ${new Date(reader.details.lastRequest).toLocaleTimeString()})`;
       }
@@ -83,8 +116,12 @@
       return info;
     }
 
+    /**
+     * 🔄 Lädt alle Streams von /api/streams und rendert sie in den DOM
+     */
     async function fetchStreams() {
       const container = document.getElementById("streams");
+
       try {
         const res = await fetch("/api/streams");
         const data = await res.json();
@@ -99,11 +136,13 @@
           const div = document.createElement("div");
           div.className = "stream-card";
 
+          // 🔽 Leser nach Typ sortieren (SRT, RTMP, HLS, WebRTC)
           const readersSorted = [...stream.readers || []].sort((a, b) => {
             const order = { srtConn: 1, rtmpConn: 2, hlsMuxer: 3, webRTCSession: 4 };
             return (order[a.type] || 99) - (order[b.type] || 99);
           });
 
+          // 🧱 Linker Bereich: Publisher
           const left = `
             <div class="stream-left">
               <div class="stream-title">${stream.name}</div>
@@ -112,11 +151,11 @@
               RTT: ${stream.source?.details?.msRTT?.toFixed(2) || "0"} ms<br/>
               Rate: ${stream.source?.details?.mbpsReceiveRate?.toFixed(2) || "0"} Mbps<br/>
               Empfangen: ${stream.source?.details?.bytesReceived?.toLocaleString() || "0"} Bytes<br/>
-              <br/>
               Tracks: ${stream.tracks?.join(", ") || "-"}
             </div>
           `;
 
+          // 📤 Rechter Bereich: Leser
           const right = `
             <div class="stream-right">
               <strong>Readers (${readersSorted.length}):</strong>
@@ -127,15 +166,16 @@
           div.innerHTML = left + right;
           container.appendChild(div);
         }
+
       } catch (err) {
         container.textContent = "⚠️ Fehler beim Laden der Daten.";
         console.error(err);
       }
     }
 
+    // 🚀 Initialer Aufruf und regelmäßiges Refresh
     fetchStreams();
     setInterval(fetchStreams, 5000);
   </script>
 </body>
 </html>
-
