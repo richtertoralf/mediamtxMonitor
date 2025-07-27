@@ -1,5 +1,8 @@
 ## 📡 MediaMTX Stream Monitoring
 
+<img width="811" height="783" alt="image" src="https://github.com/user-attachments/assets/afcf985b-a2aa-4b11-82da-b9dafdf05b72" />
+
+
 ### 🔎 Ziel des Projekts
 
 Dieses Projekt bietet eine übersichtliche und ressourcenschonende Möglichkeit, die Aktivität eines MediaMTX-Servers in Echtzeit zu überwachen – mit Fokus auf:
