@@ -1,4 +1,5 @@
-## 📡 MediaMTX Stream Monitoring
+## 📡 MediaMTX Monitoring System
+Überwachung von Streamaktivität und Systemressourcen in Echtzeit
 
 <img width="811" height="783" alt="image" src="https://github.com/user-attachments/assets/afcf985b-a2aa-4b11-82da-b9dafdf05b72" />
 
@@ -8,9 +9,11 @@
 Dieses Projekt bietet eine übersichtliche und ressourcenschonende Möglichkeit, die Aktivität eines MediaMTX-Servers in Echtzeit zu überwachen – mit Fokus auf:
 
 - aktive Streams
-- empfangene Datenmenge
+- empfangene und gesendete Datenmenge
 - verbundene Zuschauer
 - SRT-spezifische Metriken wie RTT, Linkkapazität und Empfangsrate
+- Systemmetriken wie CPU, RAM, Netzwerk, Load Average, Temperatur
+
 
 ### 🧱 Architekturüberblick
 
@@ -19,22 +22,26 @@ Dieses Projekt bietet eine übersichtliche und ressourcenschonende Möglichkeit,
 |      MediaMTX-Server      |
 |      (streaming API)      |
 +------------+--------------+
-             │  API-Abfrage alle 2 Sekunden
-+------------▼--------------+
-|          Backend          |
-|  (Python + Redis)         |
-|  - Holt MediaMTX-Daten    |
-|  - Aggregiert & speichert |
-|  - Schreibt JSON-Datei    |
-+------------+--------------+
              │
-             │ (in Phase 2: REST & WebSocket)
-+------------▼--------------+
-|         Clients           |
-|  (z. B. Browser-Frontend) |
-|  - Lesen Redis-Daten      |
-|  - Empfangen Live-Updates |
-+---------------------------+
+     +-------+---------------+--------------------+-----------------------+
+     | mediamtx_collector.py | mediamtx_system.py | mediamtx_snapshots.py |
+     |     (Streamdaten)     |  (Systemmetriken)  |  (Stream Snapshots)   |
+     +------------+----------+--------------------+-----------------------+
+                  │
+         +--------▼----------+
+         |      Redis        |
+         | + JSON-Cache +    |
+         +--------+----------+
+                  │
+         +--------▼----------+
+         |    FastAPI-Server |
+         |    + Static Files |
+         +--------+----------+
+                  │
+         +--------▼----------+
+         |    Web-Frontend   |
+         +-------------------+
+
 
 ```
 
@@ -47,7 +54,7 @@ Dieses Projekt bietet eine übersichtliche und ressourcenschonende Möglichkeit,
 │   ├── mediamtx_collector.py   ← ✅ Läuft via systemd (Daten abrufen & speichern)
 │   ├── mediamtx_api.py         ← ✅ FastAPI-Server für API + Static Files
 │   ├── mediamtx_snapshot.py    ← ✅ erstellt von den eingehenden Streams Snapshots
-│   ├── mediamtx_system.py      ← 🔜 geplant für Phase 4
+│   ├── mediamtx_system.py      ← ✅ erfasst Systemmetriken (CPU, RAM, Load, Disk, Temperatur)
 │   └── reader_bitrate.py
 │   └── __init__.py             ← optional, falls bin/ als Modul genutzt wird
 │   └── __pycache__/            ← automatisch generiert
@@ -115,7 +122,7 @@ redis-cli ping   # → PONG
 sudo apt install python3-venv
 sudo -u mediamtxmon python3 -m venv /opt/mediamtx-monitoring-backend/venv
 sudo -u mediamtxmon /opt/mediamtx-monitoring-backend/venv/bin/pip install --upgrade pip
-sudo -u mediamtxmon /opt/mediamtx-monitoring-backend/venv/bin/pip install requests redis apscheduler
+sudo -u mediamtxmon /opt/mediamtx-monitoring-backend/venv/bin/pip install requests psutil redis apscheduler
 ```
 
 ---
@@ -202,6 +209,31 @@ Restart=always
 WantedBy=multi-user.target
 
 ```
+#### 🛠️ System-Monitor
+Datei: /opt/mediamtx-monitoring-backend/bin/mediamtx_system.py
+
+- Erfasst Systemmetriken im Sekundentakt
+- Speichert:
+  - in Redis unter `mediamtx:system:latest`
+  - zusätzlich als JSON-Datei unter `/tmp/mediamtx_system.json`
+- Unterstützt Temperaturüberwachung (sofern vom System unterstützt)
+
+#### Dauerbetrieb via systemd
+
+```ini
+[Unit]
+Description=Mediamtx System Monitor
+After=network.target redis.service
+
+[Service]
+User=mediamtxmon
+WorkingDirectory=/opt/mediamtx-monitoring-backend
+ExecStart=/opt/mediamtx-monitoring-backend/venv/bin/python3 bin/mediamtx_system.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
 
 📌 Aktivieren & starten:
 
@@ -210,6 +242,9 @@ sudo systemctl daemon-reexec
 sudo systemctl daemon-reload
 sudo systemctl enable --now mediamtx-collector.service
 sudo systemctl enable --now mediamtx-api.service
+sudo systemctl enable --now mediamtx-snapshots.service
+sudo systemctl enable --now mediamtx-system.service
+
 
 ```
 #### Test
@@ -220,6 +255,8 @@ Nach Einrichtung der systemd-Dienste:
 sudo systemctl status mediamtx-collector.service
 sudo systemctl status mediamtx-api.service
 curl http://localhost:8080/api/streams
+redis-cli get mediamtx:system:latest | jq
+
 ```
 
 #### 🖥️ Web-Dashboard (HTML-Frontend)
