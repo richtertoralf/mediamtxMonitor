@@ -1,0 +1,15 @@
+[Unit]
+Description=Mediamtx Snapshot Manager
+After=network.target redis.service
+
+[Service]
+Type=simple
+User=mediamtxmon
+WorkingDirectory=/opt/mediamtx-monitoring-backend/
+ExecStart=/opt/mediamtx-monitoring-backend/venv/bin/python3 bin/mediamtx_snapshots.py
+Restart=always
+RestartSec=5
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target
