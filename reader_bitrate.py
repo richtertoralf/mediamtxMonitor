@@ -1,4 +1,27 @@
 # /opt/mediamtx-monitoring-backend/bin/reader_bitrate.py
+"""
+reader_bitrate.py – Berechnung der Bitrate einzelner Leser (Readers) eines MediaMTX-Streams
+
+💡 Warum dieses Modul?
+
+MediaMTX liefert über die API nur bei SRT-Verbindungen eine "recvBitrate". Für RTMP, HLS und WebRTC fehlen entsprechende Metriken.
+Da jedoch für alle Reader der kumulierte Wert der gesendeten Bytes (`bytesSent`) bereitgestellt wird, kann die Bitrate rechnerisch bestimmt werden.
+
+🧮 Lösung:
+Dieses Modul speichert für jeden Reader den zuletzt bekannten `bytesSent`-Wert und den zugehörigen Zeitstempel in Redis.
+Beim nächsten Durchlauf kann daraus die übertragene Datenmenge pro Zeit berechnet werden (ΔBytes / Δt), woraus sich die Bitrate in Mbps ergibt.
+⚠️ Hinweis:
+Bei HLS-Readern funktioniert diese Methode nur eingeschränkt.
+Da HLS-Clients in Intervallen ganze Chunks abrufen (statt kontinuierlich), führt das zu unregelmäßigen Sprüngen und häufig zu temporär 0 Mbps bei der Berechnung.
+Eine zuverlässigere Lösung für HLS ist in Planung.
+
+🎯 Ziel:
+- Einheitliche Bitrate-Metrik für alle Reader-Typen (SRT, RTMP, HLS, WebRTC)
+- Vergleichbare Darstellung im Dashboard
+- Entlastung des Dashboards von clientseitiger Berechnungslogik
+- Modularität: Dieses Modul ist wiederverwendbar und kann unabhängig getestet werden
+"""
+
 import time
 import logging
 
