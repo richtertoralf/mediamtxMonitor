@@ -77,6 +77,7 @@ MediaMTX Konfigurationsdatei:
 ```bash
 /usr/local/etc/mediamtx.yml
 ```
+API muss aktiviert sein!
 
 ### 🧑‍💻 Vorbereitung
 
