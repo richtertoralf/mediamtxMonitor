@@ -43,8 +43,9 @@ Dieses Projekt bietet eine übersichtliche und ressourcenschonende Möglichkeit,
 ├── bin/                         ← ausführbare Python-Skripte
 │   ├── mediamtx_collector.py   ← ✅ Läuft via systemd (Daten abrufen & speichern)
 │   ├── mediamtx_api.py         ← ✅ FastAPI-Server für API + Static Files
-│   ├── mediamtx_snapshot.py    ← ❌ aktuell nicht mehr in Benutzung
-│   ├── host_metrics_agent.py   ← 🔜 geplant für Phase 4
+│   ├── mediamtx_snapshot.py    ← ✅ erstellt von den eingehenden Streams Snapshots
+│   ├── mediamtx_system.py      ← 🔜 geplant für Phase 4
+│   └── reader_bitrate.py
 │   └── __init__.py             ← optional, falls bin/ als Modul genutzt wird
 │   └── __pycache__/            ← automatisch generiert
 │
@@ -58,8 +59,15 @@ Dieses Projekt bietet eine übersichtliche und ressourcenschonende Möglichkeit,
 │
 ├── static/
 │   └── index.html              ← ✅ einfaches HTML-Dashboard, wird vom API-Server ausgeliefert
+│   ├── js
+│   │   ├── api.js
+│   │   ├── main.js
+│   │   └── renderer.js
+│   ├── css
+│   │   └── style.css
+│   └── snapshots
 │
-├── requirements.txt            ← 📄 Python-Abhängigkeiten
+├── requirements.txt            ← 📄 Python-Abhängigkeiten (psutil, redis, apscheduler)
 ├── venv/                       ← 🔧 virtuelle Umgebung
 
 
