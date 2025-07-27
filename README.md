@@ -34,7 +34,7 @@ Ein leichtgewichtiges Monitoring-Tool für MediaMTX-Server (vormals `rtsp-simple
 Das Monitoring besteht aus drei Bausteinen:
 
 ✅ **Backend (Python)**  
-- Fragt alle 2 Sekunden die MediaMTX-API ab (`/v3/paths/list` und `/v3/srtconns/list`).
+- Fragt alle 2 Sekunden die MediaMTX-API ab (z.B.: `/v3/paths/list` und `/v3/srtconns/list`).
 - Verarbeitet die Daten und speichert sie in **Redis**.
 - Benachrichtigt alle verbundenen Browser über WebSockets, wenn es neue Daten gibt.
 
