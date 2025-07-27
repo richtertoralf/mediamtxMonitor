@@ -1,65 +1,126 @@
 #!/usr/bin/env python3
+"""
+📸 Snapshot-Manager (FFmpeg-Version, YAML-gesteuert)
 
-import requests
+Startet pro aktivem Stream genau einen ffmpeg-Prozess zur Snapshot-Erzeugung.
+Verwendet eine zentrale YAML-Konfiguration (collector.yaml) wie die anderen Module.
+
+Autor: snowgames.live
+Lizenz: MIT
+"""
+
+import redis
+import subprocess
+import time
+import os
+import logging
 import json
-import sys # Zum ordnungsgemäßen Beenden des Skripts
+import yaml
+from pathlib import Path
+from glob import glob
 
-MEDIA_MTX_API_URL = "http://localhost:9997"
-OUTPUT_FILE_PATH = "/tmp/mediamtx_streams.json"
+# 🧾 Konfigurationspfad
+CONFIG_PATH = "/opt/mediamtx-monitoring-backend/config/collector.yaml"
 
-def fetch_data(endpoint):
+# 📦 Laufende Prozesse
+running = {}
+
+# 🛠️ Konfiguration laden
+def load_config():
     try:
-        response = requests.get(f"{MEDIA_MTX_API_URL}{endpoint}")
-        response.raise_for_status() # Löst HTTPError bei schlechten Antworten (4xx oder 5xx) aus
-        return response.json()
-    except requests.exceptions.ConnectionError:
-        print(f"❌ Fehler: Verbindung zu MediaMTX unter {MEDIA_MTX_API_URL} konnte nicht hergestellt werden. Läuft der Server?", file=sys.stderr)
-        sys.exit(1)
-    except requests.exceptions.HTTPError as e:
-        print(f"❌ HTTP-Fehler beim Abrufen von {endpoint}: {e}", file=sys.stderr)
-        sys.exit(1)
-    except json.decoder.JSONDecodeError:
-        print(f"❌ Fehler: Ungültiges JSON von {endpoint} erhalten", file=sys.stderr)
-        sys.exit(1)
+        with open(CONFIG_PATH, "r") as f:
+            return yaml.safe_load(f)
     except Exception as e:
-        print(f"❌ Ein unerwarteter Fehler ist aufgetreten: {e}", file=sys.stderr)
-        sys.exit(1)
+        logging.error(f"❌ Fehler beim Laden der YAML-Konfiguration: {e}")
+        exit(1)
 
-# Hole die Paths-Liste und die SRT-Streams-Liste
-# Verwende die fetch_data-Funktion
-paths = fetch_data("/v3/paths/list")
-srtconns = fetch_data("/v3/srtconns/list")
+# 🔌 Aktive Streams aus Redis holen
+def get_active_streams(redis_host, redis_port, redis_key):
+    try:
+        r = redis.Redis(host=redis_host, port=redis_port, decode_responses=True)
+        data = r.get(redis_key)
+        if not data:
+            return []
+        parsed = json.loads(data)
+        return [s["name"] for s in parsed if s.get("source", {}).get("type")]
+    except Exception as e:
+        logging.error(f"❌ Fehler beim Lesen aus Redis: {e}")
+        return []
 
-aggregated = []
+# ▶️ ffmpeg-Prozess starten
+def start_ffmpeg_process(stream_name, snapshot_cfg):
+    output_path = os.path.join(snapshot_cfg["output_dir"], f"{stream_name}.jpg")
+    stream_url = f"{snapshot_cfg['protocol']}://localhost:{snapshot_cfg['port']}/{stream_name}"
 
-for path in paths.get("items", []):
-    name = path.get("name")
-    source_type = path.get("source", {}).get("type", "unknown")
-    tracks = path.get("tracks", [])
-    bytes_received = path.get("bytesReceived", 0)
-    readers = len(path.get("readers", []))
+    interval = int(snapshot_cfg.get("interval", 10))  # Default: 10 Sekunden
+    fps_expr = f"fps=1/{interval},scale={snapshot_cfg['width']}:{snapshot_cfg['height']}"
 
-    entry = {
-        "name": name,
-        "sourceType": source_type,
-        "tracks": tracks,
-        "bytesReceived": bytes_received,
-        "readers": readers,
-    }
+    cmd = [
+        "ffmpeg",
+        "-i", stream_url,
+        "-vf", fps_expr,
+        "-update", "1",
+        "-y", output_path
+    ]
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        logging.info(f"▶️ ffmpeg gestartet für {stream_name} (alle {interval}s)")
+        return proc
+    except Exception as e:
+        logging.error(f"❌ ffmpeg-Start fehlgeschlagen für {stream_name}: {e}")
+        return None
 
-    if source_type == "srtConn":
-        # suche in den SRT-Daten den passenden Eintrag zum Path-Namen
-        srt_data = next((s for s in srtconns.get("items", []) if s.get("path") == name), None)
-        if srt_data:
-            entry.update({
-                "rtt": srt_data.get("msRTT"),
-                "recvRateMbps": srt_data.get("mbpsReceiveRate"),
-                "linkCapacityMbps": srt_data.get("mbpsLinkCapacity"),
-            })
-    aggregated.append(entry)
+# 🧹 Veraltete Snapshots löschen
+def cleanup_snapshots(active_streams, snapshot_cfg):
+    active_files = {f"{s}.jpg" for s in active_streams}
+    for file_path in glob(os.path.join(snapshot_cfg["output_dir"], "*.jpg")):
+        if os.path.basename(file_path) not in active_files:
+            try:
+                os.remove(file_path)
+                logging.info(f"🗑️ Ungenutztes Snapshot gelöscht: {file_path}")
+            except Exception as e:
+                logging.warning(f"⚠️ Konnte Datei nicht löschen: {file_path}: {e}")
 
-# JSON speichern
-with open("/tmp/mediamtx_streams.json", "w") as f:
-    json.dump(aggregated, f, indent=2)
+# 🔁 Hauptschleife
+def main_loop(config):
+    snapshot_cfg = config.get("snapshots", {})
+    redis_cfg = config.get("redis", {})
 
-print("✅ Aggregiertes JSON wurde in /tmp/mediamtx_streams.json gespeichert.")
+    os.makedirs(snapshot_cfg["output_dir"], exist_ok=True)
+
+    while True:
+        active_streams = get_active_streams(
+            redis_host=redis_cfg.get("host", "localhost"),
+            redis_port=redis_cfg.get("port", 6379),
+            redis_key=redis_cfg.get("key", "mediamtx:streams:latest")
+        )
+
+        # Prozesse starten
+        for stream in active_streams:
+            proc = running.get(stream)
+            if proc is None or proc.poll() is not None:
+                proc = start_ffmpeg_process(stream, snapshot_cfg)
+                if proc:
+                    running[stream] = proc
+
+        # Beendete Prozesse entfernen
+        for stream in list(running):
+            if stream not in active_streams or running[stream].poll() is not None:
+                del running[stream]
+
+        # Alte Snapshots aufräumen
+        cleanup_snapshots(active_streams, snapshot_cfg)
+
+        time.sleep(2)
+
+# 🧠 Logging und Start
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+    )
+    try:
+        config = load_config()
+        main_loop(config)
+    except KeyboardInterrupt:
+        logging.info("🛑 Beendet durch Benutzer.")
