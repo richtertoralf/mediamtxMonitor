@@ -1,7 +1,5 @@
-#!/usr/bin/env python3
-
 """
-mediamtx_monitor_api.py
+mediamtx_api.py
 
 Dieses Modul stellt eine einfache API und statische Weboberfläche zur Anzeige von Stream-Informationen aus MediaMTX bereit.
 Verwendet werden FastAPI und Redis.
@@ -20,7 +18,17 @@ from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 import redis
 import json
+import yaml
+from pathlib import Path
 
+# YAML-Konfiguration laden (muss vor Verwendung passieren!)
+CONFIG_PATH = "/opt/mediamtx-monitoring-backend/config/collector.yaml"
+try:
+    with open(CONFIG_PATH, "r") as f:
+        config = yaml.safe_load(f)
+except Exception as e:
+    print(f"⚠️ Fehler beim Laden der collector.yaml: {e}")
+    config = {}
 
 # FastAPI-Instanz
 app = FastAPI(title="MediaMTX Monitoring API", version="1.0")
@@ -48,12 +56,18 @@ def index():
 @app.get("/api/streams", response_class=JSONResponse, summary="Streamdaten abrufen")
 def get_streams():
     """
-    Gibt die zuletzt gespeicherten Streamdaten aus Redis zurück.
-
-    Returns:
-        JSONResponse: JSON-Objekt mit den Streamdaten, oder leeres Array bei Fehler/nicht vorhandenem Key.
+    Gibt die zuletzt gespeicherten Streamdaten aus Redis zurück,
+    ergänzt um Snapshot- und UI-Aktualisierungszeiten aus collector.yaml.
     """
     raw = r.get("mediamtx:streams:latest")
-    if raw:
-        return JSONResponse(content=json.loads(raw))
-    return JSONResponse(content=[], status_code=204)
+    try:
+        streams = json.loads(raw) if raw else []
+    except json.JSONDecodeError:
+        streams = []
+
+    frontend_cfg = config.get("frontend", {})
+    return JSONResponse(content={
+        "streams": streams,
+        "snapshot_refresh_ms": frontend_cfg.get("snapshot_refresh_ms", 5000),
+        "streamlist_refresh_ms": frontend_cfg.get("streamlist_refresh_ms", 5000)
+    })
