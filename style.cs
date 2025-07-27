@@ -1,0 +1,91 @@
+  /* 🌒 Dunkles Design */
+
+  body {
+      font-family: sans-serif;
+      margin: 2em;
+      background: #1e1e1e;
+      color: #ffffff;
+  }
+
+  h1 {
+      font-size: 1.5em;
+      color: #ffffff;
+  }
+
+  /* 📦 Einzelne Stream-Karten */
+  .stream-card {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 20px;
+      background-color: #2a2a2a;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      color: #e0e0e0;
+      font-family: sans-serif;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+  }
+
+  .stream-left,
+  .stream-center,
+  .stream-right {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+  }
+
+  .stream-title {
+      font-size: 1.2em;
+      font-weight: bold;
+      color: #4fc3f7;
+      margin-bottom: 10px;
+  }
+
+  .snapshot-image {
+      border-radius: 4px;
+      max-width: 240px;
+      height: auto;
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.7);
+  }
+
+  .reader-block {
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #444;
+  }
+
+  .marker-srt {
+      background-color: #f44336;
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 6px;
+  }
+
+  .marker-rtmp {
+      background-color: #ff9800;
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 6px;
+  }
+
+  .marker-hls {
+      background-color: #2196f3;
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 6px;
+  }
+
+  .marker-webrtc {
+      background-color: #4caf50;
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 6px;
+  }
