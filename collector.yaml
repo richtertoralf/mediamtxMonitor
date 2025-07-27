@@ -3,12 +3,29 @@ api_base_url: "http://localhost:9997"
 
 # 🧠 Redis-Konfiguration
 redis:
-  host: "localhost"             # Redis-Host (meist localhost oder redis-server)
-  port: 6379                    # Standardport für Redis
-  key: "mediamtx:streams:latest"  # Redis-Key, unter dem die aggregierten Streamdaten gespeichert werden
+  host: "localhost"
+  port: 6379
+  key: "mediamtx:streams:latest"
 
 # 💾 Speicherort für die JSON-Datei mit allen Streamdaten
 output_json_path: "/tmp/mediamtx_streams.json"
 
 # 🔁 Intervall in Sekunden für das Abrufen und Speichern der Daten
-interval_seconds: 2
+interval_seconds: 5
+
+# 📸 Snapshot-Konfiguration (gilt für snapshots.py)
+snapshots:
+  backend: "ffmpeg"                      # Nur dokumentativ
+  protocol: "rtsp"                       # Stream-Protokoll für Snapshot-Quellen
+  port: 8554                             # z. B. RTSP-Port von MediaMTX
+  output_dir: "/opt/mediamtx-monitoring-backend/static/snapshots"
+  width: 320
+  height: 180
+  interval: 10                           # Alle 10 Sekunden pro Stream ein Bild (wird durch snapshots.py gelesen)
+  timeout_seconds: 0                    # kann bleiben – wird ggf. später von opencv-Backend genutzt
+  max_threads: 0                         # nur dokumentativ (irrelevant für ffmpeg-Dauerprozesse)
+
+# 🔁 Frontend-Einstellungen
+frontend:
+  snapshot_refresh_ms: 2000             # Browser lädt alle 2s neue Bilder
+  streamlist_refresh_ms: 5000           # Stream-API wird alle 5s neu geladen
