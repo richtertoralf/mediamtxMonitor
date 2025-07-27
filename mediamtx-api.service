@@ -1,0 +1,12 @@
+[Unit]
+Description=Mediamtx Monitoring API (FastAPI)
+After=network.target
+
+[Service]
+User=mediamtxmon
+WorkingDirectory=/opt/mediamtx-monitoring-backend
+ExecStart=/opt/mediamtx-monitoring-backend/venv/bin/uvicorn bin.mediamtx_api:app --host 0.0.0.0 --port 8080
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
