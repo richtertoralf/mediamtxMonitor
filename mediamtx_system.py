@@ -1,36 +1,49 @@
 #!/usr/bin/env python3
 """
-mediamtx_system.py – Systemmonitoring für MediaMTX-Server
+mediamtx_system.py – Systemmonitoring für MediaMTX
 
 Erfasst CPU, RAM, Swap, Disk, Netzwerk und Temperaturinformationen und speichert:
-- in Redis (mediamtx:system:latest)
-- optional als JSON-Datei (z. B. /tmp/mediamtx_system.json)
+- in Redis (Key: mediamtx:system:latest)
+- optional als JSON-Datei (z. B. /tmp/mediamtx_system.json)
 
 Läuft als eigenständiger Dienst analog zu mediamtx_collector.py.
+Die Konfiguration erfolgt über collector.yaml.
 """
 
 import psutil
 import redis
+import yaml
 import json
 import socket
 import time
 import logging
+from pathlib import Path
 from apscheduler.schedulers.background import BackgroundScheduler
 
-# Konfiguration
-REDIS_HOST = "localhost"
-REDIS_PORT = 6379
-REDIS_KEY = "mediamtx:system:latest"
-JSON_OUTPUT_PATH = "/tmp/mediamtx_system.json"
-INTERVAL_SECONDS = 10
+# 🔧 Konfigurationsdatei laden
+CONFIG_PATH = "/opt/mediamtx-monitoring-backend/config/collector.yaml"
+try:
+    with open(CONFIG_PATH, "r") as f:
+        config = yaml.safe_load(f)
+except Exception as e:
+    print(f"❌ Fehler beim Laden der Konfigurationsdatei: {e}")
+    exit(1)
 
-# Logging
+# 🔗 Konfigurationswerte extrahieren
+redis_cfg = config.get("redis", {})
+REDIS_HOST = redis_cfg.get("host", "localhost")
+REDIS_PORT = redis_cfg.get("port", 6379)
+REDIS_KEY = redis_cfg.get("system_key", "mediamtx:system:latest")
+JSON_OUTPUT_PATH = config.get("system_output_json_path", "/tmp/mediamtx_system.json")
+INTERVAL_SECONDS = config.get("system_interval_seconds", 10)
+
+# 📝 Logging einrichten
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 
-# Redis-Verbindung aufbauen
+# 🧠 Redis-Verbindung aufbauen
 try:
     r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
     r.ping()
@@ -39,7 +52,9 @@ except Exception as e:
     logging.error(f"❌ Verbindung zu Redis fehlgeschlagen: {e}")
     exit(1)
 
+
 def get_temperatures():
+    """Temperatursensoren auslesen (falls verfügbar)"""
     try:
         temps = psutil.sensors_temperatures()
         return {k: [t._asdict() for t in v] for k, v in temps.items()}
@@ -47,7 +62,9 @@ def get_temperatures():
         logging.warning(f"🌡️ Temperaturdaten nicht verfügbar: {e}")
         return {}
 
+
 def collect_and_store():
+    """Systemdaten erfassen und speichern"""
     now = time.time()
     try:
         data = {
@@ -67,18 +84,17 @@ def collect_and_store():
         logging.debug("📊 Systemdaten in Redis gespeichert.")
 
         # Optional als JSON-Datei
-        with open(JSON_OUTPUT_PATH, "w") as f:
-            json.dump(data, f)
+        Path(JSON_OUTPUT_PATH).write_text(json.dumps(data, indent=2))
         logging.debug(f"💾 JSON gespeichert unter {JSON_OUTPUT_PATH}")
 
     except Exception as e:
         logging.error(f"❌ Fehler beim Erfassen der Systemdaten: {e}")
 
-# Scheduler starten
+
+# ▶️ Scheduler starten
 scheduler = BackgroundScheduler()
 scheduler.add_job(collect_and_store, "interval", seconds=INTERVAL_SECONDS)
 scheduler.start()
-
 logging.info("🚀 Systemmonitor gestartet.")
 
 try:
