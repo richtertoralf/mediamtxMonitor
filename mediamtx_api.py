@@ -1,65 +1,66 @@
+#!/usr/bin/env python3
 """
-mediamtx_api.py
+mediamtx_api.py – API-Server zur Bereitstellung von MediaMTX-Monitoringdaten
 
-Dieses Modul stellt eine einfache API und statische Weboberfläche zur Anzeige von Stream-Informationen aus MediaMTX bereit.
-Verwendet werden FastAPI und Redis.
-
-Endpoints:
-- GET /                 → index.html ausliefern (statische Weboberfläche)
-- GET /api/streams      → aktuelle Streamdaten aus Redis als JSON zurückgeben
-
-Abhängigkeiten:
-- FastAPI
-- Redis (Python-Client)
+Stellt eine einfache FastAPI-Schnittstelle zur Anzeige von Streamdaten und 
+eine statische Weboberfläche bereit. 
+Die Konfiguration erfolgt zentral über collector.yaml.
 """
 
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
 import redis
 import json
 import yaml
+import logging
 from pathlib import Path
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 
-# YAML-Konfiguration laden (muss vor Verwendung passieren!)
-CONFIG_PATH = "/opt/mediamtx-monitoring-backend/config/collector.yaml"
+# 📄 Konfiguration laden
+CONFIG_PATH = "/opt/mediamtx-monitoring-backend/collector.yaml"
 try:
     with open(CONFIG_PATH, "r") as f:
         config = yaml.safe_load(f)
 except Exception as e:
-    print(f"⚠️ Fehler beim Laden der collector.yaml: {e}")
+    print(f"⚠️ Fehler beim Laden der Konfiguration: {e}")
     config = {}
 
-# FastAPI-Instanz
+# 🧠 Redis-Konfiguration lesen
+redis_cfg = config.get("redis", {})
+REDIS_HOST = redis_cfg.get("host", "localhost")
+REDIS_PORT = redis_cfg.get("port", 6379)
+REDIS_KEY = redis_cfg.get("key", "mediamtx:streams:latest")
+
+# 📝 Logging einrichten
+log_cfg = config.get("logging", {})
+log_level = getattr(logging, log_cfg.get("level", "INFO").upper(), logging.INFO)
+logging.basicConfig(level=log_level, format="%(asctime)s [%(levelname)s] %(message)s")
+
+# 🔌 Redis-Verbindung herstellen
+try:
+    r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+    r.ping()
+    logging.info("🔌 Verbindung zu Redis hergestellt.")
+except Exception as e:
+    logging.error(f"❌ Redis-Verbindung fehlgeschlagen: {e}")
+    raise
+
+# 🌐 FastAPI-Instanz erstellen
 app = FastAPI(title="MediaMTX Monitoring API", version="1.0")
 
-
-# Redis-Verbindung auf localhost (Standardport)
-# Die Antwortdaten werden als UTF-8-Strings dekodiert (decode_responses=True)
-r = redis.Redis(host='localhost', port=6379, decode_responses=True)
-
-# Statische Dateien unter /static verfügbar machen (HTML, JS, CSS)
-app.mount("/static", StaticFiles(directory="/opt/mediamtx-monitoring-backend/static"), name="static")
-
+# 📁 Statische Dateien einbinden (Frontend)
+static_dir = Path("/opt/mediamtx-monitoring-backend/static")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 @app.get("/")
-def index():
-    """
-    Liefert die index.html als Startseite aus.
+def serve_index():
+    """Liefert die HTML-Startseite (Frontend)."""
+    return FileResponse(static_dir / "index.html")
 
-    Returns:
-        FileResponse: Die statische HTML-Datei zur Visualisierung der Streams.
-    """
-    return FileResponse("/opt/mediamtx-monitoring-backend/static/index.html")
-
-# API-Endpunkt für Stream-Daten
 @app.get("/api/streams", response_class=JSONResponse, summary="Streamdaten abrufen")
 def get_streams():
-    """
-    Gibt die zuletzt gespeicherten Streamdaten aus Redis zurück,
-    ergänzt um Snapshot- und UI-Aktualisierungszeiten aus collector.yaml.
-    """
-    raw = r.get("mediamtx:streams:latest")
+    """Liefert aktuelle Streamdaten aus Redis, inkl. UI-Refresh-Konfiguration."""
+    raw = r.get(REDIS_KEY)
     try:
         streams = json.loads(raw) if raw else []
     except json.JSONDecodeError:
@@ -68,6 +69,6 @@ def get_streams():
     frontend_cfg = config.get("frontend", {})
     return JSONResponse(content={
         "streams": streams,
-        "snapshot_refresh_ms": frontend_cfg.get("snapshot_refresh_ms", 5000),
+        "snapshot_refresh_ms": frontend_cfg.get("snapshot_refresh_ms", 2000),
         "streamlist_refresh_ms": frontend_cfg.get("streamlist_refresh_ms", 5000)
     })
