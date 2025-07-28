@@ -1,3 +1,14 @@
+# 🌐 API-Server-Konfiguration (gilt für mediamtx_api.py)
+api_server:
+  redis:
+    host: "localhost"
+    port: 6379
+    key: "mediamtx:streams:latest"     # Redis-Key, aus dem die API die Streamdaten liest
+  static_dir: "/opt/mediamtx-monitoring-backend/static"  # Pfad zu HTML, JS, CSS
+  index_file: "index.html"             # Startseite im static-Verzeichnis
+  listen_host: "0.0.0.0"               # Host für Uvicorn/ASGI (optional, falls extern aufrufbar)
+  listen_port: 8000                    # Port für den FastAPI-Server (optional, falls separat gestartet)
+
 # 🌐 Basis-URL der MediaMTX API (normalerweise Port 9997)
 api_base_url: "http://localhost:9997"
 
