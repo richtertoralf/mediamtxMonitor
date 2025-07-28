@@ -7,12 +7,11 @@
  * - Aktualisiert die Anzeige regelmäßig basierend auf YAML-Konfiguration
  * 
  * 🔧 Modulübersicht:
- * | Datei          | Aufgabe                                    |
- * | -------------- | ------------------------------------------ |
- * | `main.js`      | Ablaufsteuerung (Daten holen, rendern)     |
- * | `api.js`       | Holt Daten vom Backend (`/api/streams`)    |
- * | `renderer.js`  | Rendert Stream-Karten & Reader-Details     |
- * | `systeminfo.js`| Rendert Systeminfos                        |
+ * | Datei         | Aufgabe                                    |
+ * | ------------- | ------------------------------------------ |
+ * | `main.js`     | Ablaufsteuerung (Daten holen, rendern)     |
+ * | `api.js`      | Holt Daten vom Backend (`/api/streams`)    |
+ * | `renderer.js` | Rendert Stream-Karten & Reader-Details     |
  * 
  * Autor: snowgames.live
  * Lizenz: MIT
@@ -22,7 +21,6 @@
 import { fetchStreamsFromApi } from "./api.js";
 import { renderStreamCard, updateStreamCard } from "./renderer.js";
 import { renderSystemInfo } from "./systeminfo.js";
-
 
 const container = document.getElementById("streams");
 const noStreams = document.getElementById("no-streams");
@@ -34,6 +32,8 @@ let refreshTimer = null;
 
 async function updateUI() {
   const result = await fetchStreamsFromApi();
+
+  renderSystemInfo(result.systeminfo || {});
 
   const snapshotInterval = result.snapshot_refresh_ms ?? 5000;
   const newInterval = result.streamlist_refresh_ms ?? 5000;
@@ -71,7 +71,6 @@ async function updateUI() {
     refreshIntervalMs = newInterval;
     refreshTimer = setInterval(updateUI, refreshIntervalMs);
   }
-  renderSystemInfo(result.systeminfo);
 }
 
 
