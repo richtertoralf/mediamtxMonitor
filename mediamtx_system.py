@@ -64,7 +64,7 @@ def get_temperatures():
 
 
 def collect_and_store():
-    """Systemdaten erfassen und speichern"""
+    """Aktuelle Systemdaten erfassen und in Redis speichern"""
     now = time.time()
     try:
         data = {
@@ -89,6 +89,40 @@ def collect_and_store():
 
     except Exception as e:
         logging.error(f"❌ Fehler beim Erfassen der Systemdaten: {e}")
+
+
+def extract_temperature(temp_data):
+    for sensor_group in temp_data.values():
+        for sensor in sensor_group:
+            if "current" in sensor:
+                return round(sensor["current"], 1)
+    return None
+
+
+def get_system_info():
+    """Systemdaten aus Redis lesen und strukturieren für das API-Frontend"""
+    try:
+        raw = r.get(REDIS_KEY)
+        if not raw:
+            return {}
+        data = json.loads(raw)
+
+        return {
+            "cpu_percent": data["cpu_percent"],
+            "memory_total_bytes": data["memory"]["total"],
+            "memory_used_bytes": data["memory"]["used"],
+            "swap_total_bytes": data["swap"]["total"],
+            "swap_used_bytes": data["swap"]["used"],
+            "disk_total_bytes": data["disk"]["total"],
+            "disk_used_bytes": data["disk"]["used"],
+            "loadavg": data.get("loadavg", []),
+            "network_rx_bytes": int(data["net_io"]["bytes_recv"] / 60),
+            "network_tx_bytes": int(data["net_io"]["bytes_sent"] / 60),
+            "temperature_celsius": extract_temperature(data.get("temperature", {}))
+        }
+    except Exception as e:
+        logging.warning(f"⚠️ Fehler beim Parsen von Systemdaten: {e}")
+        return {}
 
 
 # ▶️ Scheduler starten
