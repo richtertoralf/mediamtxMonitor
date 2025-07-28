@@ -15,7 +15,6 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-from mediamtx_system import get_system_info
 
 # 📄 Konfiguration laden
 CONFIG_PATH = "/opt/mediamtx-monitoring-backend/collector.yaml"
@@ -67,11 +66,18 @@ def get_streams():
     except json.JSONDecodeError:
         streams = []
 
+    # Systeminfos aus Redis holen
+    system_raw = r.get("mediamtx:system:latest")
+    try:
+        systeminfo = json.loads(system_raw) if system_raw else {}
+    except json.JSONDecodeError:
+        systeminfo = {}
+
     frontend_cfg = config.get("frontend", {})
 
     return JSONResponse(content={
         "streams": streams,
         "snapshot_refresh_ms": frontend_cfg.get("snapshot_refresh_ms", 2000),
         "streamlist_refresh_ms": frontend_cfg.get("streamlist_refresh_ms", 5000),
-        "systeminfo": get_system_info()
+        "systeminfo": systeminfo
     })
