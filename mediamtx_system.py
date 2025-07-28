@@ -137,3 +137,4 @@ try:
 except (KeyboardInterrupt, SystemExit):
     scheduler.shutdown()
     logging.info("🛑 Systemmonitor gestoppt.")
+
