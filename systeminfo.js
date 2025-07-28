@@ -22,14 +22,14 @@ export function renderSystemInfo(systeminfo = {}) {
   const dl = document.createElement("dl");
 
   const entries = [
-    ["CPU-Auslastung", systeminfo.cpu_percent?.toFixed(1) + " %" ?? "–"],
-    ["RAM (genutzt)", formatBytes(systeminfo.memory_used_bytes) + " / " + formatBytes(systeminfo.memory_total_bytes)],
-    ["Swap", formatBytes(systeminfo.swap_used_bytes) + " / " + formatBytes(systeminfo.swap_total_bytes)],
-    ["Festplatte", formatBytes(systeminfo.disk_used_bytes) + " / " + formatBytes(systeminfo.disk_total_bytes)],
-    ["Load Average", systeminfo.loadavg?.join(" / ") ?? "–"],
-    ["Netzwerk RX", formatBytes(systeminfo.network_rx_bytes) + "/min"],
-    ["Netzwerk TX", formatBytes(systeminfo.network_tx_bytes) + "/min"],
-    ["Temperatur", systeminfo.temperature_celsius ? systeminfo.temperature_celsius + " °C" : "–"]
+    ["CPU-Auslastung", formatPercent(systeminfo.cpu_percent)],
+    ["RAM (genutzt)", formatBytes(systeminfo.memory?.used) + " / " + formatBytes(systeminfo.memory?.total)],
+    ["Swap", formatBytes(systeminfo.swap?.used) + " / " + formatBytes(systeminfo.swap?.total)],
+    ["Festplatte", formatBytes(systeminfo.disk?.used) + " / " + formatBytes(systeminfo.disk?.total)],
+    ["Load Average", systeminfo.loadavg?.map(n => n.toFixed(2)).join(" / ") ?? "–"],
+    ["Netzwerk RX", formatBytes(systeminfo.net_io?.bytes_recv) + "/min"],
+    ["Netzwerk TX", formatBytes(systeminfo.net_io?.bytes_sent) + "/min"],
+    ["Temperatur", (systeminfo.temperature?.celsius ?? "–") + " °C"]
   ];
 
   for (const [label, value] of entries) {
@@ -54,4 +54,8 @@ function formatBytes(bytes) {
     i++;
   }
   return bytes.toFixed(1) + " " + units[i];
+}
+
+function formatPercent(val) {
+  return (typeof val === "number" && !isNaN(val)) ? val.toFixed(1) + " %" : "–";
 }
