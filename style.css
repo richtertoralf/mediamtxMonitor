@@ -12,6 +12,36 @@
       color: #ffffff;
   }
 
+  /* 🖥️ Systeminfo-Block */
+  
+  .systeminfo {
+      margin-bottom: 2em;
+      background-color: #2a2a2a;
+      padding: 1em 1.5em;
+      border-radius: 8px;
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.4);
+      max-width: 600px;
+  }
+  
+  .systeminfo dl {
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      row-gap: 6px;
+      column-gap: 1em;
+      margin: 0;
+  }
+  
+  .systeminfo dt {
+      font-weight: bold;
+      color: #bbbbbb;
+      white-space: nowrap;
+  }
+  
+  .systeminfo dd {
+      margin: 0;
+      color: #ffffff;
+  }
+
   /* 📦 Einzelne Stream-Karten */
   .stream-card {
       display: grid;
