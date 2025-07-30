@@ -1,3 +1,5 @@
 psutil
 redis
 apscheduler
+uvicorn[standard]
+fastapi
