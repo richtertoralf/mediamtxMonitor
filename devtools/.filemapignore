@@ -1,0 +1,15 @@
+# .filemapignore
+
+# ⛔ Einzelne Dateien und Dateimuster
+__init__.py
+*.pyc
+*.env
+*.log
+
+# ⛔ Ganze Verzeichnisse
+__pycache__/
+venv/
+.venv/
+logs/
+lib/
+static/snapshots/
