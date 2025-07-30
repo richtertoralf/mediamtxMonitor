@@ -116,5 +116,5 @@ graph TD
 ## 📚 Dokumentation
 
 - [README.md – Übersicht](README.md)
-- [BasisBackend.md – Architektur & Einrichtung](BasisBackend.md)
+- [BasisBackend.md – Architektur & Einrichtung](docs/BasisBackend.md)
 
