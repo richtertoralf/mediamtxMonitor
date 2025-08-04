@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
 # 📄 Konfiguration laden
-CONFIG_PATH = "/opt/mediamtx-monitoring-backend/collector.yaml"
+CONFIG_PATH = "/opt/mediamtx-monitoring-backend/config/collector.yaml"
 try:
     with open(CONFIG_PATH, "r") as f:
         config = yaml.safe_load(f)
