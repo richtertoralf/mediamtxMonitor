@@ -84,6 +84,12 @@ def get_streams():
 
 if __name__ == "__main__":
     import uvicorn
+    import sys
+    from pathlib import Path
+
+
+    # Modulpfad hinzufügen
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
     # Host und Port aus YAML holen (Fallback optional)
     server_cfg = config.get("api_server", {})
