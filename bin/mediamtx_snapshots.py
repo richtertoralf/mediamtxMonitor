@@ -104,6 +104,15 @@ def cleanup_snapshots(active_streams):
 def main_loop():
     """Hauptschleife zur Verwaltung der Snapshot-Prozesse"""
     os.makedirs(OUTPUT_DIR, exist_ok=True)
+    # 🔐 Schreibrechte testen
+    testfile = os.path.join(OUTPUT_DIR, ".write_test")
+    try:
+        with open(testfile, "w") as f:
+            f.write("test")
+        os.remove(testfile)
+    except Exception as e:
+        logging.error(f"❌ Keine Schreibrechte im OUTPUT_DIR {OUTPUT_DIR}: {e}")
+        exit(1)
 
     while True:
         active_streams = get_active_streams()
