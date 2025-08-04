@@ -4,7 +4,7 @@ set -e
 echo "📦 Installation des MediaMTX Monitoring Systems startet..."
 
 INSTALL_DIR="/opt/mediamtx-monitoring-backend"
-REPO_URL="https://github.com/snowgameslive/mediamtx-monitoring-backend.git"
+REPO_URL="https://github.com/richtertoralf/mediamtxMonitor"
 PYTHON_BIN="python3"
 USER="mediamtxmon"
 VENV_DIR="$INSTALL_DIR/venv"
