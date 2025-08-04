@@ -24,9 +24,10 @@ if [ ! -d "$INSTALL_DIR" ]; then
   echo "📁 Klone Git-Repo nach $INSTALL_DIR..."
   git clone "$REPO_URL" "$INSTALL_DIR"
 else
-  echo "🔁 Aktualisiere bestehendes Repository..."
-  cd "$INSTALL_DIR"
-  git pull
+  echo "Klonen nicht möglich !"
+  #echo "🔁 Aktualisiere bestehendes Repository..."
+  #cd "$INSTALL_DIR"
+  #git pull
 fi
 
 # 🐍 Python-Venv einrichten
