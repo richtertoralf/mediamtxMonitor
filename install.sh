@@ -27,6 +27,7 @@ if [ ! -d "$INSTALL_DIR/.git" ]; then
   fi
   echo "📁 Klone Git-Repo nach $INSTALL_DIR..."
   git clone "$REPO_URL" "$INSTALL_DIR"
+  chown -R "$USER:$USER" "$INSTALL_DIR" 
 else
   echo "🔁 Aktualisiere bestehendes Repository..."
 
@@ -42,7 +43,10 @@ else
     echo "❌ Git Pull fehlgeschlagen. Bitte manuell prüfen."
     exit 1
   }
+  chown -R "$USER:$USER" "$INSTALL_DIR"
 fi
+
+
 
 
 # 🐍 Python-Venv einrichten
