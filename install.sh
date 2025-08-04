@@ -11,7 +11,7 @@ VENV_DIR="$INSTALL_DIR/venv"
 
 # 🔧 Voraussetzung: Python 3 + Pip + Redis
 echo "🔍 Prüfe Voraussetzungen..."
-apt update && apt install -y python3 python3-venv python3-pip redis-server git
+apt update && apt install -y ffmpeg python3 python3-venv python3-pip redis-server git
 
 # 👤 Systemnutzer erstellen (falls noch nicht vorhanden)
 if ! id "$USER" &>/dev/null; then
