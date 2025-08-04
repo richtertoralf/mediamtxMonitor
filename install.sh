@@ -21,23 +21,27 @@ fi
 
 # 📁 Klonen oder Aktualisieren des Repos
 if [ ! -d "$INSTALL_DIR/.git" ]; then
+  if [ -d "$INSTALL_DIR" ]; then
+    echo "❌ $INSTALL_DIR existiert, ist aber kein Git-Repository. Installation abgebrochen."
+    exit 1
+  fi
   echo "📁 Klone Git-Repo nach $INSTALL_DIR..."
   git clone "$REPO_URL" "$INSTALL_DIR"
 else
   echo "🔁 Aktualisiere bestehendes Repository..."
 
-  # Git-Sicherheit setzen, falls als anderer User installiert wird
   git config --system --add safe.directory "$INSTALL_DIR" 2>/dev/null || \
   git config --global --add safe.directory "$INSTALL_DIR"
 
   cd "$INSTALL_DIR"
-
-  echo "⚠️  Lokale Änderungen werden verworfen..."
+  echo "⚠️  Verwerfe lokale Änderungen und unversionierte Dateien..."
   git reset --hard
   git clean -fd
-
   echo "⬇️  Hole aktuelle Version von GitHub..."
-  git pull --ff-only
+  git pull --ff-only || {
+    echo "❌ Git Pull fehlgeschlagen. Bitte manuell prüfen."
+    exit 1
+  }
 fi
 
 
