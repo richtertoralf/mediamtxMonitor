@@ -81,3 +81,13 @@ def get_streams():
         "streamlist_refresh_ms": frontend_cfg.get("streamlist_refresh_ms", 5000),
         "systeminfo": systeminfo
     })
+
+if __name__ == "__main__":
+    import uvicorn
+
+    # Host und Port aus YAML holen (Fallback optional)
+    server_cfg = config.get("api_server", {})
+    host = server_cfg.get("listen_host", "127.0.0.1")
+    port = server_cfg.get("listen_port", 8080)
+
+    uvicorn.run("bin.mediamtx_api:app", host=host, port=port)
