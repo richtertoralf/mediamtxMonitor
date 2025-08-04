@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-mediamtx_system.py – Systemmonitoring für MediaMTX
+mediamtx_systeminfo.py – Systemmonitoring für MediaMTX
 
 Erfasst CPU, RAM, Swap, Disk, Netzwerk und Temperaturinformationen und speichert:
 - in Redis (Key: mediamtx:system:latest)
