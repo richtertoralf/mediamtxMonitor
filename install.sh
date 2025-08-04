@@ -25,12 +25,21 @@ if [ ! -d "$INSTALL_DIR/.git" ]; then
   git clone "$REPO_URL" "$INSTALL_DIR"
 else
   echo "🔁 Aktualisiere bestehendes Repository..."
-  # Git-Sicherheit setzen (besitzabweichendes Verzeichnis erlauben)
+
+  # Git-Sicherheit setzen, falls als anderer User installiert wird
   git config --system --add safe.directory "$INSTALL_DIR" 2>/dev/null || \
   git config --global --add safe.directory "$INSTALL_DIR"
 
-  git -C "$INSTALL_DIR" pull --ff-only
+  cd "$INSTALL_DIR"
+
+  echo "⚠️  Lokale Änderungen werden verworfen..."
+  git reset --hard
+  git clean -fd
+
+  echo "⬇️  Hole aktuelle Version von GitHub..."
+  git pull --ff-only
 fi
+
 
 # 🐍 Python-Venv einrichten
 echo "🐍 Erzeuge virtuelle Python-Umgebung..."
