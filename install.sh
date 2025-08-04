@@ -20,14 +20,16 @@ if ! id "$USER" &>/dev/null; then
 fi
 
 # 📁 Klonen oder Aktualisieren des Repos
-if [ ! -d "$INSTALL_DIR" ]; then
+if [ ! -d "$INSTALL_DIR/.git" ]; then
   echo "📁 Klone Git-Repo nach $INSTALL_DIR..."
   git clone "$REPO_URL" "$INSTALL_DIR"
 else
-  echo "Klonen nicht möglich !"
-  #echo "🔁 Aktualisiere bestehendes Repository..."
-  #cd "$INSTALL_DIR"
-  #git pull
+  echo "🔁 Aktualisiere bestehendes Repository..."
+  # Git-Sicherheit setzen (besitzabweichendes Verzeichnis erlauben)
+  git config --system --add safe.directory "$INSTALL_DIR" 2>/dev/null || \
+  git config --global --add safe.directory "$INSTALL_DIR"
+
+  git -C "$INSTALL_DIR" pull --ff-only
 fi
 
 # 🐍 Python-Venv einrichten
