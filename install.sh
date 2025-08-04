@@ -80,4 +80,7 @@ systemctl enable --now mediamtx-snapshots.service
 systemctl enable --now mediamtx-systeminfo.service
 
 echo "✅ Installation abgeschlossen."
-echo "🌐 Web-Dashboard erreichbar unter: http://<SERVER-IP>:8080"
+echo "🌐 Web-Dashboard erreichbar unter den folgenden IP-Adressen:"
+for ip in $(hostname -I); do
+  echo "   → http://$ip:8080"
+done
