@@ -39,7 +39,7 @@ INTERVAL_SECONDS = config.get("system_interval_seconds", 10)
 
 # 📝 Logging einrichten
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 
@@ -62,11 +62,75 @@ def get_temperatures():
         logging.warning(f"🌡️ Temperaturdaten nicht verfügbar: {e}")
         return {}
 
+# Globale Zwischenspeicher zur Berechnung des Netzwerktrafics
+_last_net_io = {
+    "bytes_recv": None,
+    "bytes_sent": None,
+    "timestamp": None
+}
+
+def calculate_network_bitrate(current_net_io, current_time):
+    """
+    Berechnet die Netzwerk-Bitrate in Mbit/s seit dem letzten Aufruf.
+    
+    Parameter:
+        current_net_io: dict mit 'bytes_recv' und 'bytes_sent' (von psutil.net_io_counters()._asdict())
+        current_time: aktueller Zeitstempel (time.time())
+    
+    Rückgabe:
+        dict mit 'net_mbit_rx' und 'net_mbit_tx'
+    """
+    global _last_net_io
+
+    prev_recv = _last_net_io["bytes_recv"]
+    prev_sent = _last_net_io["bytes_sent"]
+    prev_time = _last_net_io["timestamp"]
+
+    # Erstinitialisierung: noch kein Vergleich möglich
+    if prev_recv is None or prev_sent is None or prev_time is None:
+        _last_net_io = {
+            "bytes_recv": current_net_io["bytes_recv"],
+            "bytes_sent": current_net_io["bytes_sent"],
+            "timestamp": current_time
+        }
+        return {
+            "net_mbit_rx": None,
+            "net_mbit_tx": None
+        }
+
+    delta_recv = current_net_io["bytes_recv"] - prev_recv
+    delta_sent = current_net_io["bytes_sent"] - prev_sent
+    delta_time = current_time - prev_time
+
+    # Werte für nächsten Vergleich merken
+    _last_net_io = {
+        "bytes_recv": current_net_io["bytes_recv"],
+        "bytes_sent": current_net_io["bytes_sent"],
+        "timestamp": current_time
+    }
+
+    if delta_time <= 0:
+        return {
+            "net_mbit_rx": None,
+            "net_mbit_tx": None
+        }
+
+    net_mbit_rx = (delta_recv * 8) / delta_time / 1_000_000
+    net_mbit_tx = (delta_sent * 8) / delta_time / 1_000_000
+
+    return {
+        "net_mbit_rx": round(net_mbit_rx, 2),
+        "net_mbit_tx": round(net_mbit_tx, 2)
+    }
 
 def collect_and_store():
     """Aktuelle Systemdaten erfassen und in Redis speichern"""
     now = time.time()
     try:
+
+        # Rohdaten für Bitratenberechnung erfassen
+        net_io = psutil.net_io_counters()._asdict()
+
         data = {
             "host": socket.gethostname(),
             "timestamp": now,
@@ -75,9 +139,15 @@ def collect_and_store():
             "swap": psutil.swap_memory()._asdict(),
             "disk": psutil.disk_usage("/")._asdict(),
             "loadavg": psutil.getloadavg() if hasattr(psutil, "getloadavg") else None,
-            "net_io": psutil.net_io_counters()._asdict(),
+            "net_io": net_io,
             "temperature": get_temperatures(),
         }
+
+
+        # Netzwerk-Bitrate berechnen und hinzufügen
+        bitrate = calculate_network_bitrate(net_io, now)
+        data.update(bitrate)
+        logging.debug(f"📶 Netzwerk: RX {bitrate['net_mbit_rx']} Mbit/s, TX {bitrate['net_mbit_tx']} Mbit/s")
 
         # In Redis speichern
         r.set(REDIS_KEY, json.dumps(data))
@@ -116,8 +186,8 @@ def get_system_info():
             "disk_total_bytes": data["disk"]["total"],
             "disk_used_bytes": data["disk"]["used"],
             "loadavg": data.get("loadavg", []),
-            "network_rx_bytes": int(data["net_io"]["bytes_recv"] / 60),
-            "network_tx_bytes": int(data["net_io"]["bytes_sent"] / 60),
+            "net_mbit_rx": data.get("net_mbit_rx"),
+            "net_mbit_tx": data.get("net_mbit_tx"),
             "temperature_celsius": extract_temperature(data.get("temperature", {}))
         }
     except Exception as e:
