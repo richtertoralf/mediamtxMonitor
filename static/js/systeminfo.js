@@ -50,7 +50,7 @@ export function renderSystemInfo(systeminfo = {}) {
     ["Festplatte", formatBytes(systeminfo.disk?.used) + " / " + formatBytes(systeminfo.disk?.total)],
     ["Netzwerk RX", formatMbit(systeminfo.net_mbit_rx)],
     ["Netzwerk TX", formatMbit(systeminfo.net_mbit_tx)],
-    ["Temperatur", (systeminfo.temperature?.celsius ?? "–") + " °C"]
+    ["Temperatur", (systeminfo.temperature_celsius ?? "–") + " °C"]
   ];
 
   for (const [label, value] of rightEntries) {
