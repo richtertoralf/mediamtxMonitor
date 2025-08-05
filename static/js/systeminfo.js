@@ -21,16 +21,19 @@ export function renderSystemInfo(systeminfo = {}) {
 
   const dl = document.createElement("dl");
 
-  const entries = [
-    ["CPU-Auslastung", formatPercent(systeminfo.cpu_percent)],
-    ["RAM (genutzt)", formatBytes(systeminfo.memory?.used) + " / " + formatBytes(systeminfo.memory?.total)],
-    ["Swap", formatBytes(systeminfo.swap?.used) + " / " + formatBytes(systeminfo.swap?.total)],
-    ["Festplatte", formatBytes(systeminfo.disk?.used) + " / " + formatBytes(systeminfo.disk?.total)],
-    ["Load Average", systeminfo.loadavg?.map(n => n.toFixed(2)).join(" / ") ?? "–"],
-    ["Netzwerk RX", formatMbit(systeminfo.net_mbit_rx)],
-    ["Netzwerk TX", formatMbit(systeminfo.net_mbit_tx)],
-    ["Temperatur", (systeminfo.temperature?.celsius ?? "–") + " °C"]
-  ];
+const entries = [
+  // Spalte 1: Systemressourcen
+  ["CPU-Auslastung", formatPercent(systeminfo.cpu_percent)],
+  ["Load Average", systeminfo.loadavg?.map(n => n.toFixed(2)).join(" / ") ?? "–"],
+  ["RAM (genutzt)", formatBytes(systeminfo.memory?.used) + " / " + formatBytes(systeminfo.memory?.total)],
+  ["Swap", formatBytes(systeminfo.swap?.used) + " / " + formatBytes(systeminfo.swap?.total)],
+
+  // Spalte 2: Speicher, Netzwerk, Temperatur
+  ["Festplatte", formatBytes(systeminfo.disk?.used) + " / " + formatBytes(systeminfo.disk?.total)],
+  ["Netzwerk RX", formatMbit(systeminfo.net_mbit_rx)],
+  ["Netzwerk TX", formatMbit(systeminfo.net_mbit_tx)],
+  ["Temperatur", (systeminfo.temperature?.celsius ?? "–") + " °C"]
+];
 
   for (const [label, value] of entries) {
     const dt = document.createElement("dt");
