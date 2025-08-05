@@ -27,8 +27,8 @@ export function renderSystemInfo(systeminfo = {}) {
     ["Swap", formatBytes(systeminfo.swap?.used) + " / " + formatBytes(systeminfo.swap?.total)],
     ["Festplatte", formatBytes(systeminfo.disk?.used) + " / " + formatBytes(systeminfo.disk?.total)],
     ["Load Average", systeminfo.loadavg?.map(n => n.toFixed(2)).join(" / ") ?? "–"],
-    ["Netzwerk RX", formatBytes(systeminfo.net_io?.bytes_recv) + "/min"],
-    ["Netzwerk TX", formatBytes(systeminfo.net_io?.bytes_sent) + "/min"],
+    ["Netzwerk RX", formatMbit(systeminfo.net_mbit_rx)],
+    ["Netzwerk TX", formatMbit(systeminfo.net_mbit_tx)],
     ["Temperatur", (systeminfo.temperature?.celsius ?? "–") + " °C"]
   ];
 
@@ -43,6 +43,10 @@ export function renderSystemInfo(systeminfo = {}) {
 
   section.appendChild(dl);
   container.appendChild(section);
+}
+
+function formatMbit(val) {
+  return (typeof val === "number" && !isNaN(val)) ? val.toFixed(2) + " Mbit/s" : "–";
 }
 
 function formatBytes(bytes) {
