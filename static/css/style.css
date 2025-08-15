@@ -1,15 +1,28 @@
 /* 🌒 Dunkles Design – Grundlayout */
+:root {
+    --bg-dark: #1e1e1e;
+    --bg-panel: #2a2a2a;
+    --text-main: #ffffff;
+    --text-muted: #bbbbbb;
+
+    /* Markerfarben */
+    --marker-srt: #f44336;
+    --marker-rtmp: #ff9800;
+    --marker-hls: #2196f3;
+    --marker-webrtc: #4caf50;
+}
 
 body {
     font-family: sans-serif;
-    margin: 2em;
-    background: #1e1e1e;
-    color: #ffffff;
+    margin: 1em;
+    background: var(--bg-dark);
+    color: var(--text-main);
+    min-width: 630px;
 }
 
 h1 {
-    font-size: 1.5em;
-    color: #ffffff;
+    font-size: 1.2em;
+    color: var(--text-main);
 }
 
 /* 🖥️ Systeminfo-Block */
@@ -18,8 +31,8 @@ h1 {
   display: flex;
   flex-wrap: wrap;
   gap: 2em;
-  background-color: #2a2a2a;
-  padding: 1.2em;
+  background-color: var(--bg-panel);
+  padding: 1.0em;
   border-radius: 8px;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
   max-width: 900px;
@@ -31,7 +44,7 @@ h1 {
   display: grid;
   grid-template-columns: max-content auto;
   column-gap: 1em;
-  row-gap: 0.2em;
+  row-gap: 0.0em;
 }
 
 .systeminfo dt,
@@ -44,20 +57,13 @@ h1 {
 
 .systeminfo dt {
   font-weight: 600;
-  color: #bbbbbb;
+  color: var(--text-muted);
 }
 
 .systeminfo dd {
-  color: #ffffff;
+  color: var(--text-main);
 }
 
-/*
-@media (max-width: 600px) {
-  .systeminfo {
-    flex-direction: column;
-  }
-}
-*/
 
 /* 📦 Einzelne Stream-Karten */
 
@@ -65,9 +71,9 @@ h1 {
     display: grid;
     grid-template-columns: 1fr auto 1fr;
     gap: 20px;
-    background-color: #2a2a2a;
+    background-color: var(--bg-panel); 
     border-radius: 8px;
-    padding: 20px;
+    padding: 15px;
     margin-bottom: 10px;
     color: #e0e0e0;
     font-family: sans-serif;
@@ -105,38 +111,17 @@ h1 {
 
 /* 🔵 Marker für Stream-Typen */
 
-.marker-srt {
-    background-color: #f44336;
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    margin-right: 6px;
-}
-
-.marker-rtmp {
-    background-color: #ff9800;
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    margin-right: 6px;
-}
-
-.marker-hls {
-    background-color: #2196f3;
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    margin-right: 6px;
-}
-
+.marker-srt,
+.marker-rtmp,
+.marker-hls,
 .marker-webrtc {
-    background-color: #4caf50;
     display: inline-block;
     width: 10px;
     height: 10px;
     border-radius: 50%;
     margin-right: 6px;
 }
+.marker-srt    { background-color: var(--marker-srt); }
+.marker-rtmp   { background-color: var(--marker-rtmp); }
+.marker-hls    { background-color: var(--marker-hls); }
+.marker-webrtc { background-color: var(--marker-webrtc); }
