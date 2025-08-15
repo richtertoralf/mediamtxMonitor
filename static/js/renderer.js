@@ -3,6 +3,18 @@
  * @param {Object} reader - Reader-Objekt mit Typ, ID und Details
  * @returns {string} - HTML-Block mit Reader-Informationen
  */
+
+function formatBytes(bytes) {
+  if (!bytes || isNaN(bytes)) return "–";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let i = 0;
+  while (bytes >= 1024 && i < units.length - 1) {
+    bytes /= 1024;
+    i++;
+  }
+  return bytes.toFixed(4) + " " + units[i];
+}
+
 export function renderReader(reader) {
   const markerClass = {
     srtConn: "marker-srt",
@@ -24,7 +36,7 @@ export function renderReader(reader) {
       <span class="${markerClass}"></span>Typ: ${reader.type}<br/>
       Remote: ${remote}<br/>
       Rate: ${finalRate.toFixed(2)} Mbps<br/>
-      Gesendet: ${bytes.toLocaleString()} Bytes
+      Gesendet: ${formatBytes(bytes)}
   `;
 
   if (reader.type === "hlsMuxer" && reader.details?.lastRequest) {
@@ -48,8 +60,8 @@ function renderStreamLeft(stream) {
       Remote: ${stream.source?.details?.remoteAddr || "-"}<br/>
       RTT: ${stream.source?.details?.msRTT?.toFixed(2) || "0"} ms<br/>
       Rate: ${stream.source?.details?.mbpsReceiveRate?.toFixed(2) || "0"} Mbps<br/>
-      Empfangen: ${stream.source?.details?.bytesReceived?.toLocaleString() || "0"} Bytes<br/>
-      Tracks: ${stream.tracks?.join(", ") || "-"}<br/>
+      Empfangen: ${formatBytes(stream.source?.details?.bytesReceived) || "–"}<br/>
+Tracks: ${stream.tracks?.join(", ") || "-"}<br/>
     </div>
   `;
 }
@@ -92,7 +104,6 @@ export function renderStreamCard(stream, snapshotIntervalMs = 5000) {
 
   return div;
 }
-
 
 /**
  * 🔁 Aktualisiert eine bestehende Streamkarte im DOM
