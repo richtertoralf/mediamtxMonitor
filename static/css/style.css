@@ -125,3 +125,40 @@ h1 {
 .marker-rtmp   { background-color: var(--marker-rtmp); }
 .marker-hls    { background-color: var(--marker-hls); }
 .marker-webrtc { background-color: var(--marker-webrtc); }
+
+/* === Responsive Breakpoints === */
+
+/* 1) Systeminfo: Spalten untereinander ab ~700px */
+@media (max-width: 500px) {
+  .systeminfo {
+    padding: 0.8em;     /* minimal kompakter */
+    gap: 1em;
+  }
+  .systeminfo .info-column {
+    flex: 1 1 100%;     /* jede Spalte volle Breite -> untereinander */
+  }
+}
+
+/* 2) Streamcards: 3 -> 1 Spalte ab ~900px */
+@media (max-width: 630px) {
+  .stream-card {
+    grid-template-columns: 1fr;   /* untereinander: left, center, right */
+    gap: 14px;                    /* etwas kompakter */
+  }
+  .snapshot-image {
+    max-width: min(240px, 100%);  /* sprengt nicht, bleibt kompakt */
+    align-self: start;            /* kein zentriertes "riesen" Bild */
+  }
+}
+
+/* 3) Ganz kleine Devices: Body-Minbreite aufheben, damit nichts seitlich rausläuft */
+@media (max-width: 400px) {
+  body { min-width: auto; }
+}
+
+/* 4) Mini-Feinschliff für Marker auf Mobile (optional, rein optisch) */
+@media (max-width: 500px) {
+  .marker-srt, .marker-rtmp, .marker-hls, .marker-webrtc {
+    vertical-align: middle;
+  }
+}
