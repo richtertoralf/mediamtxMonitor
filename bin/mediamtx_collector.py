@@ -34,7 +34,7 @@ Ablauf:
 4) Optional JSON-Datei für Debug/Inspektion.
 
 Voraussetzung:
-- Modul bitrate.py im selben bin/-Verzeichnis:
+- Modul bitrate.py und rtt.py im selben bin/-Verzeichnis:
   from bitrate import calc_bitrate
 """
 
@@ -55,6 +55,9 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 # Einheitliche Bitraten-Berechnung (Publisher & Reader)
 from bitrate import calc_bitrate
+
+# RTT nur für Publisher (Nicht-SRT)
+from rtt import measure_publisher_rtt_ms
 
 
 # ---------------------------------------------------------------------------
@@ -252,6 +255,26 @@ def collect_and_store() -> None:
             entry["source"]["bitrate_mbps"] = round(float(api_rx_mbps), 2)
         else:
             entry["source"]["bitrate_mbps"] = float(pub_calc_mbps or 0.0)
+
+        # -----------------------------------------
+        # --- Publisher-RTT (nur für Nicht-SRT) ---
+        # -----------------------------------------
+        remote = src_details.get("remoteAddr", "")
+        if (src_type != "srtConn") and remote:
+            try:
+                rtt_ms = measure_publisher_rtt_ms(
+                    r,
+                    remote_addr=remote,
+                    ewma_alpha=float(BITRATE_SMOOTH_ALPHA or 0.5),
+                    min_period_s=30,
+                    ttl_s=300,
+                    key_prefix="rtt:pub",
+                    timeout_s=0.9,
+                )
+                if rtt_ms is not None:
+                    entry["source"]["rtt_ms"] = round(rtt_ms, 2)
+            except Exception as e:
+                logging.debug(f"RTT-Messung fehlgeschlagen für {name} ({remote}): {e}")
 
         # ------------------------
         # Reader-Liste aufbereiten
