@@ -50,12 +50,14 @@ Dieses Projekt bietet eine übersichtliche und ressourcenschonende Möglichkeit,
 ```plaintext
 
 /opt/mediamtx-monitoring-backend/
-├── bin/                         ← ausführbare Python-Skripte
-│   ├── mediamtx_collector.py   ← ✅ Läuft via systemd (Daten abrufen & speichern)
-│   ├── mediamtx_api.py         ← ✅ FastAPI-Server für API + Static Files
-│   ├── mediamtx_snapshot.py    ← ✅ erstellt von den eingehenden Streams Snapshots
-│   ├── mediamtx_system.py      ← ✅ erfasst Systemmetriken (CPU, RAM, Load, Disk, Temperatur)
-│   └── reader_bitrate.py
+├── install.sh                  ← Skript zur automatischen Installation bzw. Aktualisierung
+├── bin/                        ← ausführbare Python-Skripte
+│   ├── mediamtx_collector.py   ← Läuft via systemd (Daten abrufen & speichern)
+│   ├── mediamtx_api.py         ← FastAPI-Server für API + Static Files
+│   ├── mediamtx_snapshot.py    ← erstellt von den eingehenden Streams Snapshots
+│   ├── mediamtx_system.py      ← erfasst Systemmetriken (CPU, RAM, Load, Disk, Temperatur)
+│   └── bitrate.py
+│   ├── rtt.py                  ← Hilfsskript zur Berechnung von RTT-Werten (nur für eingehende Streams)
 │   └── __init__.py             ← optional, falls bin/ als Modul genutzt wird
 │   └── __pycache__/            ← automatisch generiert
 │
