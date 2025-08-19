@@ -1,51 +1,57 @@
 # 🌐 API-Server-Konfiguration (gilt für mediamtx_api.py)
 api_server:
-  redis:
-    host: "localhost"
-    port: 6379
-    key: "mediamtx:streams:latest"     # Redis-Key, aus dem die API die Streamdaten liest
-  static_dir: "/opt/mediamtx-monitoring-backend/static"  # Pfad zu HTML, JS, CSS
-  index_file: "index.html"             # Startseite im static-Verzeichnis
-  listen_host: "0.0.0.0"               # Host für Uvicorn/ASGI (optional, falls extern aufrufbar)
-  listen_port: 8080                    # Port für den FastAPI-Server (optional, falls separat gestartet)
+  static_dir: "/opt/mediamtx-monitoring-backend/static"
+  index_file: "index.html"
+  listen_host: "0.0.0.0"
+  listen_port: 8080
+  redis_key: "mediamtx:streams:latest"
 
-# 🌐 Basis-URL der MediaMTX API (normalerweise Port 9997)
+# 🌐 Basis-URL der MediaMTX API
 api_base_url: "http://localhost:9997"
 
-# 🧠 Redis-Konfiguration (global gültig für alle Module)
+# 🧠 Redis-Konfiguration (global)
 redis:
   host: "localhost"
   port: 6379
 
-# 📝 Logging für alle Module in Redis
+# 📝 Logging
 logging:
-  level: "DEBUG"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
-  
-# 📦 Modul: Stream Collector (mediamtx_collector.py)
+  level: "INFO"
+
+# 📦 Stream Collector
 collector:
   redis_key: "mediamtx:streams:latest"
   output_json_path: "/tmp/mediamtx_streams.json"
   interval_seconds: 5
 
-# 📸 Modul: Snapshots (mediamtx_snapshots.py)
+# 📡 RTT-Messung (nur Publisher, Nicht-SRT)
+rtt:
+  enabled: true
+  ewma_alpha: 0.5
+  min_period_s: 30
+  ttl_s: 300
+  timeout_s: 0.9
+  key_prefix: "rtt:pub"
+
+# 📸 Snapshots
 snapshots:
-  backend: "ffmpeg"                      # Nur dokumentativ
-  protocol: "rtsp"                       # Stream-Protokoll für Snapshot-Quellen
-  port: 8554                             # z. B. RTSP-Port von MediaMTX
+  backend: "ffmpeg"
+  protocol: "rtsp"
+  port: 8554
   output_dir: "/opt/mediamtx-monitoring-backend/static/snapshots"
   width: 320
   height: 180
-  interval: 10                           # Alle 10 Sekunden pro Stream ein Bild (wird durch snapshots.py gelesen)
-  timeout_seconds: 0                     # kann bleiben – wird ggf. später von opencv-Backend genutzt
-  max_threads: 0                         # nur dokumentativ (irrelevant für ffmpeg-Dauerprozesse)
+  interval: 10
+  timeout_seconds: 0
+  max_threads: 0
 
-# 💻 Modul: System Monitoring (mediamtx_system.py)
+# 💻 System Monitoring
 system_monitor:
   redis_key: "mediamtx:system:latest"
   output_json_path: "/tmp/mediamtx_system.json"
   interval_seconds: 10
 
-# 🌍 Frontend-Parameter (wird nur vom Webserver verwendet)
+# 🌍 Frontend
 frontend:
-  snapshot_refresh_ms: 2000             # Browser lädt alle 2s neue Bilder
-  streamlist_refresh_ms: 5000           # Stream-API wird alle 5s neu geladen
+  snapshot_refresh_ms: 2000
+  streamlist_refresh_ms: 5000
