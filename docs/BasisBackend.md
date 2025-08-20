@@ -43,7 +43,7 @@ sudo sed -i 's/^api: no$/api: yes/' /usr/local/etc/mediamtx.yml
 ```
 #### Installtionsskript für mediamtxMonitor
 ```
-wget https://github.com/richtertoralf/mediamtxMonitor/blob/main/install.sh
+wget https://raw.githubusercontent.com/richtertoralf/mediamtxMonitor/main/install.sh
 chmod +x install.sh
 ```
 und ausführen
