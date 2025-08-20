@@ -83,10 +83,11 @@ function renderStreamLeft(stream) {
   const calcRate = Number(src.bitrate_mbps) || 0;
   const finalRate = apiRate > 0 ? apiRate : calcRate;
 
-  // RTT abgesichert formatieren.
-  const rtt = details.msRTT != null && !isNaN(Number(details.msRTT))
-    ? Number(details.msRTT).toFixed(2)
-    : "0";
+  // RTT: API (SRT) bevorzugt, sonst berechnete RTT (rtt.py).
+  const rttApi  = Number(stream.source?.details?.msRTT) || 0;
+  const rttCalc = Number(stream.source?.rtt_ms) || 0;
+  const rttFinal = rttApi > 0 ? rttApi : rttCalc;
+
 
   // Empfangen: bevorzugt Detailzähler, fallback auf Path-Feld.
   const bytesRx = details.bytesReceived != null
@@ -98,7 +99,7 @@ function renderStreamLeft(stream) {
       <div class="stream-title">${stream.name}</div>
       Publisher (${src.type || "-"})<br/>
       Remote: ${details.remoteAddr || "-"}<br/>
-      RTT: ${rtt} ms<br/>
+      RTT: ${rttFinal > 0 ? rttFinal.toFixed(2) : "0.00"} ms<br/>
       Rate: ${finalRate > 0 ? finalRate.toFixed(2) : "0.00"} Mbps<br/>
       Empfangen: ${formatBytes(bytesRx)}<br/>
       Tracks: ${Array.isArray(stream.tracks) && stream.tracks.length ? stream.tracks.join(", ") : "-"}<br/>
