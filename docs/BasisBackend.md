@@ -14,6 +14,41 @@ Dieses Projekt bietet eine übersichtliche und ressourcenschonende Möglichkeit,
 - SRT-spezifische Metriken wie RTT, Linkkapazität und Empfangsrate
 - Systemmetriken wie CPU, RAM, Netzwerk, Load Average, Temperatur
 
+### schnelle Installation:
+Mediamtx sollte vorher z.B. installiert worden sein:
+#### Installation von Mediamtx
+Download der Binärdateien, z.B.:
+```
+# Version prüfen !
+wget https://github.com/bluenviron/mediamtx/releases/download/v1.3.0/mediamtx_v1.3.0_linux_arm64v8.tar.gz
+```
+
+Entpacken:
+```
+tar -xzvf mediamtx_v1.3.0_linux_arm64v8.tar.gz
+```
+
+Verschieben:
+```
+sudo mv mediamtx /usr/local/bin/
+sudo mv mediamtx.yml /usr/local/etc/
+```
+
+#### Mediamtx - Konfiguration anpassen
+Das setzt voraus, das mediamtx so wie oben beschrieben installiert wurde.
+```
+
+# API aktivieren
+sudo sed -i 's/^api: no$/api: yes/' /usr/local/etc/mediamtx.yml
+```
+#### Installtionsskript für mediamtxMonitor
+```
+wget
+```
+und ausführen
+```
+sudo bash ./install.sh
+```
 
 ### 🧱 Architekturüberblick
 
