@@ -49,7 +49,8 @@ sudo systemctl status mediamtx-api.service
 ```
 
 ### 2. Browser öffnen:
-👉 http://<server>:8080/
+
+`👉 http://<server>:8080/`
 
 ### 3. API testen:
 ```
