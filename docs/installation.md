@@ -38,7 +38,7 @@ Das Skript richtet automatisch ein:
 - Redis
 - Virtuelle Python-Umgebung
 - Alle benötigten Pakete
-- Systemd-Dienste für Collector & API
+- Systemd-Dienste
 - Projektverzeichnis unter /opt/mediamtx-monitoring-backend
 
 ## Test
