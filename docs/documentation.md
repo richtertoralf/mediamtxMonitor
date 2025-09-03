@@ -34,6 +34,9 @@ Standardpfad: `/opt/mediamtx-monitoring-backend`
 ├── requirements.txt            ← Python-Abhängigkeiten
 └── venv/                       ← Virtuelle Umgebung
 
+```
+
+
 ## API-Endpunkte (REST)
 
 | Endpoint                | Beschreibung                            | Beispielausgabe                                      |
