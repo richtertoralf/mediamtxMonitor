@@ -54,7 +54,7 @@ sudo systemctl status mediamtx-api.service
 
 ### 3. API testen:
 ```
-curl http://localhost:8080/api/streams/latest
+curl http://localhost:8080/api/streams
 ```
 
 ## Update
