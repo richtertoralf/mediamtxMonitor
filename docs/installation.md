@@ -17,9 +17,9 @@ Ergebnis: Ein Web-Dashboard unter `http://<server>:8080/`, das Streams und Syste
 
 ### 1. MediaMTX installieren
 ```bash
-# Version prüfen!
-wget https://github.com/bluenviron/mediamtx/releases/download/v1.3.0/mediamtx_v1.3.0_linux_amd64.tar.gz
-tar -xzvf mediamtx_v1.3.0_linux_amd64.tar.gz
+# Version vorher prüfen!
+wget https://github.com/bluenviron/mediamtx/releases/download/v1.14.0/mediamtx_v1.14.0_linux_amd64.tar.gz
+tar -xzvf mediamtx_v1.14.0_linux_amd64.tar.gz
 sudo mv mediamtx /usr/local/bin/
 sudo mv mediamtx.yml /usr/local/etc/
 
