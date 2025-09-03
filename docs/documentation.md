@@ -39,39 +39,77 @@ Standardpfad: `/opt/mediamtx-monitoring-backend`
 
 ## API-Endpunkte (REST)
 
+Basis: `http://<server>:8080`
+
 | Endpoint                | Beschreibung                            | Beispielausgabe                                      |
 | ----------------------- | --------------------------------------- | ---------------------------------------------------- |
-| `/api/streams/latest`   | Aktuelle Streams aus Redis              | JSON-Liste mit Name, Quelle, Zuschauer, SRT-Metriken |
-| `/api/system/latest`    | Aktuelle Systemmetriken                 | JSON mit CPU, RAM, Netz, Temperatur                  |
-| `/api/snapshots/latest` | (optional) Letzte Snapshots der Streams | Dateipfade / Base64                                  |
+| `/api/streams`   | Aktuelle Streams aus Redis              | JSON-Liste mit Name, Quelle, Zuschauer, SRT-Metriken |
+| `/api/system`    | Aktuelle Systemmetriken                 | JSON mit CPU, RAM, Netz, Temperatur                  |
+| `/api/snapshots` | (optional) Letzte Snapshots der Streams | Dateipfade / Base64                                  |
 
-### Beispiel – Streams:
-```json
-[
-  {
-    "name": "testpattern-sport",
-    "sourceType": "srtConn",
-    "tracks": ["H264", "MPEG-4 Audio"],
-    "bytesReceived": 3413148,
-    "readers": 1,
-    "rtt": 0.36,
-    "recvRateMbps": 1.94,
-    "linkCapacityMbps": 1808.58
-  }
-]
+### Beispiel – `GET /api/streams`
+Antwort (gekürzt):
 
-```
-### Beispiel – System:
 ```json
 {
-  "cpu_percent": 12.3,
-  "ram_used_mb": 842,
-  "ram_total_mb": 3936,
-  "net_in_mbps": 5.1,
-  "net_out_mbps": 4.7,
-  "load_avg": [0.12, 0.08, 0.02],
-  "temperature_c": 47.5
+  "streams": [
+    {
+      "name": "testpattern-basic",
+      "source": { "type": "srtConn", "details": { "msRTT": 0.55, "mbpsReceiveRate": 16.73, "mbpsLinkCapacity": 98.18 } },
+      "tracks": ["H264", "MPEG-4 Audio"],
+      "bytesReceived": 339475545689,
+      "bytesSent": 339815173364,
+      "readers": []
+    }
+    // ...
+  ],
+  "snapshot_refresh_ms": 2000,
+  "streamlist_refresh_ms": 5000,
+  "systeminfo": {
+    "host": "debianMediamtx01",
+    "timestamp": 1756905517.1592934,
+    "cpu_percent": 18.8,
+    "memory": { "total": 2062737408, "used": 361574400, "percent": 25.1 },
+    "loadavg": [0.63, 0.42, 0.35],
+    "net_mbit_rx": 21.02,
+    "net_mbit_tx": 0.18
+  }
 }
+```
+
+### Beispiel – GET /api/system:
+
+```json
+{
+  "host": "debianMediamtx01",
+  "timestamp": 1756905517.1592934,
+  "cpu_percent": 18.8,
+  "memory": { "total": 2062737408, "used": 361574400, "percent": 25.1 },
+  "swap": { "total": 1022357504, "used": 0, "percent": 0.0 },
+  "disk": { "total": 32626225152, "used": 3564396544, "percent": 11.5 },
+  "loadavg": [0.63, 0.42, 0.35],
+  "net_io": { "bytes_recv": 486096582713, "bytes_sent": 4784003131 },
+  "net_mbit_rx": 21.02,
+  "net_mbit_tx": 0.18,
+  "temperature": {},
+  "temperature_celsius": null
+}
+
+```
+### Nützliche CLI-Tests
+
+```bash
+# komplette Payload
+curl -s http://localhost:8080/api/streams | jq
+
+# nur Streamnamen (jq)
+curl -s http://localhost:8080/api/streams | jq -r '.streams[].name'
+
+# RTT pro Stream (falls SRT-Details vorhanden)
+curl -s http://localhost:8080/api/streams | jq -r '.streams[] | "\(.name)\t\(.source.details.msRTT // "-")"'
+
+# CPU und Netz (aus systeminfo)
+curl -s http://localhost:8080/api/streams | jq '{cpu: .systeminfo.cpu_percent, rx_mbit: .systeminfo.net_mbit_rx, tx_mbit: .systeminfo.net_mbit_tx}'
 
 ```
 
