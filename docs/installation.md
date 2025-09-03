@@ -46,6 +46,8 @@ Das Skript richtet automatisch ein:
 ```bash
 sudo systemctl status mediamtx-collector.service
 sudo systemctl status mediamtx-api.service
+sudo systemctl status mediamtx-snapshots.service
+sudo systemctl status mediamtx-system.service
 ```
 
 ### 2. Browser öffnen:
@@ -70,6 +72,8 @@ sudo ./install.sh
 # Dienste stoppen
 sudo systemctl disable --now mediamtx-collector.service
 sudo systemctl disable --now mediamtx-api.service
+sudo systemctl disable --now mediamtx-snapshots.service
+sudo systemctl disable --now mediamtx-system.service
 
 # Verzeichnis löschen
 sudo rm -rf /opt/mediamtx-monitoring-backend
