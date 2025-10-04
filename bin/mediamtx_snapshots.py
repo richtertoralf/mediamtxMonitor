@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 mediamtx_snapshots.py – Snapshot-Manager für MediaMTX-Streams
+ /opt/mediamtx-monitoring-backend/bin/mediamtx_snapshots.py
 
 Startet pro aktivem Stream genau einen ffmpeg-Prozess zur Snapshot-Erzeugung.
 Verwendet eine zentrale YAML-Konfiguration (collector.yaml).
@@ -62,7 +63,17 @@ def get_active_streams():
         if not data:
             return []
         parsed = json.loads(data)
-        return [s["name"] for s in parsed if s.get("source", {}).get("type")]
+        # ✅ Nur Streams mit Quelle, und falls "ready" existiert, muss es True sein
+        return [
+            s["name"]
+            for s in parsed
+            if s.get("source", {}).get("type")
+            and (
+                "ready" not in s["source"]
+                or s["source"]["ready"]
+            )
+        ]
+
     except Exception as e:
         logging.error(f"❌ Fehler beim Lesen aus Redis: {e}")
         return []
@@ -70,13 +81,9 @@ def get_active_streams():
 
 def start_ffmpeg_process(stream_name):
     """ffmpeg-Prozess für Snapshot-Erzeugung starten"""
-    output_path = os.path.join(OUTPUT_DIR, f"{stream_name}.jpg")
-    
-    # 🔧 Unterordner automatisch anlegen (z. B. /snapshots/live/)
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    
+    safe_name = stream_name.replace("/", "_")
+    output_path = os.path.join(OUTPUT_DIR, f"{safe_name}.jpg")
     stream_url = f"{PROTOCOL}://localhost:{PORT}/{stream_name}"
-    
     fps_expr = f"fps=1/{INTERVAL},scale={WIDTH}:{HEIGHT}"
 
     cmd = [
@@ -96,7 +103,7 @@ def start_ffmpeg_process(stream_name):
 
 def cleanup_snapshots(active_streams):
     """Snapshots von Streams löschen, die nicht mehr aktiv sind"""
-    active_files = {f"{s}.jpg" for s in active_streams}
+    active_files = {f"{s.replace('/', '_')}.jpg" for s in active_streams}
     for file_path in glob(os.path.join(OUTPUT_DIR, "*.jpg")):
         if os.path.basename(file_path) not in active_files:
             try:
@@ -109,15 +116,6 @@ def cleanup_snapshots(active_streams):
 def main_loop():
     """Hauptschleife zur Verwaltung der Snapshot-Prozesse"""
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    # 🔐 Schreibrechte testen
-    testfile = os.path.join(OUTPUT_DIR, ".write_test")
-    try:
-        with open(testfile, "w") as f:
-            f.write("test")
-        os.remove(testfile)
-    except Exception as e:
-        logging.error(f"❌ Keine Schreibrechte im OUTPUT_DIR {OUTPUT_DIR}: {e}")
-        exit(1)
 
     while True:
         active_streams = get_active_streams()
