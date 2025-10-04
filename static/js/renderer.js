@@ -1,5 +1,6 @@
 /**
  * renderer.js – Render-Funktionen für Streamkarten (Publisher + Readers)
+ * /opt/mediamtx-monitoring-backend/static/js/renderer.js
  *
  * - Zeigt links die Publisher-Infos inkl. Rate:
  *   bevorzugt API-Wert (z. B. SRT mbpsReceiveRate), sonst berechnete Bitrate
@@ -129,7 +130,7 @@ export function renderStreamCard(stream, snapshotIntervalMs = 5000) {
     <div class="stream-center">
       <img
         class="snapshot-image"
-        src="/static/snapshots/${stream.name}.jpg?ts=${Date.now()}"
+        src="/static/snapshots/${stream.name.replace('/', '_')}.jpg?ts=${Date.now()}"
         alt="Snapshot: ${stream.name}"
       >
     </div>
@@ -148,7 +149,7 @@ export function renderStreamCard(stream, snapshotIntervalMs = 5000) {
   const snapshot = div.querySelector(".stream-center img");
   if (snapshot) {
     setInterval(() => {
-      snapshot.src = `/static/snapshots/${stream.name}.jpg?ts=${Date.now()}`;
+      snapshot.src = `/static/snapshots/${stream.name.replace('/', '_')}.jpg?ts=${Date.now()}`;
     }, snapshotIntervalMs);
   }
 
