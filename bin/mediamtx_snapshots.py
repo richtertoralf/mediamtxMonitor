@@ -71,7 +71,12 @@ def get_active_streams():
 def start_ffmpeg_process(stream_name):
     """ffmpeg-Prozess für Snapshot-Erzeugung starten"""
     output_path = os.path.join(OUTPUT_DIR, f"{stream_name}.jpg")
+    
+    # 🔧 Unterordner automatisch anlegen (z. B. /snapshots/live/)
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
     stream_url = f"{PROTOCOL}://localhost:{PORT}/{stream_name}"
+    
     fps_expr = f"fps=1/{INTERVAL},scale={WIDTH}:{HEIGHT}"
 
     cmd = [
