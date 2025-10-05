@@ -66,6 +66,7 @@ wget https://raw.githubusercontent.com/richtertoralf/mediamtxMonitor/main/instal
 chmod +x install.sh
 sudo ./install.sh
 ```
+Danach Reboot des Computers, da aktuell im Skript `install.sh` der neustart der Dienste nicht implementiert ist.
 
 ## Deinstallation
 ```bash
