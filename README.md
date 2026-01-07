@@ -25,28 +25,18 @@ Zeigt aktive Streams, Zuschauerzahlen, Bitraten und Systemmetriken live im Brows
 
 Das Monitoring stellt den aktuellen Zustand des MediaMTX-Servers live im Browser dar:
 
-Systemzustand: CPU, Load, RAM, Netzwerk, Temperatur
+* Systemzustand: CPU, Load, RAM, Netzwerk, Temperatur
+* Aktive Streams inkl.:
+  Publisher-Typ (SRT / RTMP)
+  RTT, Bitrate, empfangene Daten
+  Aktive Reader (Zuschauer / Weiterleitungen)
+* Automatisch erzeugte Snapshots der Videostreams zur visuellen Identifikation
 
-Aktive Streams inkl.:
-
-Publisher-Typ (SRT / RTMP)
-
-RTT, Bitrate, empfangene Daten
-
-Aktive Reader (Zuschauer / Weiterleitungen)
-
-Automatisch erzeugte Snapshots der Videostreams zur visuellen Identifikation
-
-Die Snapshots werden serverseitig erzeugt und ermöglichen es,
-Streams schnell zuzuordnen (z. B. Testpattern, OBS-Feeds, Kameras),
-ohne einen Player öffnen zu müssen.
+Die Snapshots werden serverseitig erzeugt und ermöglichen es, Streams schnell zuzuordnen (z. B. Testpattern, OBS-Feeds, Kameras), ohne einen Player öffnen zu müssen.
 
 Gedacht ist das Dashboard für:
 
-Remote-Produktionen
-
-Debugging von SRT-Verbindungen
-
-Kontrolle von Test- und Dauerstreams
-
-Betrieb ohne GUI auf dem MediaMTX-Server selbst
+* Remote-Produktionen
+* Debugging von SRT-Verbindungen
+* Kontrolle von Test- und Dauerstreams
+* Betrieb ohne GUI auf dem MediaMTX-Server selbst
