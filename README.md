@@ -10,7 +10,6 @@ Zeigt aktive Streams, Zuschauerzahlen, Bitraten und Systemmetriken live im Brows
 - SRT-Metriken (RTT, Linkkapazität, Empfangsrate)
 - Systemmetriken (CPU, RAM, Netz, Temperatur)
 - Einfaches Web-Dashboard und JSON-API
-- Modular erweiterbar (Snapshots, Historie, Docker)
 
 ## 🚀 Schnellstart
 1. MediaMTX installieren und API aktivieren  
@@ -21,3 +20,33 @@ Zeigt aktive Streams, Zuschauerzahlen, Bitraten und Systemmetriken live im Brows
 - [📄 installation.md](docs/installation.md) – Schritt-für-Schritt Einrichtung
 - [📖 documentation.md](docs/documentation.md) – Details für Anwender & Entwickler
 - [🏗️ architecture.md](docs/architecture.md) – Architektur & Designüberblick
+
+## Live-Dashboard & Snapshots
+
+Das Monitoring stellt den aktuellen Zustand des MediaMTX-Servers live im Browser dar:
+
+Systemzustand: CPU, Load, RAM, Netzwerk, Temperatur
+
+Aktive Streams inkl.:
+
+Publisher-Typ (SRT / RTMP)
+
+RTT, Bitrate, empfangene Daten
+
+Aktive Reader (Zuschauer / Weiterleitungen)
+
+Automatisch erzeugte Snapshots der Videostreams zur visuellen Identifikation
+
+Die Snapshots werden serverseitig erzeugt und ermöglichen es,
+Streams schnell zuzuordnen (z. B. Testpattern, OBS-Feeds, Kameras),
+ohne einen Player öffnen zu müssen.
+
+Gedacht ist das Dashboard für:
+
+Remote-Produktionen
+
+Debugging von SRT-Verbindungen
+
+Kontrolle von Test- und Dauerstreams
+
+Betrieb ohne GUI auf dem MediaMTX-Server selbst
