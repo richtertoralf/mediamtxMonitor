@@ -35,7 +35,6 @@ async function updateUI() {
 
   renderSystemInfo(result.systeminfo || {});
 
-  const snapshotInterval = result.snapshot_refresh_ms ?? 5000;
   const newInterval = result.streamlist_refresh_ms ?? 5000;
 
   const streams = result.streams || [];
@@ -46,7 +45,7 @@ async function updateUI() {
     const existingCard = streamCards.get(stream.name);
 
     if (!existingCard) {
-      const newCard = renderStreamCard(stream, snapshotInterval);
+      const newCard = renderStreamCard(stream);
       container.appendChild(newCard);
       streamCards.set(stream.name, newCard);
     } else {

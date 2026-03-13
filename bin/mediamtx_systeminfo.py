@@ -39,7 +39,7 @@ INTERVAL_SECONDS = config.get("system_interval_seconds", 10)
 
 # 📝 Logging einrichten
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 
@@ -52,9 +52,8 @@ except Exception as e:
     logging.error(f"❌ Verbindung zu Redis fehlgeschlagen: {e}")
     exit(1)
 
-
+# 🌡️ Temperatur auslesen
 def get_temperatures():
-    """Temperatursensoren auslesen (falls verfügbar)"""
     try:
         temps = psutil.sensors_temperatures()
         return {k: [t._asdict() for t in v] for k, v in temps.items()}
@@ -62,11 +61,85 @@ def get_temperatures():
         logging.warning(f"🌡️ Temperaturdaten nicht verfügbar: {e}")
         return {}
 
+# 📶 Netzwerkfilter (nur echte NICs)
+def get_filtered_net_io():
+    """
+    Gibt aufsummierte Netzwerknutzung (bytes_recv, bytes_sent) aller physikalischen NICs zurück.
+    Ignoriert Loopback, Docker, virtuelle Bridges, VPNs etc.
+    """
+    interfaces = psutil.net_io_counters(pernic=True)
+    filtered = {
+        name: stats for name, stats in interfaces.items()
+        if not (
+            name.startswith("lo")
+            or name.startswith("docker")
+            or name.startswith("br")
+            or name.startswith("veth")
+            # or name.startswith("wg") # wireguard Interface
+            or name.startswith("tun")
+        )
+    }
+    return {
+        "bytes_recv": sum(stats.bytes_recv for stats in filtered.values()),
+        "bytes_sent": sum(stats.bytes_sent for stats in filtered.values()),
+    }
 
+# ⏱️ Zwischenspeicher für Netzwerk-Bitrate
+_last_net_io = {
+    "bytes_recv": None,
+    "bytes_sent": None,
+    "timestamp": None
+}
+
+# 📊 Netzwerkbitrate berechnen
+def calculate_network_bitrate(current_net_io, current_time):
+    global _last_net_io
+
+    prev_recv = _last_net_io["bytes_recv"]
+    prev_sent = _last_net_io["bytes_sent"]
+    prev_time = _last_net_io["timestamp"]
+
+    if prev_recv is None or prev_sent is None or prev_time is None:
+        _last_net_io = {
+            "bytes_recv": current_net_io["bytes_recv"],
+            "bytes_sent": current_net_io["bytes_sent"],
+            "timestamp": current_time
+        }
+        return {
+            "net_mbit_rx": None,
+            "net_mbit_tx": None
+        }
+
+    delta_recv = current_net_io["bytes_recv"] - prev_recv
+    delta_sent = current_net_io["bytes_sent"] - prev_sent
+    delta_time = current_time - prev_time
+
+    _last_net_io = {
+        "bytes_recv": current_net_io["bytes_recv"],
+        "bytes_sent": current_net_io["bytes_sent"],
+        "timestamp": current_time
+    }
+
+    if delta_time <= 0:
+        return {
+            "net_mbit_rx": None,
+            "net_mbit_tx": None
+        }
+
+    net_mbit_rx = (delta_recv * 8) / delta_time / 1_000_000
+    net_mbit_tx = (delta_sent * 8) / delta_time / 1_000_000
+
+    return {
+        "net_mbit_rx": round(net_mbit_rx, 2),
+        "net_mbit_tx": round(net_mbit_tx, 2)
+    }
+
+# 📥 Daten sammeln und speichern
 def collect_and_store():
-    """Aktuelle Systemdaten erfassen und in Redis speichern"""
     now = time.time()
     try:
+        net_io = get_filtered_net_io()
+
         data = {
             "host": socket.gethostname(),
             "timestamp": now,
@@ -75,32 +148,47 @@ def collect_and_store():
             "swap": psutil.swap_memory()._asdict(),
             "disk": psutil.disk_usage("/")._asdict(),
             "loadavg": psutil.getloadavg() if hasattr(psutil, "getloadavg") else None,
-            "net_io": psutil.net_io_counters()._asdict(),
+            "net_io": net_io,
             "temperature": get_temperatures(),
         }
 
-        # In Redis speichern
+        data["temperature_celsius"] = extract_temperature(data["temperature"])
+
+        bitrate = calculate_network_bitrate(net_io, now)
+        data.update(bitrate)
+        logging.debug(f"📶 Netzwerk: RX {bitrate['net_mbit_rx']} Mbit/s, TX {bitrate['net_mbit_tx']} Mbit/s")
+
         r.set(REDIS_KEY, json.dumps(data))
         logging.debug("📊 Systemdaten in Redis gespeichert.")
 
-        # Optional als JSON-Datei
         Path(JSON_OUTPUT_PATH).write_text(json.dumps(data, indent=2))
         logging.debug(f"💾 JSON gespeichert unter {JSON_OUTPUT_PATH}")
 
     except Exception as e:
         logging.error(f"❌ Fehler beim Erfassen der Systemdaten: {e}")
 
-
+# 🌡️ Temperatur extrahieren
 def extract_temperature(temp_data):
-    for sensor_group in temp_data.values():
-        for sensor in sensor_group:
-            if "current" in sensor:
+    """
+    Extrahiert bevorzugt die Temperatur von 'coretemp' → 'Package id 0'.
+    Falls nicht verfügbar, nimmt den ersten verfügbaren Sensorwert mit 'current'.
+    """
+    # Bevorzugt: Package id 0 bei coretemp
+    for entry in temp_data.get("coretemp", []):
+        if entry.get("label") == "Package id 0":
+            return round(entry.get("current", 0), 1)
+
+    # Fallback: erster beliebiger Sensorwert mit 'current'
+    for group in temp_data.values():
+        for sensor in group:
+            if isinstance(sensor, dict) and "current" in sensor:
                 return round(sensor["current"], 1)
+
     return None
 
 
+# 📤 API-Datenstruktur bereitstellen
 def get_system_info():
-    """Systemdaten aus Redis lesen und strukturieren für das API-Frontend"""
     try:
         raw = r.get(REDIS_KEY)
         if not raw:
@@ -116,14 +204,13 @@ def get_system_info():
             "disk_total_bytes": data["disk"]["total"],
             "disk_used_bytes": data["disk"]["used"],
             "loadavg": data.get("loadavg", []),
-            "network_rx_bytes": int(data["net_io"]["bytes_recv"] / 60),
-            "network_tx_bytes": int(data["net_io"]["bytes_sent"] / 60),
+            "net_mbit_rx": data.get("net_mbit_rx"),
+            "net_mbit_tx": data.get("net_mbit_tx"),
             "temperature_celsius": extract_temperature(data.get("temperature", {}))
         }
     except Exception as e:
         logging.warning(f"⚠️ Fehler beim Parsen von Systemdaten: {e}")
         return {}
-
 
 # ▶️ Scheduler starten
 scheduler = BackgroundScheduler()
@@ -137,4 +224,3 @@ try:
 except (KeyboardInterrupt, SystemExit):
     scheduler.shutdown()
     logging.info("🛑 Systemmonitor gestoppt.")
-

@@ -20,7 +20,6 @@ export async function fetchStreamsFromApi() {
     console.error("❌ Fehler beim API-Fetch:", err);
     return {
       streams: [],
-      snapshot_refresh_ms: 5000,
       streamlist_refresh_ms: 5000
     };
   }
