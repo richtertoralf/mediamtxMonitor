@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 mediamtx_snapshots.py – Snapshot-Manager für MediaMTX-Streams
+ /opt/mediamtx-monitoring-backend/bin/mediamtx_snapshots.py
 
 Startet pro aktivem Stream genau einen ffmpeg-Prozess zur Snapshot-Erzeugung.
 Verwendet eine zentrale YAML-Konfiguration (collector.yaml).

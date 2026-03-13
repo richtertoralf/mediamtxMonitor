@@ -14,6 +14,42 @@ Dieses Projekt bietet eine übersichtliche und ressourcenschonende Möglichkeit,
 - SRT-spezifische Metriken wie RTT, Linkkapazität und Empfangsrate
 - Systemmetriken wie CPU, RAM, Netzwerk, Load Average, Temperatur
 
+### schnelle Installation:
+Mediamtx sollte vorher z.B. installiert worden sein:
+#### Installation von Mediamtx
+Download der Binärdateien, z.B.:
+```
+# Version prüfen !
+wget https://github.com/bluenviron/mediamtx/releases/download/v1.3.0/mediamtx_v1.3.0_linux_arm64v8.tar.gz
+```
+
+Entpacken:
+```
+tar -xzvf mediamtx_v1.3.0_linux_arm64v8.tar.gz
+```
+
+Verschieben:
+```
+sudo mv mediamtx /usr/local/bin/
+sudo mv mediamtx.yml /usr/local/etc/
+```
+
+#### Mediamtx - Konfiguration anpassen
+Das setzt voraus, das mediamtx so wie oben beschrieben installiert wurde.
+```
+
+# API aktivieren
+sudo sed -i 's/^api: no$/api: yes/' /usr/local/etc/mediamtx.yml
+```
+#### Installtionsskript für mediamtxMonitor
+```
+wget https://raw.githubusercontent.com/richtertoralf/mediamtxMonitor/main/install.sh
+chmod +x install.sh
+```
+und ausführen
+```
+sudo ./install.sh
+```
 
 ### 🧱 Architekturüberblick
 
@@ -50,12 +86,14 @@ Dieses Projekt bietet eine übersichtliche und ressourcenschonende Möglichkeit,
 ```plaintext
 
 /opt/mediamtx-monitoring-backend/
-├── bin/                         ← ausführbare Python-Skripte
-│   ├── mediamtx_collector.py   ← ✅ Läuft via systemd (Daten abrufen & speichern)
-│   ├── mediamtx_api.py         ← ✅ FastAPI-Server für API + Static Files
-│   ├── mediamtx_snapshot.py    ← ✅ erstellt von den eingehenden Streams Snapshots
-│   ├── mediamtx_system.py      ← ✅ erfasst Systemmetriken (CPU, RAM, Load, Disk, Temperatur)
-│   └── reader_bitrate.py
+├── install.sh                  ← Skript zur automatischen Installation bzw. Aktualisierung
+├── bin/                        ← ausführbare Python-Skripte
+│   ├── mediamtx_collector.py   ← Läuft via systemd (Daten abrufen & speichern)
+│   ├── mediamtx_api.py         ← FastAPI-Server für API + Static Files
+│   ├── mediamtx_snapshot.py    ← erstellt von den eingehenden Streams Snapshots
+│   ├── mediamtx_system.py      ← erfasst Systemmetriken (CPU, RAM, Load, Disk, Temperatur)
+│   └── bitrate.py
+│   ├── rtt.py                  ← Hilfsskript zur Berechnung von RTT-Werten (nur für eingehende Streams)
 │   └── __init__.py             ← optional, falls bin/ als Modul genutzt wird
 │   └── __pycache__/            ← automatisch generiert
 │
