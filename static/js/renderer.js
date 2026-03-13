@@ -113,13 +113,12 @@ function buildPreviewIframeSrc(streamName) {
     .map(segment => encodeURIComponent(segment))
     .join("/");
 
-  return `http://172.16.90.18:8889/__preview__/${encodedPath}?controls=false&muted=true&autoplay=true&playsInline=true`;
+  return `http://192.168.95.18:8889/__preview__/${encodedPath}?controls=false&muted=true&autoplay=true&playsInline=true`;
 }
 
 /**
- * Rendert eine komplette Streamkarte (links Publisher, Mitte Snapshot, rechts Readers).
+ * Rendert eine komplette Streamkarte (links Publisher, Mitte Vorschaustream, rechts Readers).
  * @param {Object} stream - Aggregiertes Stream-Objekt mit source, tracks, readers etc.
- * @param {number} [snapshotIntervalMs=5000] - Reload-Intervall für das Snapshot-Bild
  * @returns {HTMLDivElement} DOM-Element der Streamkarte
  */
 export function renderStreamCard(stream) {
