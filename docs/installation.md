@@ -82,3 +82,47 @@ sudo rm -rf /opt/mediamtx-monitoring-backend
 ---
 👉 Für Details zu Architektur, API-Endpunkten und Projektstruktur siehe documentation.md
 
+---
+
+## 📡 Network & Bonding Optimization (S.A.NE + MediaMTX)
+
+Um einen stabilen Betrieb von **6 parallelen HD-Streams** über eine gebündelte Internetanbindung (z. B. 2x LTE + 1x DSL via Bondix S.A.NE) zu gewährleisten, müssen die UDP-Puffergrößen des Linux-Kernels sowohl auf dem **Relay-Server** als auch auf dem **Streaming-Server** massiv erhöht werden.
+
+### Warum das wichtig ist
+Standardmäßig reserviert Linux nur ca. 208 KB für UDP-Empfangspuffer. Bei Jitter (typisch für LTE/DSL-Mix) müssen Pakete im RAM zwischengespeichert werden, um die korrekte Reihenfolge wiederherzustellen (Re-Ordering). Ein zu kleiner Puffer führt bei Netzwerk-Bursts sofort zu **Paketverlusten (UDP Drops)**, was sich in Bild-Artefakten oder Stream-Abbrüchen äußert.
+
+
+
+### 1. Kernel-Tuning (Sysctl)
+Die folgenden Werte erhöhen den Puffer auf **16 MB**, um Schwankungen im Millisekundenbereich sicher abzufangen:
+
+```bash
+# Temporär anwenden
+sudo sysctl -w net.core.rmem_max=16777216
+sudo sysctl -w net.core.rmem_default=16777216
+sudo sysctl -w net.core.wmem_max=16777216
+sudo sysctl -w net.core.wmem_default=16777216
+
+# Permanent speichern (/etc/sysctl.conf)
+echo "net.core.rmem_max=16777216" | sudo tee -a /etc/sysctl.conf
+echo "net.core.rmem_default=16777216" | sudo tee -a /etc/sysctl.conf
+echo "net.core.wmem_max=16777216" | sudo tee -a /etc/sysctl.conf
+echo "net.core.wmem_default=16777216" | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+```
+
+### 2. MediaMTX Konfiguration
+Zusätzlich muss MediaMTX angewiesen werden, diese Puffer für RTSP/UDP-Ingests auch tatsächlich anzufordern. In der mediamtx.yml:
+```yaml
+# In den globalen Einstellungen oder unter pathDefaults
+rtspUDPReadBufferSize: 16777216
+```
+
+### 3. Monitoring & Validierung
+Ob die Einstellungen aktiv sind, lässt sich mit ss (Socket Statistics) prüfen. Der Wert rb (Receive Buffer) sollte nach einem Dienst-Neustart bei ca. 33.554.432 (16MB x 2 Kernel-Overhead) liegen:
+
+```bash
+# Prüfen des aktiven Sockets (Beispiel Port 44343 für Bondix oder 8000 für MediaMTX)
+sudo ss -unlmp | grep <PORT>
+```
+Achte darauf, dass der Counter d (Drops) am Ende der Zeile auf 0 bleibt.
