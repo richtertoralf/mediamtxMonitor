@@ -1,42 +1,52 @@
 # 📡 MediaMTX Monitor
 
-Ein leichtgewichtiges Monitoring-Tool für [MediaMTX](https://github.com/bluenviron/mediamtx).  
-Zeigt aktive Streams, Zuschauerzahlen, Bitraten und Systemmetriken live im Browser – ohne direkte API-Zugriffe durch Clients.
+Ein leichtgewichtiges Monitoring-Tool für [MediaMTX](https://github.com/bluenviron/mediamtx) mit Web-Dashboard und Redis-Backend.  
+
+## Zweck
+
+Das Projekt sammelt aktuelle Streamdaten von MediaMTX, ergänzt sie um berechnete Werte wie Bitraten und SRT-Metriken und stellt alles über ein einfaches Web-Dashboard bereit.
 
 <img width="600" alt="MediaMTX Monitor Screenshot" src="docs/MediaMTX_Monitor_Screenshot.png" />
 
-## ✨ Features
-- Übersicht aktive Streams & Zuschauer
-- SRT-Metriken (RTT, Linkkapazität, Empfangsrate)
-- Systemmetriken (CPU, RAM, Netz, Temperatur)
-- Einfaches Web-Dashboard und JSON-API
+## Aktueller Funktionsumfang
+
+- Anzeige aktiver Streams
+- Anzeige verbundener Reader
+- SRT-Metriken wie RTT und Datenrate
+- Systemmetriken des Hosts (CPU, RAM, Disk, Netzwerk, Temperatur)
+- REST-API für Frontend und CLI-Tests
+- Statisches Web-Frontend ohne direkte Browser-Zugriffe auf die MediaMTX-API
+
+## Architektur in Kurzform
+
+MediaMTX API → Collector → Redis → FastAPI → Browser
+
+## Voraussetzungen
+
+- Linux-Server (Debian, Ubuntu oder Raspberry Pi OS)
+- Installiertes MediaMTX mit aktivierter API
+- Python 3
+- Redis
 
 ## 🚀 Schnellstart
 1. MediaMTX installieren und API aktivieren  
-2. [Installation ausführen](docs/installation.md)  
-3. Dashboard im Browser öffnen → `http://<server>:8080/`
+2. [Installation ausführen](docs/installation.md)
 
-## 📚 Weitere Infos
+```bash
+wget https://raw.githubusercontent.com/richtertoralf/mediamtxMonitor/main/install.sh
+chmod +x install.sh
+sudo ./install.sh
+```
+
+4.Danach ist das Dashboard unter folgendem Port bzw. im Browser erreichbar: → `http://<server>:8080/`
+
+## Hinweise
+
+- Die Basisfunktion des Projekts ist Stream- und Systemmonitoring.
+- Vorschaustreams oder Snapshot-Mechanismen sind installationsspezifisch und nicht Voraussetzung für den Grundbetrieb.
+- Das Installationsskript aktualisiert ein bestehendes Checkout per Git und verwirft dabei lokale Änderungen.
+
+## 📚 Weitere Infos / Dokumentation
 - [📄 installation.md](docs/installation.md) – Schritt-für-Schritt Einrichtung
 - [📖 documentation.md](docs/documentation.md) – Details für Anwender & Entwickler
 - [🏗️ architecture.md](docs/architecture.md) – Architektur & Designüberblick
-
-## Live-Dashboard & Snapshots
-
-Das Monitoring stellt den aktuellen Zustand des MediaMTX-Servers live im Browser dar:
-
-* Systemzustand: CPU, Load, RAM, Netzwerk, Temperatur
-* Aktive Streams inkl.:
-  Publisher-Typ (SRT / RTMP)
-  RTT, Bitrate, empfangene Daten
-  Aktive Reader (Zuschauer / Weiterleitungen)
-* Automatisch erzeugte Snapshots der Videostreams zur visuellen Identifikation
-
-Die Snapshots werden serverseitig erzeugt und ermöglichen es, Streams schnell zuzuordnen (z. B. Testpattern, OBS-Feeds, Kameras), ohne einen Player öffnen zu müssen.
-
-Gedacht ist das Dashboard für:
-
-* Remote-Produktionen
-* Debugging von SRT-Verbindungen
-* Kontrolle von Test- und Dauerstreams
-* Betrieb ohne GUI auf dem MediaMTX-Server selbst
