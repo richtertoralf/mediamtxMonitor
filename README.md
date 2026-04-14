@@ -1,5 +1,10 @@
 # 📡 MediaMTX Monitor
 
+![Purpose](https://img.shields.io/badge/Purpose-MediaMTX%20Monitoring-blue)
+![Backend](https://img.shields.io/badge/Backend-FastAPI%20%2B%20Redis-green)
+![Dashboard](https://img.shields.io/badge/UI-Web%20Dashboard-orange)
+![Platform](https://img.shields.io/badge/Platform-Linux-lightgrey)
+
 Ein leichtgewichtiges Monitoring-Tool für [MediaMTX](https://github.com/bluenviron/mediamtx) mit Web-Dashboard und Redis-Backend.  
 
 ## Zweck
