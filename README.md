@@ -13,6 +13,12 @@ Das Projekt sammelt aktuelle Streamdaten von MediaMTX, ergänzt sie um berechnet
 
 <img width="600" alt="MediaMTX Monitor Screenshot" src="docs/MediaMTX_Monitor_Screenshot.png" />
 
+## Motivation
+
+MediaMTX Monitor entstand aus dem praktischen Bedarf, mehrere Live-Streams bei Sportproduktionen zuverlässig zu überwachen. Die Grundidee ist von professionellen Broadcast-Monitoring-Werkzeugen inspiriert: Alle relevanten Streams sollen in einer Oberfläche sichtbar sein, inklusive technischer Kennzahlen wie Bitrate, SRT-RTT, Readern, Systemlast und optionalen Vorschaubildern.
+
+Im Unterschied zu kommerziellen Broadcast-Lösungen ist MediaMTX Monitor bewusst leichtgewichtig, offen und serverseitig aufgebaut. Es nutzt MediaMTX, Redis, FastAPI und ein einfaches Web-Frontend und richtet sich an Vereine, kleine Produktionen, Community-Livestreams und selbstgehostete Streaming-Infrastrukturen.
+
 ## Aktueller Funktionsumfang
 
 - Anzeige aktiver Streams
