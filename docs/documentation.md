@@ -14,7 +14,6 @@ Standardpfad: `/opt/mediamtx-monitoring-backend`
 ├── bin/                        ← ausführbare Python-Skripte
 │   ├── mediamtx_collector.py   ← Fragt MediaMTX-API ab, speichert Daten in Redis
 │   ├── mediamtx_api.py         ← FastAPI-Server (REST-API + Dashboard)
-│   ├── mediamtx_snapshots.py   ← Erstellt Snapshots von Streams (optional)
 │   ├── mediamtx_system.py      ← Erfasst Systemmetriken (CPU, RAM, Load, Temp)
 │   └── ...
 │
@@ -28,7 +27,6 @@ Standardpfad: `/opt/mediamtx-monitoring-backend`
 │   ├── index.html              ← Dashboard
 │   ├── js/                     ← API-Aufrufe, Renderer, Frontend-Logik
 │   ├── css/                    ← Layout & Styles
-│   └── snapshots/              ← Bilder von Streams (falls aktiviert)
 │
 ├── logs/                       ← Logs (optional)
 ├── requirements.txt            ← Python-Abhängigkeiten
@@ -45,7 +43,6 @@ Basis: `http://<server>:8080`
 | ----------------------- | --------------------------------------- | ---------------------------------------------------- |
 | `/api/streams`   | Aktuelle Streams aus Redis              | JSON-Liste mit Name, Quelle, Zuschauer, SRT-Metriken |
 | `/api/system`    | Aktuelle Systemmetriken                 | JSON mit CPU, RAM, Netz, Temperatur                  |
-| `/api/snapshots` | (optional) Letzte Snapshots der Streams | Dateipfade / Base64                                  |
 
 ### Beispiel – `GET /api/streams`
 Antwort (gekürzt):
@@ -76,6 +73,8 @@ Antwort (gekürzt):
   }
 }
 ```
+
+`snapshot_refresh_ms` ist ein Legacy-/Kompatibilitätsfeld. Das aktuelle Frontend verwendet es nicht; seine Entfernung ist für eine spätere API-Bereinigung vorgesehen.
 
 ### Beispiel – GET /api/system:
 
@@ -119,7 +118,6 @@ curl -s http://localhost:8080/api/streams | jq '{cpu: .systeminfo.cpu_percent, r
 | --------------------------- | --------------------------------------- | ---------------- |
 | `mediamtx:streams:latest`   | JSON-Array mit aktiven Streams          | siehe oben       |
 | `mediamtx:system:latest`    | JSON-Objekt mit Systemdaten             | siehe oben       |
-| `mediamtx:snapshots:<name>` | (optional) Bilddaten                    | Base64 oder Pfad |
 | `mediamtx:history:*`        | (optional) Zeitreihen für Langzeitdaten | Redis Streams    |
 
 >Vorteil:
@@ -155,7 +153,16 @@ curl -s http://localhost:8080/api/streams | jq '{cpu: .systeminfo.cpu_percent, r
 - Darstellung:
 -   Streams (Name, Quelle, Leserzahl, SRT-Metriken)
 -   Systemmetriken (CPU, RAM, Netz, Temperatur)
--   Snapshots (falls aktiviert)
+-   On-Demand-WebRTC-Videovorschau
+
+### Datenweg der Videovorschau
+
+```text
+Browser → MediaMTX WebRTC → __preview__/<stream> → On-Demand-FFmpeg
+        → lokaler RTSP-Originalstream → verkleinerter Vorschaustream zurück zu MediaMTX
+```
+
+Der Browser fragt die MediaMTX-Control-API nicht direkt ab; Monitoringdaten gelangen über Collector, Redis und FastAPI zum Browser. Nur für die Videovorschau greift der Browser direkt auf MediaMTX WebRTC zu. Beim Abruf von `__preview__/<stream>` startet FFmpeg on demand, liest das Original lokal per RTSP und erzeugt H.264 mit 192×108 Pixeln, 10 fps und ohne Audio. Nach Ende der Nutzung endet der Prozess automatisch. Periodische JPEG-Dateien und eine lokale Bildablage gehören nicht zum aktuellen System.
 
 ## Erweiterungsmöglichkeiten
 

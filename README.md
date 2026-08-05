@@ -26,11 +26,20 @@ Im Unterschied zu kommerziellen Broadcast-Lösungen ist MediaMTX Monitor bewusst
 - SRT-Metriken wie RTT und Datenrate
 - Systemmetriken des Hosts (CPU, RAM, Disk, Netzwerk, Temperatur)
 - REST-API für Frontend und CLI-Tests
-- Statisches Web-Frontend ohne direkte Browser-Zugriffe auf die MediaMTX-API
+- Statisches Web-Frontend ohne direkte Browser-Zugriffe auf die MediaMTX-Control-API
+- On-Demand-Videovorschau über MediaMTX WebRTC
 
 ## Architektur in Kurzform
 
-MediaMTX API → Collector → Redis → FastAPI → Browser
+Monitoringdaten:
+
+`MediaMTX API → Collector → Redis → FastAPI → Browser`
+
+Videovorschau:
+
+`Browser → MediaMTX WebRTC → __preview__/<stream> → On-Demand-FFmpeg → lokaler RTSP-Originalstream → MediaMTX WebRTC`
+
+Der Browser fragt die MediaMTX-Control-API nicht direkt ab. Für die Videovorschau verbindet er sich jedoch direkt mit MediaMTX WebRTC. Der Abruf eines `__preview__/<stream>`-Pfads startet FFmpeg bei Bedarf. FFmpeg liest den Originalstream lokal per RTSP und erzeugt einen verkleinerten H.264-Vorschaustream mit 192×108 Pixeln, 10 fps und ohne Audio. Nach Ende der Nutzung wird der FFmpeg-Prozess automatisch beendet. Periodisch erzeugte JPEG-Dateien gehören nicht zur aktuellen Architektur.
 
 ## Voraussetzungen
 
@@ -54,7 +63,7 @@ sudo ./install.sh
 ## Hinweise
 
 - Die Basisfunktion des Projekts ist Stream- und Systemmonitoring.
-- Vorschaustreams oder Snapshot-Mechanismen sind installationsspezifisch und nicht Voraussetzung für den Grundbetrieb.
+- Die Videovorschau wird ausschließlich als On-Demand-WebRTC-Stream bereitgestellt.
 - Das Installationsskript aktualisiert ein bestehendes Checkout per Git und verwirft dabei lokale Änderungen.
 
 ## 📚 Weitere Infos / Dokumentation
