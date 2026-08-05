@@ -1,3 +1,5 @@
+> **Historischer Entwurfsstand:** Dieses Dokument enthält frühere Ideen für periodisch erzeugte JPEG-Snapshots und ist keine aktuelle Installations- oder Betriebsanleitung. Aktuelle Quellen sind [README.md](../README.md) und [docs/architecture.md](architecture.md).
+
 ## 📡 MediaMTX Monitoring System
 Überwachung von Streamaktivität und Systemressourcen in Echtzeit
 
@@ -59,10 +61,10 @@ sudo ./install.sh
 |      (streaming API)      |
 +------------+--------------+
              │
-     +-------+---------------+--------------------+-----------------------+
-     | mediamtx_collector.py | mediamtx_system.py | mediamtx_snapshots.py |
-     |     (Streamdaten)     |  (Systemmetriken)  |  (Stream Snapshots)   |
-     +------------+----------+--------------------+-----------------------+
+     +-------+---------------+--------------------+
+     | mediamtx_collector.py | mediamtx_system.py |
+     |     (Streamdaten)     |  (Systemmetriken)  |
+     +------------+----------+--------------------+
                   │
          +--------▼----------+
          |      Redis        |
@@ -90,7 +92,6 @@ sudo ./install.sh
 ├── bin/                        ← ausführbare Python-Skripte
 │   ├── mediamtx_collector.py   ← Läuft via systemd (Daten abrufen & speichern)
 │   ├── mediamtx_api.py         ← FastAPI-Server für API + Static Files
-│   ├── mediamtx_snapshot.py    ← erstellt von den eingehenden Streams Snapshots
 │   ├── mediamtx_system.py      ← erfasst Systemmetriken (CPU, RAM, Load, Disk, Temperatur)
 │   └── bitrate.py
 │   ├── rtt.py                  ← Hilfsskript zur Berechnung von RTT-Werten (nur für eingehende Streams)
@@ -113,7 +114,6 @@ sudo ./install.sh
 │   │   └── renderer.js
 │   ├── css
 │   │   └── style.css
-│   └── snapshots
 │
 ├── requirements.txt            ← 📄 Python-Abhängigkeiten (psutil, redis, apscheduler)
 ├── venv/                       ← 🔧 virtuelle Umgebung
@@ -136,7 +136,7 @@ sudo useradd -r -s /bin/false mediamtxmon
 ```
 ```bash
 sudo mkdir -p /opt/mediamtx-monitoring-backend/{bin,lib,static,logs} \
-  && sudo touch /opt/mediamtx-monitoring-backend/bin/{mediamtx_collector.py,mediamtx_snapshot.py,mediamtx_api.py,host_metrics_agent.py} \
+  && sudo touch /opt/mediamtx-monitoring-backend/bin/{mediamtx_collector.py,mediamtx_api.py,host_metrics_agent.py} \
   && sudo touch /opt/mediamtx-monitoring-backend/lib/config.py \
   && sudo touch /opt/mediamtx-monitoring-backend/requirements.txt \
   && sudo touch /opt/mediamtx-monitoring-backend/.env
@@ -280,7 +280,6 @@ sudo systemctl daemon-reexec
 sudo systemctl daemon-reload
 sudo systemctl enable --now mediamtx-collector.service
 sudo systemctl enable --now mediamtx-api.service
-sudo systemctl enable --now mediamtx-snapshots.service
 sudo systemctl enable --now mediamtx-system.service
 
 

@@ -21,12 +21,13 @@ Der MediaMTX Monitor besteht aus vier Kernkomponenten:
 3. **Webserver (FastAPI)**  
    - Stellt REST-API und optional WebSockets bereit  
    - Liefert das statische Web-Frontend aus  
-   - Abstraktionsebene: Clients greifen **nie direkt** auf MediaMTX zu
+   - Abstraktionsebene: Clients greifen für Monitoringdaten nicht direkt auf die MediaMTX-Control-API zu
 
 4. **Web-Frontend (HTML/JS)**  
    - Holt Initialdaten über REST  
    - Hält Verbindung per Polling (5s) oder künftig WebSocket  
-   - Stellt Daten in Tabellen, Diagrammen und Snapshots dar
+   - Stellt Monitoringdaten und eine On-Demand-WebRTC-Videovorschau dar
+   - Greift für die Vorschau direkt auf MediaMTX WebRTC zu
 
 ---
 
@@ -43,6 +44,15 @@ Der MediaMTX Monitor besteht aus vier Kernkomponenten:
                                                        |   Frontend    |
                                                        +---------------+
 ```
+
+Die Videovorschau verwendet einen getrennten Datenweg:
+
+```text
+Browser → MediaMTX WebRTC → __preview__/<stream> → On-Demand-FFmpeg
+        → lokaler RTSP-Originalstream → verkleinerter H.264-Vorschaustream zurück zu MediaMTX
+```
+
+Der Abruf von `__preview__/<stream>` startet FFmpeg bei Bedarf. FFmpeg liest den Originalstream lokal per RTSP und erzeugt H.264 mit 192×108 Pixeln, 10 fps und ohne Audio. Nach Ende der Nutzung endet der Prozess automatisch. Periodische JPEG-Dateien werden nicht erzeugt.
 
 ## Designentscheidungen
 
@@ -72,7 +82,7 @@ Skalierbarkeit: mehrere Webserver können auf dieselbe Redis-Instanz zugreifen
 
 4. Warum keine direkten MediaMTX-API-Zugriffe vom Browser?
 
-Sicherheit: MediaMTX-API muss nicht nach außen freigegeben werden
+Monitoringdaten: Die MediaMTX-Control-API wird ausschließlich vom Collector abgefragt. Der direkte WebRTC-Zugriff dient nur der Videovorschau.
 
 Effizienz: nur eine API-Abfrage → kein Overload bei vielen Clients
 
@@ -94,13 +104,13 @@ Nutzt psutil (CPU, RAM, Load, Netz, Temp)
 
 Schreibt JSON nach mediamtx:system:latest
 
-Snapshots
+Videovorschau
 
-ffmpeg-basierter Dauerprozess
+MediaMTX startet FFmpeg für `__preview__/<stream>` on demand.
 
-Speichert Standbilder regelmäßig in /static/snapshots/
+FFmpeg liest das Original lokal per RTSP und publiziert die verkleinerte H.264-Vorschau zurück zu MediaMTX.
 
-Redis-Key: mediamtx:snapshots:<stream>
+Der Prozess endet nach Ende der Nutzung automatisch; eine Bildablage oder ein eigener Redis-Key ist nicht beteiligt.
 
 ## Skalierungsszenarien
 

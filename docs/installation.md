@@ -46,13 +46,14 @@ Das Skript richtet automatisch ein:
 ```bash
 sudo systemctl status mediamtx-collector.service
 sudo systemctl status mediamtx-api.service
-sudo systemctl status mediamtx-snapshots.service
 sudo systemctl status mediamtx-system.service
 ```
 
 ### 2. Browser öffnen:
 
 `👉 http://<server>:8080/`
+
+Monitoringdaten gelangen über Collector, Redis und FastAPI zum Browser; die MediaMTX-Control-API wird vom Browser nicht direkt abgefragt. Nur für die Videovorschau greift er direkt auf MediaMTX WebRTC zu. Der Abruf von `__preview__/<stream>` startet FFmpeg on demand. FFmpeg liest den Originalstream lokal per RTSP und liefert H.264 mit 192×108 Pixeln, 10 fps und ohne Audio zurück an MediaMTX. Nach Ende der Nutzung endet der Prozess automatisch. Ein separater JPEG-Dienst gehört nicht zum aktuellen System.
 
 ### 3. API testen:
 ```
@@ -73,7 +74,6 @@ Danach Reboot des Computers, da aktuell im Skript `install.sh` der neustart der 
 # Dienste stoppen
 sudo systemctl disable --now mediamtx-collector.service
 sudo systemctl disable --now mediamtx-api.service
-sudo systemctl disable --now mediamtx-snapshots.service
 sudo systemctl disable --now mediamtx-system.service
 
 # Verzeichnis löschen
