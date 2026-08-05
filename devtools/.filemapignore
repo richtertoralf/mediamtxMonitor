@@ -12,4 +12,5 @@ venv/
 .venv/
 logs/
 lib/
+# Schützt mögliche Legacy-Laufzeitdateien; nach kontrollierter Migration entfernbar.
 static/snapshots/

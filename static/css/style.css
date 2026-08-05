@@ -169,12 +169,6 @@ h1 {
     /* etwas kompakter */
   }
 
-  .snapshot-image {
-    max-width: min(240px, 100%);
-    /* sprengt nicht, bleibt kompakt */
-    align-self: start;
-    /* kein zentriertes "riesen" Bild */
-  }
 }
 
 /* 3) Ganz kleine Devices: Body-Minbreite aufheben, damit nichts seitlich rausläuft */

@@ -86,8 +86,7 @@ Die Skripte sind modular aufgebaut und können bei Bedarf um Funktionen wie Logg
 /opt/mediamtx-monitoring-backend/
 ├── bin/            ← Python-Skripte
 │   ├── mediamtx_collector.py
-│   ├── mediamtx_api.py
-│   └── snapshots.py
+│   └── mediamtx_api.py
 ├── config/         ← YAML-Konfigurationen
 │   └── collector.yaml
 ├── static/         ← Web-Assets (HTML, CSS, JS, Bilder)

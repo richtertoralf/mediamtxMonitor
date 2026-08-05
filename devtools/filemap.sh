@@ -7,7 +7,6 @@ declare -A FILES=(
   [mediamtx_collector.py]="/opt/mediamtx-monitoring-backend/bin"
   [reader_bitrate.py]="/opt/mediamtx-monitoring-backend/bin"
   [mediamtx_api.py]="/opt/mediamtx-monitoring-backend/bin"
-  [mediamtx_snapshots.py]="/opt/mediamtx-monitoring-backend/bin"
   [mediamtx_system.py]="/opt/mediamtx-monitoring-backend/bin"
 
   # ⚙️ Konfiguration
