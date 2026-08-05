@@ -87,7 +87,6 @@ EOF
 
 install_service "mediamtx-api" "bin/mediamtx_api.py"
 install_service "mediamtx-collector" "bin/mediamtx_collector.py"
-install_service "mediamtx-snapshots" "bin/mediamtx_snapshots.py"
 install_service "mediamtx-systeminfo" "bin/mediamtx_systeminfo.py"
 
 # 🔄 Dienste aktivieren und starten
@@ -95,7 +94,6 @@ systemctl daemon-reexec
 systemctl daemon-reload
 systemctl enable --now mediamtx-api.service
 systemctl enable --now mediamtx-collector.service
-systemctl enable --now mediamtx-snapshots.service
 systemctl enable --now mediamtx-systeminfo.service
 
 echo "✅ Installation abgeschlossen."

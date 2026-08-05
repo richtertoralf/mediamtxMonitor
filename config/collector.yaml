@@ -29,17 +29,6 @@ rtt:
   timeout_s: 0.9
   key_prefix: "rtt:pub"
 
-snapshots:
-  backend: "ffmpeg"
-  protocol: "rtsp"
-  port: 8554
-  output_dir: "/opt/mediamtx-monitoring-backend/static/snapshots"
-  width: 320
-  height: 180
-  interval: 10
-  timeout_seconds: 0
-  max_threads: 0
-
 system_monitor:
   redis_key: "mediamtx:system:latest"
   output_json_path: "/tmp/mediamtx_system.json"

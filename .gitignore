@@ -1,4 +1,5 @@
 venv/
 __pycache__/
 *.pyc
+# Schützt mögliche Legacy-Laufzeitdateien; nach kontrollierter Migration entfernbar.
 static/snapshots/
