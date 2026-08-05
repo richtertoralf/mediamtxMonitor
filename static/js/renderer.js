@@ -113,7 +113,7 @@ function buildPreviewIframeSrc(streamName) {
     .map(segment => encodeURIComponent(segment))
     .join("/");
 
-  return `http://192.168.95.18:8889/__preview__/${encodedPath}?controls=false&muted=true&autoplay=true&playsInline=true`;
+  return `http://${window.location.hostname}:8889/__preview__/${encodedPath}?controls=false&muted=true&autoplay=true&playsInline=true`;
 }
 
 /**
