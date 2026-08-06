@@ -23,9 +23,9 @@ MediaMTX-Streamingdienst auf derselben Maschine nicht.
 ## Unterstützte Neuinstallationen
 
 - Ubuntu Server 24.04 LTS
-- `x86_64` / `amd64`
-- `aarch64` / `arm64`
-- Raspberry Pi 4 mit 64-Bit-Ubuntu Server
+- `x86_64` / `amd64` – Neuinstallation erfolgreich getestet
+- `aarch64` / `arm64` – vom Installer unterstützt, praktischer Test steht noch aus
+- Raspberry Pi 4 mit 64-Bit-Ubuntu Server – unterstützt, praktischer Test steht noch aus
 
 Der Installer unterstützt nur frische Systeme. Existierende oder angepasste
 Installationen werden nicht überschrieben oder aktualisiert.
@@ -36,11 +36,10 @@ Installationen werden nicht überschrieben oder aktualisiert.
 sudo ./install.sh 1.20.0
 ```
 
-MediaMTX v1.20.0 wurde auf der bestehenden Entwicklungsinstallation erfolgreich
-mit dem Monitor getestet. Der vollständige Neuinstaller wird anschließend auf
-einer frischen Ubuntu-24.04-VM geprüft. Die gewünschte MediaMTX-Version wird vom
-Benutzer gewählt; ein optionales führendes `v` ist erlaubt. Der Installer sucht
-nicht automatisch nach der neuesten Version.
+Die vollständige Neuinstallation wurde mit MediaMTX v1.20.0 auf Ubuntu Server
+24.04 LTS amd64 getestet. Die gewünschte MediaMTX-Version wird vom Benutzer
+gewählt; ein optionales führendes `v` ist erlaubt. Der Installer sucht nicht
+automatisch nach der neuesten Version.
 
 Der Installer lädt Binary und vollständige `mediamtx.yml` aus demselben
 offiziellen Release-Archiv und prüft dessen SHA-256-Summe. Er aktiviert API,

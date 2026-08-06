@@ -31,7 +31,7 @@ if [[ ! "$VERSION_INPUT" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 fi
 readonly MEDIAMTX_VERSION="${VERSION_INPUT#v}"
 printf 'Gewählte MediaMTX-Version: v%s\n' "$MEDIAMTX_VERSION"
-printf 'Die mitgelieferte Konfiguration wurde mit MediaMTX v1.20.0 getestet.\n'
+printf 'Die automatische Ergänzung der offiziellen MediaMTX-Konfiguration wurde mit MediaMTX v1.20.0 getestet.\n'
 
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
   fail "Root-Rechte sind erforderlich. Aufruf: sudo ./install.sh"
