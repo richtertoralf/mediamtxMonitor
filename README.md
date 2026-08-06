@@ -22,13 +22,33 @@ MediaMTX-Streamingdienst auf derselben Maschine nicht.
 
 ## Unterstützte Neuinstallationen
 
-- Ubuntu Server 24.04 LTS
-- `x86_64` / `amd64` – Neuinstallation erfolgreich getestet
-- `aarch64` / `arm64` – vom Installer unterstützt, praktischer Test steht noch aus
-- Raspberry Pi 4 mit 64-Bit-Ubuntu Server – unterstützt, praktischer Test steht noch aus
+Der Installer ist für Debian-basierte Linux-Systeme mit apt, dpkg und
+systemd vorgesehen, insbesondere:
 
-Der Installer unterstützt nur frische Systeme. Existierende oder angepasste
-Installationen werden nicht überschrieben oder aktualisiert.
+- Debian  
+- Ubuntu  
+- Raspberry Pi OS  
+
+Unterstützte Architekturen:
+
+- x86_64 mit Debian-Architektur amd64  
+- aarch64 mit Debian-Architektur arm64  
+- 32-Bit-ARMv6 mit Debian-Architektur armhf  
+- 32-Bit-ARMv7 mit Debian-Architektur armhf  
+
+arm64 wird vom Installer unterstützt. Dazu gehören auch aktuelle
+64-Bit-Installationen von Raspberry Pi OS auf einem Raspberry Pi.
+
+32-Bit-ARM-Systeme werden erkannt und können mit den MediaMTX-Archiven
+linux_armv6 beziehungsweise linux_armv7 installiert werden. Diese Systeme
+wurden jedoch nicht getestet. Der Installer gibt deshalb eine Warnung aus und
+setzt die Installation anschließend fort.
+
+Andere Linux-Distributionen sowie 32-Bit-x86-Systeme werden ebenfalls nicht getestet.
+
+**Der Installer ist nur für frische Installationen vorgesehen. Existierende oder 
+angepasste MediaMTX- oder Monitor-Installationen werden nicht überschrieben oder
+aktualisiert.**
 
 ## Installation
 
@@ -41,9 +61,24 @@ Die vollständige Neuinstallation wurde mit MediaMTX v1.20.0 auf Ubuntu Server
 gewählt; ein optionales führendes `v` ist erlaubt. Der Installer sucht nicht
 automatisch nach der neuesten Version.
 
+Der Installer ermittelt:
+
+- über /etc/os-release, ob das System Debian-basiert ist,  
+- über dpkg --print-architecture die Architektur des installierten Userspace,  
+- über uname -m die Maschinen- und bei 32-Bit-ARM die ARM-Version,  
+- über den Benutzerparameter die zu installierende MediaMTX-Version.  
+
+Anschließend wählt er automatisch eines der passenden MediaMTX-Archive:
+
+- linux_amd64  
+- linux_arm64  
+- linux_armv6  
+- linux_armv7  
+
 Der Installer lädt Binary und vollständige `mediamtx.yml` aus demselben
-offiziellen Release-Archiv und prüft dessen SHA-256-Summe. Er aktiviert API,
-RTSP und WebRTC und ergänzt ausschließlich die On-Demand-Vorschauregel.
+offiziellen Release-Archiv und prüft dessen SHA-256-Summe. 
+Er aktiviert, wenn nicht schon aktiv, API,
+RTSP und WebRTC und ergänzt ausschließlich die On-Demand-Vorschauregel.  
 
 ## Installierte Komponenten und Pfade
 
