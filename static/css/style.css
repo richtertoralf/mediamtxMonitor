@@ -17,7 +17,6 @@ body {
   margin: 1em;
   background: var(--bg-dark);
   color: var(--text-main);
-  min-width: 630px;
 }
 
 h1 {
@@ -42,7 +41,7 @@ h1 {
 .systeminfo .info-column {
   flex: 1 1 300px;
   display: grid;
-  grid-template-columns: max-content auto;
+  grid-template-columns: max-content minmax(0, 1fr);
   column-gap: 1em;
   row-gap: 0.0em;
 }
@@ -62,6 +61,8 @@ h1 {
 
 .systeminfo dd {
   color: var(--text-main);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 
@@ -87,6 +88,8 @@ h1 {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .stream-title {
@@ -163,22 +166,21 @@ h1 {
 /* 2) Streamcards: 3 -> 1 Spalte ab ~900px */
 @media (max-width: 630px) {
   .stream-card {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     /* untereinander: left, center, right */
     gap: 14px;
     /* etwas kompakter */
   }
 
-}
 
-/* 3) Ganz kleine Devices: Body-Minbreite aufheben, damit nichts seitlich rausläuft */
-@media (max-width: 400px) {
-  body {
-    min-width: auto;
+  .preview-frame {
+    width: 100%;
+    max-width: 256px;
+    box-sizing: border-box;
   }
 }
 
-/* 4) Mini-Feinschliff für Marker auf Mobile (optional, rein optisch) */
+/* 3) Mini-Feinschliff für Marker auf Mobile (optional, rein optisch) */
 @media (max-width: 500px) {
 
   .marker-srt,
