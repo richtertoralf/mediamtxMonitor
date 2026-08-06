@@ -103,6 +103,21 @@ fi
 
 printf 'Installiere MediaMTX Monitor auf Ubuntu 24.04 (%s -> linux_%s).\n' "$MACHINE_ARCH" "$MEDIAMTX_ARCH"
 
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y --no-install-recommends \
+  ca-certificates \
+  coreutils \
+  curl \
+  ffmpeg \
+  hostname \
+  passwd \
+  python3 \
+  python3-venv \
+  redis-server \
+  tar \
+  util-linux
+
 TEMP_DIR=$(mktemp -d)
 trap 'rm -rf -- "$TEMP_DIR"' EXIT
 
@@ -195,21 +210,6 @@ if len(re.findall(r"__preview__", text)) != 1:
 output_path.write_text(text, encoding="utf-8")
 PY
 
-export DEBIAN_FRONTEND=noninteractive
-apt-get update
-apt-get install -y --no-install-recommends \
-  ca-certificates \
-  coreutils \
-  curl \
-  ffmpeg \
-  hostname \
-  passwd \
-  python3 \
-  python3-venv \
-  redis-server \
-  tar \
-  util-linux
-
 groupadd --system "$SERVICE_GROUP"
 useradd \
   --system \
@@ -220,8 +220,8 @@ useradd \
   "$SERVICE_USER"
 
 install -d -m 0755 /usr/local/bin /usr/local/etc
-install -m 0755 "$TEMP_DIR/extract/mediamtx" "$MEDIAMTX_BIN"
-install -m 0644 "$TEMP_DIR/mediamtx.yml" "$MEDIAMTX_CONFIG"
+install -o root -g root -m 0755 "$TEMP_DIR/extract/mediamtx" "$MEDIAMTX_BIN"
+install -o root -g root -m 0644 "$TEMP_DIR/mediamtx.yml" "$MEDIAMTX_CONFIG"
 
 install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 0755 "$INSTALL_DIR"
 install -d -m 0755 \
@@ -236,6 +236,7 @@ install -m 0644 "$SCRIPT_DIR/requirements.txt" "$INSTALL_DIR/requirements.txt"
 install -m 0644 "$SCRIPT_DIR/static/index.html" "$INSTALL_DIR/static/index.html"
 install -m 0644 "$SCRIPT_DIR"/static/css/*.css "$INSTALL_DIR/static/css/"
 install -m 0644 "$SCRIPT_DIR"/static/js/*.js "$INSTALL_DIR/static/js/"
+chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR"
 
 runuser -u "$SERVICE_USER" -- env HOME="$INSTALL_DIR" python3 -m venv "$INSTALL_DIR/venv"
 runuser -u "$SERVICE_USER" -- env HOME="$INSTALL_DIR" "$INSTALL_DIR/venv/bin/python" -m pip install \

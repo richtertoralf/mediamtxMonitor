@@ -1,7 +1,7 @@
 [Unit]
 Description=Mediamtx Monitoring Collector
-After=network.target redis-server.service mediamtx.service
-Requires=redis-server.service mediamtx.service
+After=network.target redis-server.service
+Requires=redis-server.service
 
 [Service]
 User=mediamtxmon
