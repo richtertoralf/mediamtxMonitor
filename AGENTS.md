@@ -35,8 +35,6 @@ Das Gesamtsystem besteht aus drei getrennten Ebenen:
 - Keine öffentlichen Ports öffnen.
 - Keine Änderungen unter /opt, /usr/local oder /etc ohne ausdrückliche Freigabe.
 - Keine Streamkeys, Passwörter oder Tokens anzeigen oder committen.
-- Keine Befehle ausführen, die echte YouTube-Streams starten könnten.
-- Keine Streams mit den Namen table1 bis table6 für Tests verwenden.
 
 ## Arbeitsweise
 

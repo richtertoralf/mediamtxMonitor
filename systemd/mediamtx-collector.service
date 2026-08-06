@@ -1,12 +1,15 @@
 [Unit]
 Description=Mediamtx Monitoring Collector
-After=network.target redis.service
+After=network.target redis-server.service mediamtx.service
+Requires=redis-server.service mediamtx.service
 
 [Service]
 User=mediamtxmon
+Group=mediamtxmon
 WorkingDirectory=/opt/mediamtx-monitoring-backend
 ExecStart=/opt/mediamtx-monitoring-backend/venv/bin/python3 bin/mediamtx_collector.py
-Restart=always
+Restart=on-failure
+RestartSec=5
 Environment="PYTHONUNBUFFERED=1"
 
 [Install]
