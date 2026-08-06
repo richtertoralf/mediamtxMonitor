@@ -13,6 +13,10 @@ fail() {
   exit 1
 }
 
+warn() {
+  printf 'WARNUNG: %s\n' "$*" >&2
+}
+
 usage() {
   printf 'Verwendung: sudo ./install.sh <MediaMTX-Version>\n' >&2
   printf 'Beispiel:   sudo ./install.sh 1.2.3\n' >&2
@@ -39,29 +43,95 @@ fi
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 
-[ -r /etc/os-release ] || fail "/etc/os-release ist nicht lesbar. Unterstützt wird ausschließlich Ubuntu Server 24.04 LTS."
-# shellcheck disable=SC1091
-source /etc/os-release
-[ "${ID:-}" = "ubuntu" ] && [ "${VERSION_ID:-}" = "24.04" ] || \
-  fail "Nicht unterstütztes Betriebssystem: ${PRETTY_NAME:-unbekannt}. Erforderlich ist Ubuntu Server 24.04 LTS."
+# Betriebssysteminformationen einlesen.
+# /etc/os-release ist üblicherweise ein Link auf /usr/lib/os-release.
+if [ -r /etc/os-release ]; then
+  OS_RELEASE_FILE="/etc/os-release"
+elif [ -r /usr/lib/os-release ]; then
+  OS_RELEASE_FILE="/usr/lib/os-release"
+else
+  fail "Keine lesbare os-release-Datei gefunden."
+fi
 
-MACHINE_ARCH=$(uname -m)
-case "$MACHINE_ARCH" in
-  x86_64)
-    DEB_ARCH="amd64"
-    MEDIAMTX_ARCH="amd64"
-    ;;
-  aarch64)
-    DEB_ARCH="arm64"
-    MEDIAMTX_ARCH="arm64"
+# shellcheck disable=SC1090
+source "$OS_RELEASE_FILE"
+
+readonly OS_ID="${ID:-unknown}"
+readonly OS_ID_LIKE="${ID_LIKE:-}"
+readonly OS_NAME="${PRETTY_NAME:-unbekannt}"
+
+[ "$(uname -s)" = "Linux" ] || \
+  fail "Nicht unterstütztes Betriebssystem: $(uname -s). Unterstützt wird nur Linux."
+
+# Debian meldet ID=debian.
+# Ubuntu und andere Debian-Abkömmlinge melden normalerweise ID_LIKE=debian.
+case " $OS_ID $OS_ID_LIKE " in
+  *" debian "*)
     ;;
   *)
-    fail "Nicht unterstützte Architektur: $MACHINE_ARCH. Unterstützt werden x86_64/amd64 und aarch64/arm64."
+    fail "Nicht unterstütztes Betriebssystem: $OS_NAME. Erforderlich ist ein Debian-basiertes Linux."
     ;;
 esac
 
-[ "$(dpkg --print-architecture 2>/dev/null)" = "$DEB_ARCH" ] || \
-  fail "Systemarchitektur und Debian-Architektur stimmen nicht überein."
+# Der Installer benötigt apt, dpkg und systemd.
+for required_command in apt-get dpkg systemctl; do
+  command -v "$required_command" >/dev/null 2>&1 || \
+    fail "Erforderliches Programm fehlt: $required_command"
+done
+
+# dpkg bestimmt die Architektur des installierten Userspace.
+DEB_ARCH="$(dpkg --print-architecture 2>/dev/null)" || \
+  fail "Die Debian-Architektur konnte nicht ermittelt werden."
+
+# uname unterscheidet bei 32-Bit-ARM zwischen ARMv6 und ARMv7.
+MACHINE_ARCH="$(uname -m)"
+
+case "${DEB_ARCH}:${MACHINE_ARCH}" in
+  amd64:x86_64|amd64:amd64)
+    MEDIAMTX_ARCH="amd64"
+    ;;
+
+  arm64:aarch64|arm64:arm64)
+    MEDIAMTX_ARCH="arm64"
+    ;;
+
+  # 32-Bit-ARMv6, beispielsweise ältere Raspberry-Pi-Systeme.
+  armhf:armv6l|armhf:armv6)
+    MEDIAMTX_ARCH="armv6"
+    warn "Ein 32-Bit-ARMv6-System wurde erkannt."
+    warn "Dieses System wurde nicht getestet. Die Installation wird nicht empfohlen, aber trotzdem fortgesetzt."
+    ;;
+
+  # 32-Bit-ARMv7-Userspace.
+  armhf:armv7l|armhf:armv7|armhf:armv8l)
+    MEDIAMTX_ARCH="armv7"
+    warn "Ein 32-Bit-ARMv7-System wurde erkannt."
+    warn "Dieses System wurde nicht getestet. Die Installation wird nicht empfohlen, aber trotzdem fortgesetzt."
+    ;;
+
+  # 32-Bit-Userspace auf einem 64-Bit-ARM-Kernel.
+  armhf:aarch64|armhf:arm64)
+    MEDIAMTX_ARCH="armv7"
+    warn "Ein 32-Bit-ARM-Userspace auf einem 64-Bit-ARM-Kernel wurde erkannt."
+    warn "Dieses System wurde nicht getestet. Die Installation wird nicht empfohlen, aber trotzdem fortgesetzt."
+    ;;
+
+  i386:*|i686:*)
+    fail "Ein 32-Bit-x86-System wurde erkannt. Für diese Architektur steht kein vorgesehenes MediaMTX-Archiv zur Verfügung."
+    ;;
+
+  *)
+    fail "Nicht unterstützte Architektur: dpkg=$DEB_ARCH, uname=$MACHINE_ARCH."
+    ;;
+esac
+
+readonly DEB_ARCH
+readonly MACHINE_ARCH
+readonly MEDIAMTX_ARCH
+
+printf 'Betriebssystem: %s\n' "$OS_NAME"
+printf 'Architektur: dpkg=%s, uname=%s -> MediaMTX linux_%s\n' \
+  "$DEB_ARCH" "$MACHINE_ARCH" "$MEDIAMTX_ARCH"
 
 required_sources=(
   "$SCRIPT_DIR/requirements.txt"
@@ -101,7 +171,8 @@ if getent passwd "$SERVICE_USER" >/dev/null 2>&1 || getent group "$SERVICE_GROUP
   fail "Benutzer oder Gruppe $SERVICE_USER existiert bereits; dieser Installer ist nur für frische Installationen."
 fi
 
-printf 'Installiere MediaMTX Monitor auf Ubuntu 24.04 (%s -> linux_%s).\n' "$MACHINE_ARCH" "$MEDIAMTX_ARCH"
+printf 'Installiere MediaMTX Monitor auf %s (%s/%s -> linux_%s).\n' \
+  "$OS_NAME" "$DEB_ARCH" "$MACHINE_ARCH" "$MEDIAMTX_ARCH"
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
@@ -274,6 +345,8 @@ MONITOR_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 [ -n "$MONITOR_IP" ] || MONITOR_IP="127.0.0.1"
 
 printf '\nInstallation abgeschlossen.\n'
-printf 'Architektur: %s (linux_%s)\n' "$MACHINE_ARCH" "$MEDIAMTX_ARCH"
+printf 'Betriebssystem: %s\n' "$OS_NAME"
+printf 'Architektur: dpkg=%s, uname=%s, MediaMTX=linux_%s\n' \
+  "$DEB_ARCH" "$MACHINE_ARCH" "$MEDIAMTX_ARCH"
 printf 'MediaMTX: v%s\n' "$MEDIAMTX_VERSION"
 printf 'Monitor: http://%s:8080/\n' "$MONITOR_IP"
