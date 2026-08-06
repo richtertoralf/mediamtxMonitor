@@ -1,16 +1,14 @@
-# /etc/systemd/system/mediamtx-system.service
-
 [Unit]
 Description=MediaMTX System Monitor
-After=network.target redis.service
-Requires=redis.service
+After=network.target redis-server.service
+Requires=redis-server.service
 
 [Service]
 Type=simple
 User=mediamtxmon
 Group=mediamtxmon
 WorkingDirectory=/opt/mediamtx-monitoring-backend
-ExecStart=/opt/mediamtx-monitoring-backend/venv/bin/python3 /opt/mediamtx-monitoring-backend/bin/mediamtx_system.py
+ExecStart=/opt/mediamtx-monitoring-backend/venv/bin/python3 bin/mediamtx_systeminfo.py
 Restart=on-failure
 RestartSec=5
 Environment="PYTHONUNBUFFERED=1"

@@ -1,0 +1,24 @@
+  "~^__preview__/(.+)$":
+    runOnDemand: >
+      ffmpeg -nostdin -loglevel warning
+        -rtsp_transport tcp
+        -i rtsp://127.0.0.1:$RTSP_PORT/$G1
+        -map 0:v:0
+        -an
+        -vf scale=192:108,fps=10
+        -c:v libx264
+        -preset ultrafast
+        -tune zerolatency
+        -threads 1
+        -x264-params "ref=1:me=dia:subme=0:weightp=0:aq-mode=0"
+        -pix_fmt yuv420p
+        -g 20
+        -keyint_min 20
+        -sc_threshold 0
+        -b:v 80k
+        -maxrate 100k
+        -bufsize 100k
+        -f rtsp rtsp://127.0.0.1:$RTSP_PORT/$MTX_PATH
+    runOnDemandRestart: true
+    runOnDemandStartTimeout: 15s
+    runOnDemandCloseAfter: 20s

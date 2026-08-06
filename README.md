@@ -1,72 +1,100 @@
-# 📡 MediaMTX Monitor
+# MediaMTX Monitor
 
-![Purpose](https://img.shields.io/badge/Purpose-MediaMTX%20Monitoring-blue)
-![Backend](https://img.shields.io/badge/Backend-FastAPI%20%2B%20Redis-green)
-![Dashboard](https://img.shields.io/badge/UI-Web%20Dashboard-orange)
-![Platform](https://img.shields.io/badge/Platform-Linux-lightgrey)
+MediaMTX Monitor zeigt aktive MediaMTX-Streams, Publisher, Reader, Bitraten,
+SRT-Metriken und Systemdaten in einem kleinen Web-Dashboard. Das Frontend bleibt
+Vanilla JavaScript. Redis puffert die vom Collector gelesenen Daten, FastAPI
+liefert API und Dashboard aus.
 
-Ein leichtgewichtiges Monitoring-Tool für [MediaMTX](https://github.com/bluenviron/mediamtx) mit Web-Dashboard und Redis-Backend.  
+## Dienste
 
-## Zweck
+MediaMTX und der Monitor laufen auf derselben Maschine als getrennte
+systemd-Dienste. Ein Fehler des Monitor-Dashboards soll den laufenden
+Streamingdienst nicht beenden.
 
-Das Projekt sammelt aktuelle Streamdaten von MediaMTX, ergänzt sie um berechnete Werte wie Bitraten und SRT-Metriken und stellt alles über ein einfaches Web-Dashboard bereit.
+| Komponente | Betrieb |
+|---|---|
+| MediaMTX | unabhängiger Dienst `mediamtx.service`, systemd-Standardbenutzer `root` |
+| MediaMTX-Monitor | drei Dienste unter `mediamtxmon:mediamtxmon` |
 
-<img width="600" alt="MediaMTX Monitor Screenshot" src="docs/MediaMTX_Monitor_Screenshot.png" />
+Ein Ausfall von MediaMTX beendet den Collector nicht. Der Collector meldet dann
+API-Fehler und fragt weiter. Umgekehrt beeinflusst ein Monitor-Ausfall den
+MediaMTX-Streamingdienst auf derselben Maschine nicht.
 
-## Motivation
+## Unterstützte Neuinstallationen
 
-MediaMTX Monitor entstand aus dem praktischen Bedarf, mehrere Live-Streams bei Sportproduktionen zuverlässig zu überwachen. Die Grundidee ist von professionellen Broadcast-Monitoring-Werkzeugen inspiriert: Alle relevanten Streams sollen in einer Oberfläche sichtbar sein, inklusive technischer Kennzahlen wie Bitrate, SRT-RTT, Readern, Systemlast und optionalen Vorschaubildern.
+- Ubuntu Server 24.04 LTS
+- `x86_64` / `amd64` – Neuinstallation erfolgreich getestet
+- `aarch64` / `arm64` – vom Installer unterstützt, praktischer Test steht noch aus
+- Raspberry Pi 4 mit 64-Bit-Ubuntu Server – unterstützt, praktischer Test steht noch aus
 
-Im Unterschied zu kommerziellen Broadcast-Lösungen ist MediaMTX Monitor bewusst leichtgewichtig, offen und serverseitig aufgebaut. Es nutzt MediaMTX, Redis, FastAPI und ein einfaches Web-Frontend und richtet sich an Vereine, kleine Produktionen, Community-Livestreams und selbstgehostete Streaming-Infrastrukturen.
+Der Installer unterstützt nur frische Systeme. Existierende oder angepasste
+Installationen werden nicht überschrieben oder aktualisiert.
 
-## Aktueller Funktionsumfang
-
-- Anzeige aktiver Streams
-- Anzeige verbundener Reader
-- SRT-Metriken wie RTT und Datenrate
-- Systemmetriken des Hosts (CPU, RAM, Disk, Netzwerk, Temperatur)
-- REST-API für Frontend und CLI-Tests
-- Statisches Web-Frontend ohne direkte Browser-Zugriffe auf die MediaMTX-Control-API
-- On-Demand-Videovorschau über MediaMTX WebRTC
-
-## Architektur in Kurzform
-
-Monitoringdaten:
-
-`MediaMTX API → Collector → Redis → FastAPI → Browser`
-
-Videovorschau:
-
-`Browser → MediaMTX WebRTC → __preview__/<stream> → On-Demand-FFmpeg → lokaler RTSP-Originalstream → MediaMTX WebRTC`
-
-Der Browser fragt die MediaMTX-Control-API nicht direkt ab. Für die Videovorschau verbindet er sich jedoch direkt mit MediaMTX WebRTC. Der Abruf eines `__preview__/<stream>`-Pfads startet FFmpeg bei Bedarf. FFmpeg liest den Originalstream lokal per RTSP und erzeugt einen verkleinerten H.264-Vorschaustream mit 192×108 Pixeln, 10 fps und ohne Audio. Nach Ende der Nutzung wird der FFmpeg-Prozess automatisch beendet. Periodisch erzeugte JPEG-Dateien gehören nicht zur aktuellen Architektur.
-
-## Voraussetzungen
-
-- Linux-Server (Debian, Ubuntu oder Raspberry Pi OS)
-- Installiertes MediaMTX mit aktivierter API
-- Python 3
-- Redis
-
-## 🚀 Schnellstart
-1. MediaMTX installieren und API aktivieren  
-2. [Installation ausführen](docs/installation.md)
+## Installation
 
 ```bash
-wget https://raw.githubusercontent.com/richtertoralf/mediamtxMonitor/main/install.sh
-chmod +x install.sh
-sudo ./install.sh
+sudo ./install.sh 1.20.0
 ```
 
-4.Danach ist das Dashboard unter folgendem Port bzw. im Browser erreichbar: → `http://<server>:8080/`
+Die vollständige Neuinstallation wurde mit MediaMTX v1.20.0 auf Ubuntu Server
+24.04 LTS amd64 getestet. Die gewünschte MediaMTX-Version wird vom Benutzer
+gewählt; ein optionales führendes `v` ist erlaubt. Der Installer sucht nicht
+automatisch nach der neuesten Version.
 
-## Hinweise
+Der Installer lädt Binary und vollständige `mediamtx.yml` aus demselben
+offiziellen Release-Archiv und prüft dessen SHA-256-Summe. Er aktiviert API,
+RTSP und WebRTC und ergänzt ausschließlich die On-Demand-Vorschauregel.
 
-- Die Basisfunktion des Projekts ist Stream- und Systemmonitoring.
-- Die Videovorschau wird ausschließlich als On-Demand-WebRTC-Stream bereitgestellt.
-- Das Installationsskript aktualisiert ein bestehendes Checkout per Git und verwirft dabei lokale Änderungen.
+## Installierte Komponenten und Pfade
 
-## 📚 Weitere Infos / Dokumentation
-- [📄 installation.md](docs/installation.md) – Schritt-für-Schritt Einrichtung
-- [📖 documentation.md](docs/documentation.md) – Details für Anwender & Entwickler
-- [🏗️ architecture.md](docs/architecture.md) – Architektur & Designüberblick
+| Inhalt | Pfad |
+|---|---|
+| MediaMTX-Binary | `/usr/local/bin/mediamtx` |
+| MediaMTX-Konfiguration | `/usr/local/etc/mediamtx.yml` |
+| Monitor | `/opt/mediamtx-monitoring-backend` |
+| Monitor-Konfiguration | `/opt/mediamtx-monitoring-backend/config/collector.yaml` |
+| systemd-Units | `/etc/systemd/system/mediamtx*.service` |
+
+Zusätzlich installiert der Installer FFmpeg, Redis und eine Python-Venv mit den
+Monitor-Abhängigkeiten.
+
+## Dienste und Benutzer
+
+| Dienst | Benutzer | Aufgabe |
+|---|---|---|
+| `mediamtx.service` | root (kein `User=` in der Unit) | Streamingserver |
+| `mediamtx-api.service` | `mediamtxmon` | Dashboard und Monitor-API |
+| `mediamtx-collector.service` | `mediamtxmon` | MediaMTX-Control-API abfragen |
+| `mediamtx-system.service` | `mediamtxmon` | Systemmetriken erfassen |
+| `redis-server.service` | Distributionseinstellung | Zwischenspeicher |
+
+## Ports
+
+Für die mit MediaMTX v1.20.0 getestete Konfiguration:
+
+| Port | Funktion |
+|---:|---|
+| 8554 | RTSP |
+| 1935 | RTMP |
+| 8888 | HLS |
+| 8889 | WebRTC und Monitor-Vorschau |
+| 8890 | SRT |
+| 9997 | MediaMTX-Control-API |
+| 8080 | Dashboard und Monitor-API |
+| 6379 | Redis, lokal |
+
+Die vollständige MediaMTX-Konfiguration stammt aus der gewählten Version; deren
+Werte bleiben mit Ausnahme der dokumentierten Monitor-Anpassungen maßgeblich.
+
+## Kurzer Funktionstest
+
+```bash
+systemctl is-active mediamtx mediamtx-api mediamtx-collector mediamtx-system
+curl -fsS http://127.0.0.1:9997/v3/paths/list | python3 -m json.tool
+curl -fsS http://127.0.0.1:8080/api/streams | python3 -m json.tool
+```
+
+Dashboard: `http://<server-ip>:8080/`
+
+Weitere Prüfungen und Fehlerbilder stehen in
+[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
