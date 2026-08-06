@@ -16,6 +16,11 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
+try:
+    from .monitoring_config import resolve_system_monitor_config
+except ImportError:
+    from monitoring_config import resolve_system_monitor_config
+
 # 📄 Konfiguration laden
 CONFIG_PATH = "/opt/mediamtx-monitoring-backend/config/collector.yaml"
 try:
@@ -30,6 +35,7 @@ redis_cfg = config.get("redis", {})
 REDIS_HOST = redis_cfg.get("host", "localhost")
 REDIS_PORT = redis_cfg.get("port", 6379)
 REDIS_KEY = redis_cfg.get("key", "mediamtx:streams:latest")
+SYSTEM_REDIS_KEY = resolve_system_monitor_config(config)["redis_key"]
 
 # 📝 Logging einrichten
 log_cfg = config.get("logging", {})
@@ -67,7 +73,7 @@ def get_streams():
         streams = []
 
     # Systeminfos aus Redis holen
-    system_raw = r.get("mediamtx:system:latest")
+    system_raw = r.get(SYSTEM_REDIS_KEY)
     try:
         systeminfo = json.loads(system_raw) if system_raw else {}
     except json.JSONDecodeError:

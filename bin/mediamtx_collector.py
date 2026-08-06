@@ -58,6 +58,13 @@ from bitrate import calc_bitrate
 
 # RTT nur für Publisher (Nicht-SRT)
 from rtt import measure_publisher_rtt_ms
+try:
+    from .monitoring_config import measure_configured_rtt, resolve_rtt_config
+except ImportError:
+    from monitoring_config import (
+        measure_configured_rtt,
+        resolve_rtt_config,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +101,8 @@ if BITRATE_SMOOTH_ALPHA is not None:
     BITRATE_SMOOTH_ALPHA = float(BITRATE_SMOOTH_ALPHA)
 BITRATE_TTL: int = int(BITRATE_CFG.get("ttl", 300))
 IGNORE_LOOPBACK: bool = bool(BITRATE_CFG.get("ignore_loopback", True))
+
+RTT_CFG: Dict[str, Any] = resolve_rtt_config(config)
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -281,14 +290,11 @@ def collect_and_store() -> None:
         remote = src_details.get("remoteAddr", "")
         if (src_type != "srtConn") and remote:
             try:
-                rtt_ms = measure_publisher_rtt_ms(
+                rtt_ms = measure_configured_rtt(
                     r,
                     remote_addr=remote,
-                    ewma_alpha=float(BITRATE_SMOOTH_ALPHA or 0.5),
-                    min_period_s=30,
-                    ttl_s=300,
-                    key_prefix="rtt:pub",
-                    timeout_s=0.9,
+                    rtt_config=RTT_CFG,
+                    measure_func=measure_publisher_rtt_ms,
                 )
                 if rtt_ms is not None:
                     entry["source"]["rtt_ms"] = round(rtt_ms, 2)

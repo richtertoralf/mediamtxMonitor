@@ -20,6 +20,11 @@ import logging
 from pathlib import Path
 from apscheduler.schedulers.background import BackgroundScheduler
 
+try:
+    from .monitoring_config import resolve_system_monitor_config
+except ImportError:
+    from monitoring_config import resolve_system_monitor_config
+
 # 🔧 Konfigurationsdatei laden
 CONFIG_PATH = "/opt/mediamtx-monitoring-backend/config/collector.yaml"
 try:
@@ -33,9 +38,10 @@ except Exception as e:
 redis_cfg = config.get("redis", {})
 REDIS_HOST = redis_cfg.get("host", "localhost")
 REDIS_PORT = redis_cfg.get("port", 6379)
-REDIS_KEY = redis_cfg.get("system_key", "mediamtx:system:latest")
-JSON_OUTPUT_PATH = config.get("system_output_json_path", "/tmp/mediamtx_system.json")
-INTERVAL_SECONDS = config.get("system_interval_seconds", 10)
+system_monitor_cfg = resolve_system_monitor_config(config)
+REDIS_KEY = system_monitor_cfg["redis_key"]
+JSON_OUTPUT_PATH = system_monitor_cfg["output_json_path"]
+INTERVAL_SECONDS = system_monitor_cfg["interval_seconds"]
 
 # 📝 Logging einrichten
 logging.basicConfig(
