@@ -38,12 +38,16 @@ Das Gesamtsystem besteht aus drei getrennten Ebenen:
 
 ## Arbeitsweise
 
-- Immer zuerst Bestand und Zusammenhänge analysieren.
-- Vor nicht-trivialen Änderungen einen konkreten Plan vorlegen.
-- Änderungen klein und nachvollziehbar halten.
-- Bestehende Architektur und Abhängigkeiten bevorzugen.
-- Code muss gut lesbar, verständlich und möglichst einfach strukturiert sein.
-- Kurze Kommentare nur dort einfügen, wo sie erklären, warum eine Lösung oder Architektur gewählt wurde.
-- Nach jeder Änderung passende Tests ausführen.
-- Dokumentation erst nach verifizierten Codeänderungen aktualisieren.
-- Keine bestehenden Dateien ungefragt vollständig neu schreiben.
+* Immer zuerst Bestand und Zusammenhänge analysieren.
+* Vor nicht-trivialen Änderungen einen konkreten Plan vorlegen.
+* Änderungen klein, praktisch und nachvollziehbar halten.
+* Immer die einfachste ausreichend robuste Lösung bevorzugen.
+* Code muss gut lesbar, verständlich und möglichst einfach strukturiert sein.
+* Keine unnötigen Abstraktionen, Generalisierungen oder Architektur für hypothetische zukünftige Anforderungen einführen.
+* Bestehende Architektur, vorhandene Werkzeuge und Bordmittel bevorzugen.
+* Neue Abhängigkeiten nur einführen, wenn sie einen klaren praktischen Vorteil bringen; dabei Open Source bevorzugen.
+* Frameworks vermeiden, wenn die Aufgabe mit einfachen Bordmitteln übersichtlich lösbar ist.
+* Kurze Kommentare nur dort einfügen, wo sie erklären, warum eine Lösung oder Architektur gewählt wurde.
+* Nach jeder Änderung passende Tests ausführen.
+* Dokumentation erst nach verifizierten Codeänderungen aktualisieren.
+* Keine bestehenden Dateien ungefragt vollständig neu schreiben.
