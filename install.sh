@@ -186,6 +186,7 @@ apt-get install -y --no-install-recommends \
   python3 \
   python3-venv \
   redis-server \
+  rsync \
   tar \
   util-linux
 

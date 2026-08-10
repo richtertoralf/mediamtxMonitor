@@ -1,98 +1,110 @@
-# 🛠️ devtools – Hilfsskripte für Entwicklung und Deployment
+# devtools – Dev-Deployment
 
-Dieses Verzeichnis enthält Werkzeuge zur Synchronisation von Entwicklungsdateien mit dem produktiven Testverzeichnis von `mediamtx-monitoring-backend`.
+Dieses Verzeichnis enthält Hilfsskripte für die Entwicklung des MediaMTX Monitor.
 
-Die Entwicklung erfolgt lokal in Visual Studio Code im Verzeichnis:
+## Prinzip
 
-`$HOME/scripts/mediamtxmon`.
+Entwicklung und Versionskontrolle erfolgen im Git-Repository:
 
-Die produktive Testumgebung liegt hingegen unter:
-
-```
-/opt/mediamtx-monitoring-backend/
+```text
+~/mediamtxMonitor
 ```
 
+Die laufende Entwicklungsinstallation liegt unter:
 
-Da auf `/opt/...` in der Regel nur mit `sudo` oder unter einem dedizierten Systemnutzer (z. B. `mediamtxmon`) geschrieben werden darf, ist ein direktes Arbeiten dort nicht praktikabel. Stattdessen dienen diese Skripte dem geregelten Holen und Zurückspielen von bearbeiteten Dateien.
-
----
-
-## 📁 Dateien in diesem Verzeichnis
-
-| Datei               | Beschreibung |
-|---------------------|--------------|
-| `filemap.sh`        | Zentrale Datei-Ziel-Zuordnung. Enthält eine Assoziativliste, die jeder bearbeiteten Datei ihr Zielverzeichnis im Produktivsystem zuweist. Wird von `fetch.sh` und `deploy.sh` verwendet. |
-| `fetch.sh`          | Kopiert ausgewählte oder alle Dateien **aus** dem Produktivsystem nach `$HOME/scripts/mediamtxmon`, um sie lokal zu bearbeiten. |
-| `deploy.sh`         | Spielt bearbeitete Dateien **zurück** ins Produktivsystem und setzt dabei Besitzer- und Ausführungsrechte korrekt. |
-| `generate_filemap.sh` | Erstellt `filemap.sh` automatisch anhand des aktuellen Inhalts des Produktivverzeichnisses – unter Berücksichtigung von `.filemapignore`. |
-| `.filemapignore`    | Enthält Muster (ähnlich `.gitignore`) für Dateien und Verzeichnisse, die beim Erzeugen der `filemap.sh` ausgeschlossen werden sollen. |
-
----
-
-## ⚙️ Verwendung
-
-1. In dieses Verzeichnis wechseln:
-
-   ```bash
-   cd ~/scripts/mediamtxmon/devtools
-
-
-## ⚙️ Verwendung
-
-1. In dieses Verzeichnis wechseln:
-
-   ```bash
-   cd ~/scripts/mediamtxmon/devtools
-   ```
-
-2. Datei-Zuordnung automatisch erzeugen (optional, ersetzt manuelles Pflegen von filemap.sh):
-
-```
-./generate_filemap.sh
+```text
+/opt/mediamtx-monitoring-backend
 ```
 
+Das Git-Repository ist die **Source of Truth**. Dateien unter `/opt` werden nicht direkt bearbeitet.
 
-3. Dateien aus dem Produktivsystem holen:
-   ```
-   ./fetch.sh           # Interaktive Auswahl
-   ./fetch.sh --all     # Alle in filemap.sh gelisteten Dateien holen
-   ```
-
-3. Dateien ins Produktivsystem zurückspielen:
-   ```
-   ./deploy.sh          # Interaktive Auswahl
-   ```
-
-## 🔐 Rechte und Benutzer
-Die Dateien im Produktivsystem gehören dem Nutzer mediamtxmon.
-
-deploy.sh übernimmt daher automatisch:
-
-- Kopieren mit sudo
-- Setzen des Besitzers mit chown
-- Setzen der Ausführbarkeit bei .py-Dateien mit chmod +x
-
-📌 Hinweise
-filemap.sh bildet die Grundlage für beide Skripte. Sie kann manuell gepflegt oder mit generate_filemap.sh automatisch erzeugt werden.
-
-.filemapignore funktioniert ähnlich wie .gitignore und erlaubt das Ausschließen unerwünschter Dateien und Verzeichnisse.
-
-Das Setup ist besonders nützlich bei eingeschränkten Rechten auf /opt/..., z. B. in Multi-User- oder Produktivumgebungen.
-
-Die Skripte sind modular aufgebaut und können bei Bedarf um Funktionen wie Logging, Dry-Run oder Dateivergleich erweitert werden.
-
-## 🧪 Beispielhafte Zielstruktur im Produktivsystem
+```text
+Codex / VS Code
+      ↓
+~/mediamtxMonitor
+      ↓
+deploy-dev.sh
+      ↓
+/opt/mediamtx-monitoring-backend
+      ↓
+Browser
 ```
-/opt/mediamtx-monitoring-backend/
-├── bin/            ← Python-Skripte
-│   ├── mediamtx_collector.py
-│   └── mediamtx_api.py
-├── config/         ← YAML-Konfigurationen
-│   └── collector.yaml
-├── static/         ← Web-Assets (HTML, CSS, JS, Bilder)
-│   ├── index.html
-│   ├── js/
-│   └── css/
-└── venv/           ← (ausgeschlossen)
 
+## deploy-dev.sh
+
+Änderungen zunächst nur anzeigen:
+
+```bash
+./devtools/deploy-dev.sh --dry-run
+```
+
+Dieser reine Vergleich verändert keine Dateien und darf ohne zusätzliche
+Freigabe ausgeführt werden.
+
+Änderungen nach ausdrücklicher Freigabe deployen:
+
+```bash
+./devtools/deploy-dev.sh
+```
+
+Übertragen werden:
+
+```text
+bin/                  → /opt/mediamtx-monitoring-backend/bin/
+static/               → /opt/mediamtx-monitoring-backend/static/
+config/collector.yaml → /opt/mediamtx-monitoring-backend/config/collector.yaml
+```
+
+`__pycache__/` und `*.pyc` werden ignoriert.
+
+Bei Änderungen an Backend oder `collector.yaml` werden die Monitoring-Dienste neu gestartet. Bei reinen Frontend-Änderungen genügt anschließend ein Browser-Reload.
+
+## Nicht Teil des Dev-Deployments
+
+Diese Dateien werden bewusst nicht über `deploy-dev.sh` ausgerollt:
+
+```text
+config/monitor-preview-path.yml
+requirements.txt
+systemd/
+install.sh
+uninstall.sh
+```
+
+`config/monitor-preview-path.yml` wird nur von `install.sh` verwendet, um die MediaMTX-Konfiguration unter `/usr/local/etc/mediamtx.yml` zu erzeugen.
+
+Änderungen an `requirements.txt` erfordern eine separate, ausdrücklich
+freizugebende Aktualisierung der Python-vEnv unter
+`/opt/mediamtx-monitoring-backend/venv`.
+
+## Frische Neuinstallation einer Dev-VM
+
+`install.sh` ist ausschließlich für eine frische VM vorgesehen. Das Skript ist
+nicht zum Aktualisieren einer bestehenden Installation gedacht und bricht ab,
+wenn relevante Installationsziele bereits vorhanden sind.
+
+```bash
+git clone <repository> ~/mediamtxMonitor
+cd ~/mediamtxMonitor
+sudo ./install.sh 1.20.0
+```
+
+Danach sollte:
+
+```bash
+./devtools/deploy-dev.sh --dry-run
+```
+
+melden:
+
+```text
+Keine deploybaren Änderungen gefunden.
+```
+
+## Aktueller Inhalt
+
+```text
+devtools/
+├── README.md
+└── deploy-dev.sh
 ```
