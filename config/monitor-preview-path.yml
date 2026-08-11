@@ -1,6 +1,6 @@
   "~^__preview__/(.+)$":
     runOnDemand: >
-      ffmpeg -nostdin -loglevel warning
+      nice -n 10 ffmpeg -nostdin -loglevel warning
         -rtsp_transport tcp
         -i rtsp://127.0.0.1:$RTSP_PORT/$G1
         -map 0:v:0
