@@ -198,7 +198,7 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
                         "id": "rtmp-publisher",
                         "remoteAddr": "192.0.2.20:1935",
                     },
-                    "bitrate_mbps": 0.0,
+                    "bitrate_mbps": None,
                 },
                 "tracks2": [],
                 "tracks": [],
@@ -211,7 +211,7 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
                     {
                         "type": "rtmpConn",
                         "id": "rtmp-reader",
-                        "bitrate_mbps": 0.0,
+                        "bitrate_mbps": None,
                         "details": {
                             "id": "rtmp-reader",
                             "remoteAddr": "192.0.2.21:1935",
@@ -255,6 +255,78 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
         self.assertEqual(
             health_keys,
             {key for key in self.redis.values if key.startswith("srt-health:")},
+        )
+
+    def test_native_zero_rate_is_distinct_from_unavailable_rate(self):
+        self.srt_details[0]["mbpsReceiveRate"] = 0
+        self.srt_details[1]["mbpsSendRate"] = 0
+
+        snapshot = self.collect()
+
+        self.assertEqual(snapshot[0]["source"]["bitrate_mbps"], 0.0)
+        self.assertEqual(snapshot[0]["readers"][0]["bitrate_mbps"], 0.0)
+        self.assertIsNone(snapshot[1]["source"]["bitrate_mbps"])
+        self.assertIsNone(snapshot[1]["readers"][0]["bitrate_mbps"])
+
+    def test_rtsp_rtmp_and_hls_keep_missing_rates_null_and_raw_metrics(self):
+        protocol_details = {
+            "/v3/rtspsessions/list": [
+                {
+                    "id": "rtsp-publisher",
+                    "remoteAddr": "192.0.2.30:8554",
+                    "inboundRTPPacketsLost": 0,
+                    "inboundRTPPacketsJitter": 1.25,
+                },
+                {
+                    "id": "rtsp-reader",
+                    "remoteAddr": "192.0.2.31:8554",
+                    "outboundRTPPacketsDiscarded": 0,
+                },
+            ],
+            "/v3/rtmpconns/list": [
+                {"id": "rtmp-reader", "remoteAddr": "192.0.2.32:1935"},
+            ],
+            "/v3/hlssessions/list": [
+                {"id": "hls-reader", "remoteAddr": "192.0.2.33:49152"},
+            ],
+        }
+
+        def fetch(endpoint, params=None):
+            if endpoint == "/v3/info":
+                return {"version": "1.20.0"}
+            if endpoint == "/v3/paths/list":
+                return {"items": [{
+                    "name": "protocol-path",
+                    "source": {"type": "rtspSession", "id": "rtsp-publisher"},
+                    "readers": [
+                        {"type": "rtspSession", "id": "rtsp-reader"},
+                        {"type": "rtmpConn", "id": "rtmp-reader"},
+                        {"type": "hlsSession", "id": "hls-reader"},
+                    ],
+                }]}
+            return {"items": protocol_details.get(endpoint, [])}
+
+        self.collector.mediamtx_client = FakeMediaMTXClient(fetch)
+        snapshot = self.collect()
+        stream = snapshot[0]
+
+        self.assertIsNone(stream["source"]["bitrate_mbps"])
+        self.assertEqual(
+            stream["source"]["details"]["inboundRTPPacketsLost"], 0
+        )
+        self.assertEqual(
+            stream["source"]["details"]["inboundRTPPacketsJitter"], 1.25
+        )
+        self.assertEqual(
+            [reader["type"] for reader in stream["readers"]],
+            ["rtspSession", "rtmpConn", "hlsSession"],
+        )
+        self.assertTrue(
+            all(reader["bitrate_mbps"] is None for reader in stream["readers"])
+        )
+        self.assertEqual(
+            stream["readers"][0]["details"]["outboundRTPPacketsDiscarded"],
+            0,
         )
 
 

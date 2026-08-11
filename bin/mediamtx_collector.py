@@ -214,6 +214,15 @@ def is_loopback(remote: str) -> bool:
     return False
 
 
+def first_available(mapping: Dict[str, Any], *field_names: str) -> Any:
+    """Return the first present, non-null field without treating zero as absent."""
+    for field_name in field_names:
+        value = mapping.get(field_name)
+        if value is not None:
+            return value
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Kernfunktion: Sammeln und Speichern
 # ---------------------------------------------------------------------------
@@ -276,12 +285,11 @@ def collect_and_store() -> None:
         api_rx_mbps = src_details.get("mbpsReceiveRate")
         # Fallback: aus Byte-Deltas berechnen. SRT behält native Transportzähler.
         # Quelle bytes: bevorzugt die Detailverbindung, sonst Path-Feld
-        pub_bytes_now = int(
-            src_details.get("inboundBytes")
-            or (src_details.get("bytesReceived") if src_type == "srtConn" else 0)
-            or entry["inboundBytes"]
-            or 0
-        )
+        pub_bytes_value = first_available(src_details, "inboundBytes")
+        if pub_bytes_value is None and src_type == "srtConn":
+            pub_bytes_value = first_available(src_details, "bytesReceived")
+        if pub_bytes_value is None:
+            pub_bytes_value = entry.get("inboundBytes")
 
         pub_identity = connection_identity(source)
         pub_key = publisher_connection_key(
@@ -290,21 +298,21 @@ def collect_and_store() -> None:
             pub_identity,
         )
         pub_calc_mbps = None
-        if pub_bytes_now > 0:
+        if pub_bytes_value is not None:
             pub_calc_mbps = calc_bitrate(
                 r,
                 key=pub_key,
-                bytes_now=pub_bytes_now,
+                bytes_now=int(pub_bytes_value),
                 now=now,
                 min_dt=BITRATE_MIN_DT,
                 smooth_alpha=BITRATE_SMOOTH_ALPHA,
                 ttl=BITRATE_TTL,
             )
 
-        if api_rx_mbps is not None and float(api_rx_mbps) > 0:
+        if api_rx_mbps is not None:
             entry["source"]["bitrate_mbps"] = round(float(api_rx_mbps), 2)
         else:
-            entry["source"]["bitrate_mbps"] = float(pub_calc_mbps or 0.0)
+            entry["source"]["bitrate_mbps"] = pub_calc_mbps
 
         # -----------------------------------------
         # SRT liefert Transport-RTT; für andere Protokolle bleibt ICMP separat.
@@ -357,20 +365,18 @@ def collect_and_store() -> None:
 
             # Reader-Bitrate: API (SRT) bevorzugen, sonst Delta aus outboundBytes
             api_tx_mbps = rd_details.get("mbpsSendRate")
-            rd_bytes_now = int(
-                rd_details.get("outboundBytes")
-                or (rd_details.get("bytesSent") if rtype == "srtConn" else 0)
-                or 0
-            )
+            rd_bytes_value = first_available(rd_details, "outboundBytes")
+            if rd_bytes_value is None and rtype == "srtConn":
+                rd_bytes_value = first_available(rd_details, "bytesSent")
 
             reader_identity = connection_identity(rd)
             rd_key = reader_connection_key(name, rtype, reader_identity)
             rd_calc_mbps = None
-            if rd_bytes_now > 0:
+            if rd_bytes_value is not None:
                 rd_calc_mbps = calc_bitrate(
                     r,
                     key=rd_key,
-                    bytes_now=rd_bytes_now,
+                    bytes_now=int(rd_bytes_value),
                     now=now,
                     min_dt=BITRATE_MIN_DT,
                     smooth_alpha=BITRATE_SMOOTH_ALPHA,
@@ -379,8 +385,8 @@ def collect_and_store() -> None:
 
             bitrate_final = (
                 round(float(api_tx_mbps), 2)
-                if (api_tx_mbps is not None and float(api_tx_mbps) > 0)
-                else float(rd_calc_mbps or 0.0)
+                if api_tx_mbps is not None
+                else rd_calc_mbps
             )
 
             reader_entry = {
