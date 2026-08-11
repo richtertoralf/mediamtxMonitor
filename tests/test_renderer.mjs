@@ -9,6 +9,7 @@ const rendererSource = await readFile(
 const {
   renderReader,
   renderSrtHealth,
+  renderStreamCard,
   renderStreamLeft,
 } = await import(`data:text/javascript;base64,${Buffer.from(rendererSource).toString("base64")}`);
 
@@ -90,3 +91,105 @@ const nonSrtReader = renderReader({
 assert.match(nonSrtReader, /Rate: 2\.50 Mbps/);
 assert.match(nonSrtReader, /Gesendet: 1\.0000 KB/);
 assert.doesNotMatch(nonSrtReader, /TX:/);
+
+
+const injectionPayloads = [
+  ["<script>alert(1)</script>", "&lt;script&gt;alert(1)&lt;/script&gt;"],
+  ["<img src=x onerror=alert(1)>", "&lt;img src=x onerror=alert(1)&gt;"],
+  ['"><svg onload=alert(1)>', "&quot;&gt;&lt;svg onload=alert(1)&gt;"],
+  [`STREAM<&>"'`, "STREAM&lt;&amp;&gt;&quot;&#39;"],
+];
+
+for (const [payload, visibleText] of injectionPayloads) {
+  const streamHtml = renderStreamLeft({
+    name: payload,
+    source: {
+      type: payload,
+      details: {remoteAddr: payload},
+    },
+    media: {
+      video: [{displayCodec: payload}],
+      audio: [{displayCodec: payload}],
+      other: [{displayCodec: payload}],
+    },
+  });
+  const readerHtml = renderReader({
+    type: payload,
+    details: {remoteAddr: payload},
+  });
+
+  for (const html of [streamHtml, readerHtml]) {
+    assert.doesNotMatch(html, /<script\b/i);
+    assert.doesNotMatch(html, /<img\b/i);
+    assert.doesNotMatch(html, /<svg\b/i);
+    assert.doesNotMatch(html, /<[^>]*\sonerror\s*=/i);
+    assert.doesNotMatch(html, /<[^>]*\sonload\s*=/i);
+  }
+
+  assert.ok(streamHtml.includes(visibleText));
+  assert.ok(readerHtml.includes(visibleText));
+
+  const fallbackTrackHtml = renderStreamLeft({
+    name: "track-test",
+    source: {details: {}},
+    media: {},
+    tracks: [payload],
+  });
+  assert.ok(fallbackTrackHtml.includes(visibleText));
+  assert.doesNotMatch(fallbackTrackHtml, /<(?:script|img|svg)\b/i);
+}
+
+
+class FakeIframe {
+  constructor() {
+    this.attributes = new Map();
+  }
+
+  setAttribute(name, value) {
+    this.attributes.set(name, String(value));
+  }
+}
+
+class FakeCard {
+  constructor() {
+    this.iframe = new FakeIframe();
+    this.innerHTML = "";
+  }
+
+  querySelector(selector) {
+    return selector === ".preview-frame" ? this.iframe : null;
+  }
+}
+
+globalThis.document = {
+  createElement: () => new FakeCard(),
+};
+globalThis.window = {
+  location: {hostname: "monitor.example"},
+};
+
+const previewPayload = '"><svg onload=alert(1)>';
+const card = renderStreamCard({
+  name: previewPayload,
+  source: {type: "rtmpConn", details: {}},
+  media: {},
+  readers: [],
+});
+
+assert.doesNotMatch(card.innerHTML, /<svg\b/i);
+assert.doesNotMatch(card.innerHTML, /<[^>]*\sonload\s*=/i);
+assert.equal(card.iframe.attributes.get("title"), `Preview: ${previewPayload}`);
+assert.equal(
+  card.iframe.attributes.get("src"),
+  "http://monitor.example:8889/__preview__/%22%3E%3Csvg%20onload%3Dalert(1)%3E?controls=false&muted=true&autoplay=true&playsInline=true",
+);
+
+const normalCard = renderStreamCard({
+  name: "camera/main",
+  source: {type: "rtmpConn", details: {remoteAddr: "192.0.2.10:1935"}},
+  media: {},
+  readers: [],
+});
+assert.match(normalCard.innerHTML, /camera\/main/);
+assert.match(normalCard.innerHTML, /Publisher \(rtmpConn\)/);
+assert.equal(normalCard.iframe.attributes.get("title"), "Preview: camera/main");

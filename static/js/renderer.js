@@ -12,6 +12,16 @@
  * Dieses Frontend macht keine eigene Delta-Berechnung.
  */
 
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, character => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[character]);
+}
+
 /**
  * Formatiert Bytes in eine lesbare Einheit.
  * @param {number} bytes - Bytewert (kumuliert)
@@ -78,7 +88,7 @@ function renderMedia(stream) {
     lines.push(`Tracks: ${stream.tracks.join(", ")}`);
   }
 
-  return lines.map(line => `${line}<br/>`).join("");
+  return lines.map(line => `${escapeHtml(line)}<br/>`).join("");
 }
 
 /**
@@ -107,8 +117,8 @@ export function renderReader(reader) {
 
   let html = `
     <div class="reader-block">
-      <span class="${markerClass}"></span>Typ: ${reader.type}<br/>
-      Remote: ${remote}<br/>
+      <span class="${markerClass}"></span>Typ: ${escapeHtml(reader.type)}<br/>
+      Remote: ${escapeHtml(remote)}<br/>
       ${reader.type === "srtConn"
         ? renderSrtHealth(reader?.srt_health || {}, "tx_mbps", finalRate)
         : `Rate: ${finalRate > 0 ? finalRate.toFixed(2) : "0.00"} Mbps<br/>`}
@@ -188,9 +198,9 @@ export function renderStreamLeft(stream) {
 
   return `
     <div class="stream-left">
-      <div class="stream-title">${stream.name}</div>
-      Publisher (${src.type || "-"})<br/>
-      Remote: ${details.remoteAddr || "-"}<br/>
+      <div class="stream-title">${escapeHtml(stream.name)}</div>
+      Publisher (${escapeHtml(src.type || "-")})<br/>
+      Remote: ${escapeHtml(details.remoteAddr || "-")}<br/>
       ${src.type === "srtConn"
         ? renderSrtHealth(sourceHealth, "rx_mbps", finalRate)
         : `${latencyLine}Rate: ${finalRate > 0 ? finalRate.toFixed(2) : "0.00"} Mbps<br/>`}
@@ -235,8 +245,6 @@ export function renderStreamCard(stream) {
   <div class="stream-center">
     <iframe
       class="preview-frame"
-      src="${previewSrc}"
-      title="Preview: ${stream.name}"
       loading="lazy"
       scrolling="no"
       allow="autoplay"
@@ -254,6 +262,9 @@ export function renderStreamCard(stream) {
 
   div.innerHTML = left + center + right;
 
+  const preview = div.querySelector(".preview-frame");
+  preview.setAttribute("src", previewSrc);
+  preview.setAttribute("title", `Preview: ${stream.name}`);
 
   return div;
 }
