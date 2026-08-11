@@ -1,9 +1,5 @@
-import builtins
-import importlib
-import io
 import json
 import sys
-import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -113,34 +109,9 @@ class SrtHealthModelTests(unittest.TestCase):
 class CollectorSrtHealthIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        real_open = builtins.open
+        import mediamtx_collector
 
-        def open_config(path, *args, **kwargs):
-            if path == "/opt/mediamtx-monitoring-backend/config/collector.yaml":
-                return io.StringIO("bitrate:\n  ttl: 300\n  ignore_loopback: false\n")
-            return real_open(path, *args, **kwargs)
-
-        bootstrap_redis = FakeRedis()
-        redis_module = types.ModuleType("redis")
-        redis_module.Redis = mock.Mock(return_value=bootstrap_redis)
-        apscheduler_module = types.ModuleType("apscheduler")
-        schedulers_module = types.ModuleType("apscheduler.schedulers")
-        background_module = types.ModuleType("apscheduler.schedulers.background")
-        background_module.BackgroundScheduler = mock.Mock
-        sys.modules.pop("mediamtx_collector", None)
-        with (
-            mock.patch("builtins.open", side_effect=open_config),
-            mock.patch.dict(
-                sys.modules,
-                {
-                    "redis": redis_module,
-                    "apscheduler": apscheduler_module,
-                    "apscheduler.schedulers": schedulers_module,
-                    "apscheduler.schedulers.background": background_module,
-                },
-            ),
-        ):
-            cls.collector = importlib.import_module("mediamtx_collector")
+        cls.collector = mediamtx_collector
 
     def setUp(self):
         self.redis = FakeRedis()

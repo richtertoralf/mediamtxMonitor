@@ -10,15 +10,14 @@ Läuft als eigenständiger Dienst analog zu mediamtx_collector.py.
 Die Konfiguration erfolgt über collector.yaml.
 """
 
-import psutil
-import redis
 import yaml
 import json
 import socket
 import time
 import logging
+import sys
 from pathlib import Path
-from apscheduler.schedulers.background import BackgroundScheduler
+from typing import Any, Dict
 
 try:
     from .monitoring_config import resolve_system_monitor_config
@@ -27,36 +26,56 @@ except ImportError:
 
 # 🔧 Konfigurationsdatei laden
 CONFIG_PATH = "/opt/mediamtx-monitoring-backend/config/collector.yaml"
-try:
-    with open(CONFIG_PATH, "r") as f:
-        config = yaml.safe_load(f)
-except Exception as e:
-    print(f"❌ Fehler beim Laden der Konfigurationsdatei: {e}")
-    exit(1)
-
-# 🔗 Konfigurationswerte extrahieren
-redis_cfg = config.get("redis", {})
-REDIS_HOST = redis_cfg.get("host", "localhost")
-REDIS_PORT = redis_cfg.get("port", 6379)
+config: Dict[str, Any] = {}
+redis_cfg: Dict[str, Any] = {}
+REDIS_HOST = "localhost"
+REDIS_PORT = 6379
 system_monitor_cfg = resolve_system_monitor_config(config)
 REDIS_KEY = system_monitor_cfg["redis_key"]
 JSON_OUTPUT_PATH = system_monitor_cfg["output_json_path"]
 INTERVAL_SECONDS = system_monitor_cfg["interval_seconds"]
+r = None
+psutil = None
 
-# 📝 Logging einrichten
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
 
-# 🧠 Redis-Verbindung aufbauen
-try:
-    r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
-    r.ping()
-    logging.info("🔌 Verbindung zu Redis hergestellt.")
-except Exception as e:
-    logging.error(f"❌ Verbindung zu Redis fehlgeschlagen: {e}")
-    exit(1)
+def load_config(path: str = CONFIG_PATH) -> Dict[str, Any]:
+    try:
+        with open(path, "r", encoding="utf-8") as config_file:
+            return yaml.safe_load(config_file) or {}
+    except Exception as exc:
+        print(f"❌ Fehler beim Laden der Konfigurationsdatei: {exc}")
+        sys.exit(1)
+
+
+def configure_runtime(runtime_config: Dict[str, Any]) -> None:
+    global config, redis_cfg, REDIS_HOST, REDIS_PORT
+    global system_monitor_cfg, REDIS_KEY, JSON_OUTPUT_PATH, INTERVAL_SECONDS
+
+    config = runtime_config
+    redis_cfg = config.get("redis", {}) or {}
+    REDIS_HOST = redis_cfg.get("host", "localhost")
+    REDIS_PORT = redis_cfg.get("port", 6379)
+    system_monitor_cfg = resolve_system_monitor_config(config)
+    REDIS_KEY = system_monitor_cfg["redis_key"]
+    JSON_OUTPUT_PATH = system_monitor_cfg["output_json_path"]
+    INTERVAL_SECONDS = system_monitor_cfg["interval_seconds"]
+
+
+def initialize_runtime() -> None:
+    global r, psutil
+
+    import psutil as psutil_module
+    import redis
+
+    psutil = psutil_module
+    configure_runtime(load_config())
+    try:
+        r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+        r.ping()
+        logging.info("🔌 Verbindung zu Redis hergestellt.")
+    except Exception as exc:
+        logging.error(f"❌ Verbindung zu Redis fehlgeschlagen: {exc}")
+        sys.exit(1)
 
 # 🌡️ Temperatur auslesen
 def get_temperatures():
@@ -218,15 +237,27 @@ def get_system_info():
         logging.warning(f"⚠️ Fehler beim Parsen von Systemdaten: {e}")
         return {}
 
-# ▶️ Scheduler starten
-scheduler = BackgroundScheduler()
-scheduler.add_job(collect_and_store, "interval", seconds=INTERVAL_SECONDS)
-scheduler.start()
-logging.info("🚀 Systemmonitor gestartet.")
+def main() -> None:
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+    )
+    initialize_runtime()
 
-try:
-    while True:
-        time.sleep(60)
-except (KeyboardInterrupt, SystemExit):
-    scheduler.shutdown()
-    logging.info("🛑 Systemmonitor gestoppt.")
+    from apscheduler.schedulers.background import BackgroundScheduler
+
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(collect_and_store, "interval", seconds=INTERVAL_SECONDS)
+    scheduler.start()
+    logging.info("🚀 Systemmonitor gestartet.")
+
+    try:
+        while True:
+            time.sleep(60)
+    except (KeyboardInterrupt, SystemExit):
+        scheduler.shutdown()
+        logging.info("🛑 Systemmonitor gestoppt.")
+
+
+if __name__ == "__main__":
+    main()

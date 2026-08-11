@@ -19,8 +19,6 @@ import time
 import re
 from typing import Optional, Tuple
 
-import redis  # nur für Typgefühl; richtige Instanz kommt vom Aufrufer
-
 _IPV6_BRACKET_RE = re.compile(r'^\[(.+)\]:(\d+)$')  # "[2001:db8::1]:443"
 _IPV4_PORT_RE = re.compile(r'^([^:]+):(\d+)$')      # "192.168.0.10:5555"
 
