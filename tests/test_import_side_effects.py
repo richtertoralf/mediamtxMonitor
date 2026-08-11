@@ -71,6 +71,7 @@ class ProductModuleImportTests(unittest.TestCase):
                 import bin.monitoring_config
                 import bin.redis_keys
                 import bin.redis_store
+                import bin.stream_normalizer
 
             assert collector.r is None
             assert api.r is None

@@ -55,11 +55,8 @@ try:
         DETAIL_ENDPOINTS,
         MINIMUM_MEDIAMTX_VERSION,
         OPTIONAL_SECURE_ENDPOINTS,
-        build_media_model,
-        get_details_by_type,
         index_details,
         is_supported_version,
-        track_codecs,
     )
     from .monitoring_config import (
         DEFAULT_CONFIG_PATH,
@@ -76,6 +73,7 @@ try:
     )
     from .redis_store import RedisStore
     from .srt_health import build_srt_health
+    from .stream_normalizer import connection_identity, normalize_stream
 except ImportError:
     from bitrate import calc_bitrate
     from mediamtx_client import MediaMTXClient, MediaMTXError, MediaMTXHTTPError
@@ -83,11 +81,8 @@ except ImportError:
         DETAIL_ENDPOINTS,
         MINIMUM_MEDIAMTX_VERSION,
         OPTIONAL_SECURE_ENDPOINTS,
-        build_media_model,
-        get_details_by_type,
         index_details,
         is_supported_version,
-        track_codecs,
     )
     from monitoring_config import (
         DEFAULT_CONFIG_PATH,
@@ -104,6 +99,7 @@ except ImportError:
     )
     from redis_store import RedisStore
     from srt_health import build_srt_health
+    from stream_normalizer import connection_identity, normalize_stream
 
 
 # ---------------------------------------------------------------------------
@@ -258,35 +254,20 @@ def collect_and_store() -> None:
             logging.debug(f"⏭️ Interner Pfad ignoriert: {name}")
             continue
 
-        source = path.get("source", {}) or {}
-        readers = path.get("readers", []) or []
-
-        # Publisher/Source auflösen
-        src_type: Optional[str] = source.get("type")
-        src_id: Optional[str] = source.get("id")
-        src_details = get_details_by_type(src_type, src_id, details)
-        tracks2 = path.get("tracks2", []) or []
-
-        # Grundobjekt für die Ausgabe
-        entry: Dict[str, Any] = {
-            "name": name,
-            "mediamtxVersion": mediamtx_version,
-            "source": {
-                "type": src_type,
-                "id": src_id,
-                "details": src_details,
-            },
-            "tracks2": tracks2,
-            "tracks": track_codecs(tracks2),
-            "media": build_media_model(tracks2),
-            "inboundBytes": int(path.get("inboundBytes") or 0),
-            "outboundBytes": int(path.get("outboundBytes") or 0),
-            "inboundFramesInError": int(path.get("inboundFramesInError") or 0),
-            "forwardDestinations": fetch(
-                "/v3/paths/forward/list", params={"path": name}
-            ).get("items", []),
-            "readers": [],
-        }
+        forward_destinations = fetch(
+            "/v3/paths/forward/list", params={"path": name}
+        ).get("items", [])
+        entry = normalize_stream(
+            path,
+            details,
+            mediamtx_version,
+            forward_destinations,
+        )
+        source = entry["source"]
+        src_type: Optional[str] = source["type"]
+        src_details = source["details"]
+        normalized_readers = entry["readers"]
+        entry["readers"] = []
 
         # ---------------------------
         # Publisher-Bitrate berechnen
@@ -302,7 +283,7 @@ def collect_and_store() -> None:
             or 0
         )
 
-        pub_identity = src_id or src_details.get("remoteAddr") or "n/a"
+        pub_identity = connection_identity(source)
         pub_key = publisher_connection_key(
             name,
             src_type,
@@ -363,12 +344,10 @@ def collect_and_store() -> None:
         # ------------------------
         # Reader-Liste aufbereiten
         # ------------------------
-        for rd in readers:
-            rtype: Optional[str] = rd.get("type")
-            rid: Optional[str] = rd.get("id")
-
-            # Detailobjekt zum Reader
-            rd_details = get_details_by_type(rtype, rid, details)
+        for rd in normalized_readers:
+            rtype: Optional[str] = rd["type"]
+            rid: Optional[str] = rd["id"]
+            rd_details = rd["details"]
 
             # Optional lokale/loopback-Reader ignorieren
             if IGNORE_LOOPBACK:
@@ -384,7 +363,7 @@ def collect_and_store() -> None:
                 or 0
             )
 
-            reader_identity = rid or rd_details.get("remoteAddr") or "n/a"
+            reader_identity = connection_identity(rd)
             rd_key = reader_connection_key(name, rtype, reader_identity)
             rd_calc_mbps = None
             if rd_bytes_now > 0:

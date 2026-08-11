@@ -174,9 +174,52 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
         return {"items": []}
 
     def collect(self):
-        with mock.patch.object(Path, "write_text"):
+        with (
+            mock.patch.object(Path, "write_text"),
+            mock.patch.object(
+                self.collector, "measure_configured_rtt", return_value=None
+            ),
+        ):
             self.collector.collect_and_store()
         return json.loads(self.redis.values[self.collector.REDIS_KEY])
+
+    def test_collector_snapshot_shape_remains_exact_for_rtmp_path(self):
+        snapshot = self.collect()
+
+        self.assertEqual(
+            snapshot[1],
+            {
+                "name": "rtmp-path",
+                "mediamtxVersion": "1.20.0",
+                "source": {
+                    "type": "rtmpConn",
+                    "id": "rtmp-publisher",
+                    "details": {
+                        "id": "rtmp-publisher",
+                        "remoteAddr": "192.0.2.20:1935",
+                    },
+                    "bitrate_mbps": 0.0,
+                },
+                "tracks2": [],
+                "tracks": [],
+                "media": {"video": [], "audio": [], "other": []},
+                "inboundBytes": 0,
+                "outboundBytes": 0,
+                "inboundFramesInError": 0,
+                "forwardDestinations": [],
+                "readers": [
+                    {
+                        "type": "rtmpConn",
+                        "id": "rtmp-reader",
+                        "bitrate_mbps": 0.0,
+                        "details": {
+                            "id": "rtmp-reader",
+                            "remoteAddr": "192.0.2.21:1935",
+                        },
+                    }
+                ],
+            },
+        )
 
     def test_collector_adds_srt_health_with_stable_separate_keys(self):
         first = self.collect()
