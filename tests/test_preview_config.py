@@ -14,10 +14,10 @@ class PreviewCommandTests(unittest.TestCase):
         self.assertIn('"~^__preview__/(.+)$":', config)
         self.assertIn("nice -n 10 ffmpeg -nostdin -loglevel warning", config)
         for parameter in (
-            "-vf scale=192:108,fps=10",
-            "-b:v 80k",
-            "-maxrate 100k",
-            "-bufsize 100k",
+            "-vf fps=10,scale=384:216",
+            "-b:v 200k",
+            "-maxrate 250k",
+            "-bufsize 250k",
         ):
             self.assertIn(parameter, config)
 
