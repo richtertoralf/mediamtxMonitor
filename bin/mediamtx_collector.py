@@ -69,6 +69,12 @@ try:
         resolve_monitoring_config,
     )
     from .rtt import measure_publisher_rtt_ms
+    from .redis_keys import (
+        publisher_connection_key,
+        publisher_srt_health_key,
+        reader_connection_key,
+        reader_srt_health_key,
+    )
     from .srt_health import build_srt_health
 except ImportError:
     from bitrate import calc_bitrate
@@ -89,6 +95,12 @@ except ImportError:
         resolve_monitoring_config,
     )
     from rtt import measure_publisher_rtt_ms
+    from redis_keys import (
+        publisher_connection_key,
+        publisher_srt_health_key,
+        reader_connection_key,
+        reader_srt_health_key,
+    )
     from srt_health import build_srt_health
 
 
@@ -287,8 +299,11 @@ def collect_and_store() -> None:
             or 0
         )
 
-        pub_key = (
-            f"pub:{name}:{src_type}:{src_id or src_details.get('remoteAddr') or 'n/a'}"
+        pub_identity = src_id or src_details.get("remoteAddr") or "n/a"
+        pub_key = publisher_connection_key(
+            name,
+            src_type,
+            pub_identity,
         )
         pub_calc_mbps = None
         if pub_bytes_now > 0:
@@ -331,7 +346,11 @@ def collect_and_store() -> None:
         if src_type == "srtConn":
             entry["source"]["srt_health"] = build_srt_health(
                 r,
-                key=f"srt-health:{pub_key}",
+                key=publisher_srt_health_key(
+                    name,
+                    src_type,
+                    pub_identity,
+                ),
                 details=src_details,
                 direction="publisher",
                 ttl=BITRATE_TTL,
@@ -362,7 +381,8 @@ def collect_and_store() -> None:
                 or 0
             )
 
-            rd_key = f"rd:{name}:{rtype}:{rid or rd_details.get('remoteAddr') or 'n/a'}"
+            reader_identity = rid or rd_details.get("remoteAddr") or "n/a"
+            rd_key = reader_connection_key(name, rtype, reader_identity)
             rd_calc_mbps = None
             if rd_bytes_now > 0:
                 rd_calc_mbps = calc_bitrate(
@@ -390,7 +410,11 @@ def collect_and_store() -> None:
             if rtype == "srtConn":
                 reader_entry["srt_health"] = build_srt_health(
                     r,
-                    key=f"srt-health:{rd_key}",
+                    key=reader_srt_health_key(
+                        name,
+                        rtype,
+                        reader_identity,
+                    ),
                     details=rd_details,
                     direction="reader",
                     ttl=BITRATE_TTL,

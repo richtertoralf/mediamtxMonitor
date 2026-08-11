@@ -5,6 +5,11 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional
 
+try:
+    from .redis_keys import srt_counter_key
+except ImportError:
+    from redis_keys import srt_counter_key
+
 
 PUBLISHER_COUNTERS = {
     "retrans_packets": "packetsReceivedRetrans",
@@ -85,7 +90,7 @@ def build_srt_health(
     for model_name, native_name in counters.items():
         delta = counter_delta(
             redis_client,
-            f"{key}:{native_name}",
+            srt_counter_key(key, native_name),
             details.get(native_name),
             ttl,
         )

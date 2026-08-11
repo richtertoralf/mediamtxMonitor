@@ -29,6 +29,11 @@ import time
 import logging
 from typing import Optional
 
+try:
+    from .redis_keys import bitrate_state_keys
+except ImportError:
+    from redis_keys import bitrate_state_keys
+
 
 def calc_bitrate(
     r,
@@ -90,9 +95,11 @@ def calc_bitrate(
     now = time.time() if now is None else float(now)
 
     try:
+        prev_bytes_key, prev_ts_key, ewma_key = bitrate_state_keys(key)
+
         # Vorzustand lesen
-        prev_bytes_str = r.get(f"{key}:prev_bytes")
-        prev_ts_str = r.get(f"{key}:prev_ts")
+        prev_bytes_str = r.get(prev_bytes_key)
+        prev_ts_str = r.get(prev_ts_key)
 
         # Wenn noch kein Zustand existiert, initialisieren und keine Rate liefern
         if prev_bytes_str is None or prev_ts_str is None:
@@ -119,14 +126,14 @@ def calc_bitrate(
         # Optionale EWMA-Glättung
         if smooth_alpha is not None:
             try:
-                prev_mbps_str = r.get(f"{key}:ewma_mbps")
+                prev_mbps_str = r.get(ewma_key)
                 if prev_mbps_str is not None:
                     prev_mbps = float(prev_mbps_str)
                     alpha = float(smooth_alpha)
                     # EWMA: aktueller Wert stärker gewichten je nach alpha
                     mbps = alpha * mbps + (1.0 - alpha) * prev_mbps
                 # Geglätteten Wert speichern
-                r.set(f"{key}:ewma_mbps", mbps, ex=ttl)
+                r.set(ewma_key, mbps, ex=ttl)
             except Exception as e:
                 # Glättung ist optional – bei Fehlern nur protokollieren
                 logging.debug(f"calc_bitrate: EWMA-Fehler für {key}: {e}")
@@ -155,9 +162,10 @@ def reset_state(r, key: str) -> None:
     Nützlich bei manuellen Resets, Tests oder wenn Verbindungen bewusst neu gestartet werden.
     """
     try:
-        r.delete(f"{key}:prev_bytes")
-        r.delete(f"{key}:prev_ts")
-        r.delete(f"{key}:ewma_mbps")
+        prev_bytes_key, prev_ts_key, ewma_key = bitrate_state_keys(key)
+        r.delete(prev_bytes_key)
+        r.delete(prev_ts_key)
+        r.delete(ewma_key)
     except Exception as e:
         logging.debug(f"reset_state: Fehler beim Löschen des Zustands für {key}: {e}")
 
@@ -167,9 +175,10 @@ def _store_state(r, key: str, bytes_now: int, ts: float, ttl: int) -> None:
     Interne Hilfsfunktion: speichert prev_bytes/prev_ts atomar (Pipeline) mit TTL.
     """
     try:
+        prev_bytes_key, prev_ts_key, _ = bitrate_state_keys(key)
         pipe = r.pipeline()
-        pipe.set(f"{key}:prev_bytes", bytes_now, ex=ttl)
-        pipe.set(f"{key}:prev_ts", ts, ex=ttl)
+        pipe.set(prev_bytes_key, bytes_now, ex=ttl)
+        pipe.set(prev_ts_key, ts, ex=ttl)
         pipe.execute()
     except Exception as e:
         logging.debug(f"_store_state: Fehler beim Speichern des Zustands für {key}: {e}")

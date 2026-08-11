@@ -19,6 +19,11 @@ import time
 import re
 from typing import Optional, Tuple
 
+try:
+    from .redis_keys import DEFAULT_RTT_PUBLISHER_PREFIX, publisher_rtt_keys
+except ImportError:
+    from redis_keys import DEFAULT_RTT_PUBLISHER_PREFIX, publisher_rtt_keys
+
 _IPV6_BRACKET_RE = re.compile(r'^\[(.+)\]:(\d+)$')  # "[2001:db8::1]:443"
 _IPV4_PORT_RE = re.compile(r'^([^:]+):(\d+)$')      # "192.168.0.10:5555"
 
@@ -74,7 +79,7 @@ def measure_publisher_rtt_ms(
     ewma_alpha: float = 0.5,
     min_period_s: int = 30,
     ttl_s: int = 300,
-    key_prefix: str = "rtt:pub",
+    key_prefix: str = DEFAULT_RTT_PUBLISHER_PREFIX,
     timeout_s: float = 0.9,
 ) -> Optional[float]:
     """
@@ -86,8 +91,7 @@ def measure_publisher_rtt_ms(
     if not host:
         return None
 
-    base = f"{key_prefix}:{host}"
-    k_ewma, k_last, k_ts = f"{base}:ewma_ms", f"{base}:last_ms", f"{base}:last_ts"
+    k_ewma, k_last, k_ts = publisher_rtt_keys(host, key_prefix)
 
     now = time.time()
     last_ts = _rgetf(r, k_ts)

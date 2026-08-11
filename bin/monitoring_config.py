@@ -7,6 +7,19 @@ from typing import Any, Callable, Dict, Mapping, Optional
 
 import yaml
 
+try:
+    from .redis_keys import (
+        DEFAULT_RTT_PUBLISHER_PREFIX,
+        DEFAULT_STREAM_SNAPSHOT_KEY,
+        DEFAULT_SYSTEM_SNAPSHOT_KEY,
+    )
+except ImportError:
+    from redis_keys import (
+        DEFAULT_RTT_PUBLISHER_PREFIX,
+        DEFAULT_STREAM_SNAPSHOT_KEY,
+        DEFAULT_SYSTEM_SNAPSHOT_KEY,
+    )
+
 
 DEFAULT_CONFIG_PATH = Path(
     "/opt/mediamtx-monitoring-backend/config/collector.yaml"
@@ -19,7 +32,7 @@ MONITORING_DEFAULTS: Dict[str, Any] = {
 REDIS_DEFAULTS: Dict[str, Any] = {
     "host": "localhost",
     "port": 6379,
-    "key": "mediamtx:streams:latest",
+    "key": DEFAULT_STREAM_SNAPSHOT_KEY,
 }
 
 COLLECTOR_DEFAULTS: Dict[str, Any] = {
@@ -36,7 +49,7 @@ BITRATE_DEFAULTS: Dict[str, Any] = {
 }
 
 SYSTEM_MONITOR_DEFAULTS: Dict[str, Any] = {
-    "redis_key": "mediamtx:system:latest",
+    "redis_key": DEFAULT_SYSTEM_SNAPSHOT_KEY,
     "output_json_path": "/tmp/mediamtx_system.json",
     "interval_seconds": 10,
 }
@@ -47,7 +60,7 @@ RTT_DEFAULTS: Dict[str, Any] = {
     "min_period_s": 30,
     "ttl_s": 300,
     "timeout_s": 0.9,
-    "key_prefix": "rtt:pub",
+    "key_prefix": DEFAULT_RTT_PUBLISHER_PREFIX,
 }
 
 API_DEFAULTS: Dict[str, Any] = {
