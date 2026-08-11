@@ -5,6 +5,8 @@ SRT-Metriken und Systemdaten in einem kleinen Web-Dashboard. Das Frontend bleibt
 Vanilla JavaScript. Redis puffert die vom Collector gelesenen Daten, FastAPI
 liefert API und Dashboard aus.
 
+![MediaMTX Monitor Dashboard](MediamtxMonitor.png)
+
 Voraussetzung ist **MediaMTX v1.20.0 oder neuer**. Der Collector prüft die
 laufende Version über `/v3/info` und meldet ältere oder nicht eindeutig
 erkennbare Versionen als nicht unterstützt. Details zum erfassten Datenmodell
