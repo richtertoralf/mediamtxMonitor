@@ -68,6 +68,7 @@ from mediamtx_model import (
 
 # RTT nur für Publisher (Nicht-SRT)
 from rtt import measure_publisher_rtt_ms
+from srt_health import build_srt_health
 try:
     from .monitoring_config import measure_configured_rtt, resolve_rtt_config
 except ImportError:
@@ -307,6 +308,16 @@ def collect_and_store() -> None:
             except Exception as e:
                 logging.debug(f"RTT-Messung fehlgeschlagen für {name} ({remote}): {e}")
 
+        if src_type == "srtConn":
+            entry["source"]["srt_health"] = build_srt_health(
+                r,
+                key=f"srt-health:{pub_key}",
+                details=src_details,
+                direction="publisher",
+                ttl=BITRATE_TTL,
+                transport_rtt_ms=entry["source"].get("transport_rtt_ms"),
+            )
+
         # ------------------------
         # Reader-Liste aufbereiten
         # ------------------------
@@ -350,14 +361,21 @@ def collect_and_store() -> None:
                 else float(rd_calc_mbps or 0.0)
             )
 
-            entry["readers"].append(
-                {
-                    "type": rtype,
-                    "id": rid,
-                    "bitrate_mbps": bitrate_final,
-                    "details": rd_details,
-                }
-            )
+            reader_entry = {
+                "type": rtype,
+                "id": rid,
+                "bitrate_mbps": bitrate_final,
+                "details": rd_details,
+            }
+            if rtype == "srtConn":
+                reader_entry["srt_health"] = build_srt_health(
+                    r,
+                    key=f"srt-health:{rd_key}",
+                    details=rd_details,
+                    direction="reader",
+                    ttl=BITRATE_TTL,
+                )
+            entry["readers"].append(reader_entry)
 
         aggregated.append(entry)
 

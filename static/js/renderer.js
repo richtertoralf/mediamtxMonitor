@@ -109,7 +109,9 @@ export function renderReader(reader) {
     <div class="reader-block">
       <span class="${markerClass}"></span>Typ: ${reader.type}<br/>
       Remote: ${remote}<br/>
-      Rate: ${finalRate > 0 ? finalRate.toFixed(2) : "0.00"} Mbps<br/>
+      ${reader.type === "srtConn"
+        ? renderSrtHealth(reader?.srt_health || {}, "tx_mbps", finalRate)
+        : `Rate: ${finalRate > 0 ? finalRate.toFixed(2) : "0.00"} Mbps<br/>`}
       Gesendet: ${formatBytes(bytesSent)}
   `;
 
@@ -117,12 +119,39 @@ export function renderReader(reader) {
   return html;
 }
 
+function healthNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+export function renderSrtHealth(health, rateField, fallbackRate = 0) {
+  const lines = [];
+  const nativeRate = healthNumber(health?.[rateField]);
+  const calculatedRate = healthNumber(fallbackRate);
+  const rate = nativeRate != null && nativeRate > 0 ? nativeRate : calculatedRate;
+  const link = healthNumber(health?.link_capacity_mbps);
+  const reserve = healthNumber(health?.reserve_ratio);
+  const rtt = healthNumber(health?.rtt_ms);
+  const retrans = healthNumber(health?.retrans_packets);
+  const drop = healthNumber(health?.drop_packets);
+  const belated = healthNumber(health?.belated_packets);
+
+  if (rate != null && rate > 0) lines.push(`${rateField === "rx_mbps" ? "RX" : "TX"}: ${rate.toFixed(2)} Mbit/s`);
+  if (link != null && link > 0) lines.push(`Link: ${link.toFixed(2)} Mbit/s`);
+  if (reserve != null && reserve > 0) lines.push(`Reserve: ${reserve.toFixed(1)}×`);
+  if (rtt != null && rtt > 0) lines.push(`RTT: ${Number(rtt.toFixed(2))} ms`);
+  if (retrans != null && retrans >= 0) lines.push(`Retrans: ${retrans} pkt`);
+  if (drop != null && drop >= 0) lines.push(`Drop: ${drop} pkt`);
+  if (belated != null && belated > 0) lines.push(`Belated: ${belated} pkt`);
+  return lines.map(line => `${line}<br/>`).join("");
+}
+
 /**
  * Rendert den linken Block (Publisher/Ingest) einer Streamkarte.
  * @param {Object} stream - Aggregierte Streamdaten
  * @returns {string} HTML-Fragment
  */
-function renderStreamLeft(stream) {
+export function renderStreamLeft(stream) {
   const src = stream?.source || {};
   const details = src.details || {};
 
@@ -139,6 +168,15 @@ function renderStreamLeft(stream) {
   const latencyLine = Number.isFinite(latencyValue) && latencyValue > 0
     ? `${latencyLabel}: ${latencyValue.toFixed(2)} ms<br/>`
     : "";
+  const sourceHealth = {...(src.srt_health || {})};
+  if (
+    src.type === "srtConn"
+    && !(healthNumber(sourceHealth.rtt_ms) > 0)
+    && Number.isFinite(latencyValue)
+    && latencyValue > 0
+  ) {
+    sourceHealth.rtt_ms = latencyValue;
+  }
 
 
   // Empfangen: bevorzugt Detailzähler, fallback auf Path-Feld.
@@ -153,8 +191,9 @@ function renderStreamLeft(stream) {
       <div class="stream-title">${stream.name}</div>
       Publisher (${src.type || "-"})<br/>
       Remote: ${details.remoteAddr || "-"}<br/>
-      ${latencyLine}
-      Rate: ${finalRate > 0 ? finalRate.toFixed(2) : "0.00"} Mbps<br/>
+      ${src.type === "srtConn"
+        ? renderSrtHealth(sourceHealth, "rx_mbps", finalRate)
+        : `${latencyLine}Rate: ${finalRate > 0 ? finalRate.toFixed(2) : "0.00"} Mbps<br/>`}
       Empfangen: ${formatBytes(bytesRx)}<br/>
       ${renderMedia(stream)}
     </div>
