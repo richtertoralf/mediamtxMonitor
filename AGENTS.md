@@ -66,6 +66,14 @@ normalen Entwicklungszyklus vorgesehen.
 - Bestehende Architektur und vorhandene Werkzeuge bevorzugen.
 - Keine unnötigen neuen Dienste, Frameworks oder Abhängigkeiten einführen.
 
+### Verbindliche Architektur- und Coding-Dokumentation
+
+Vor Änderungen sind die Regeln aus `docs/ARCHITECTURE.md` und
+`docs/CODING_STYLE.md` zu beachten. Wenn bestehender Code noch nicht dem dort
+beschriebenen Zielbild entspricht, ist das kein Auftrag für einen automatischen
+Großrefactor. Änderungen bleiben klein, kompatibel, testbar und schrittweise
+deploybar.
+
 ## Sicherheit und Systemgrenzen
 
 Innerhalb von `~/mediamtxMonitor` darf Codex selbstständig:
