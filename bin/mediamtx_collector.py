@@ -49,7 +49,6 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import requests
-import yaml
 
 try:
     from .bitrate import calc_bitrate
@@ -63,7 +62,12 @@ try:
         is_supported_version,
         track_codecs,
     )
-    from .monitoring_config import measure_configured_rtt, resolve_rtt_config
+    from .monitoring_config import (
+        DEFAULT_CONFIG_PATH,
+        load_monitoring_config,
+        measure_configured_rtt,
+        resolve_monitoring_config,
+    )
     from .rtt import measure_publisher_rtt_ms
     from .srt_health import build_srt_health
 except ImportError:
@@ -79,8 +83,10 @@ except ImportError:
         track_codecs,
     )
     from monitoring_config import (
+        DEFAULT_CONFIG_PATH,
+        load_monitoring_config,
         measure_configured_rtt,
-        resolve_rtt_config,
+        resolve_monitoring_config,
     )
     from rtt import measure_publisher_rtt_ms
     from srt_health import build_srt_health
@@ -90,72 +96,59 @@ except ImportError:
 # Konfiguration laden
 # ---------------------------------------------------------------------------
 
-CONFIG_PATH = "/opt/mediamtx-monitoring-backend/config/collector.yaml"
-
-config: Dict[str, Any] = {}
-API_BASE = "http://localhost:9997"
-REDIS_CFG: Dict[str, Any] = {}
-REDIS_HOST = "localhost"
-REDIS_PORT = 6379
-REDIS_KEY = "mediamtx:streams:latest"
-COLLECTOR_CFG: Dict[str, Any] = {}
-JSON_OUTPUT_PATH = "/tmp/mediamtx_streams.json"
-INTERVAL = 10
-IGNORE_PATH_PREFIXES = ["__preview__/"]
-BITRATE_CFG: Dict[str, Any] = {}
-BITRATE_MIN_DT = 0.5
-BITRATE_SMOOTH_ALPHA: Optional[float] = 0.5
-BITRATE_TTL = 300
-IGNORE_LOOPBACK = True
-RTT_CFG: Dict[str, Any] = resolve_rtt_config(config)
+config = resolve_monitoring_config({})
+API_BASE = config["api_base_url"]
+REDIS_CFG = config["redis"]
+REDIS_HOST = REDIS_CFG["host"]
+REDIS_PORT = REDIS_CFG["port"]
+REDIS_KEY = REDIS_CFG["key"]
+COLLECTOR_CFG = config["collector"]
+JSON_OUTPUT_PATH = COLLECTOR_CFG["output_json_path"]
+INTERVAL = COLLECTOR_CFG["interval_seconds"]
+IGNORE_PATH_PREFIXES = COLLECTOR_CFG["ignore_path_prefixes"]
+BITRATE_CFG = config["bitrate"]
+BITRATE_MIN_DT = BITRATE_CFG["min_dt"]
+BITRATE_SMOOTH_ALPHA: Optional[float] = BITRATE_CFG["smooth_alpha"]
+BITRATE_TTL = BITRATE_CFG["ttl"]
+IGNORE_LOOPBACK = BITRATE_CFG["ignore_loopback"]
+RTT_CFG = config["rtt"]
 r = None
 
 
-def load_config(path: str = CONFIG_PATH) -> Dict[str, Any]:
-    try:
-        with open(path, "r", encoding="utf-8") as config_file:
-            return yaml.safe_load(config_file) or {}
-    except Exception as exc:
-        print(f"❌ Fehler beim Laden der Konfigurationsdatei {path}: {exc}")
-        sys.exit(1)
-
-
-def configure_runtime(runtime_config: Dict[str, Any]) -> None:
+def configure_runtime(raw_config: Dict[str, Any]) -> None:
     global config, API_BASE, REDIS_CFG, REDIS_HOST, REDIS_PORT, REDIS_KEY
     global COLLECTOR_CFG, JSON_OUTPUT_PATH, INTERVAL, IGNORE_PATH_PREFIXES
     global BITRATE_CFG, BITRATE_MIN_DT, BITRATE_SMOOTH_ALPHA, BITRATE_TTL
     global IGNORE_LOOPBACK, RTT_CFG
 
-    config = runtime_config
-    API_BASE = config.get("api_base_url", "http://localhost:9997")
-    REDIS_CFG = config.get("redis", {}) or {}
-    REDIS_HOST = REDIS_CFG.get("host", "localhost")
-    REDIS_PORT = int(REDIS_CFG.get("port", 6379))
-    REDIS_KEY = REDIS_CFG.get("key", "mediamtx:streams:latest")
-    COLLECTOR_CFG = config.get("collector", {}) or {}
-    JSON_OUTPUT_PATH = COLLECTOR_CFG.get(
-        "output_json_path", "/tmp/mediamtx_streams.json"
-    )
-    INTERVAL = int(COLLECTOR_CFG.get("interval_seconds", 10))
-    IGNORE_PATH_PREFIXES = COLLECTOR_CFG.get(
-        "ignore_path_prefixes", ["__preview__/"]
-    )
-    BITRATE_CFG = config.get("bitrate", {}) or {}
-    BITRATE_MIN_DT = float(BITRATE_CFG.get("min_dt", 0.5))
-    BITRATE_SMOOTH_ALPHA = BITRATE_CFG.get("smooth_alpha", 0.5)
-    if BITRATE_SMOOTH_ALPHA is not None:
-        BITRATE_SMOOTH_ALPHA = float(BITRATE_SMOOTH_ALPHA)
-    BITRATE_TTL = int(BITRATE_CFG.get("ttl", 300))
-    IGNORE_LOOPBACK = bool(BITRATE_CFG.get("ignore_loopback", True))
-    RTT_CFG = resolve_rtt_config(config)
+    config = resolve_monitoring_config(raw_config)
+    API_BASE = config["api_base_url"]
+    REDIS_CFG = config["redis"]
+    REDIS_HOST = REDIS_CFG["host"]
+    REDIS_PORT = REDIS_CFG["port"]
+    REDIS_KEY = REDIS_CFG["key"]
+    COLLECTOR_CFG = config["collector"]
+    JSON_OUTPUT_PATH = COLLECTOR_CFG["output_json_path"]
+    INTERVAL = COLLECTOR_CFG["interval_seconds"]
+    IGNORE_PATH_PREFIXES = COLLECTOR_CFG["ignore_path_prefixes"]
+    BITRATE_CFG = config["bitrate"]
+    BITRATE_MIN_DT = BITRATE_CFG["min_dt"]
+    BITRATE_SMOOTH_ALPHA = BITRATE_CFG["smooth_alpha"]
+    BITRATE_TTL = BITRATE_CFG["ttl"]
+    IGNORE_LOOPBACK = BITRATE_CFG["ignore_loopback"]
+    RTT_CFG = config["rtt"]
 
 
-def initialize_runtime() -> None:
+def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
     global r
 
     import redis
 
-    configure_runtime(load_config())
+    try:
+        configure_runtime(load_monitoring_config(config_path))
+    except Exception as exc:
+        print(f"❌ Fehler beim Laden der Konfigurationsdatei {config_path}: {exc}")
+        sys.exit(1)
     try:
         r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
         r.ping()

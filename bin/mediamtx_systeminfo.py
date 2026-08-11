@@ -10,7 +10,6 @@ Läuft als eigenständiger Dienst analog zu mediamtx_collector.py.
 Die Konfiguration erfolgt über collector.yaml.
 """
 
-import yaml
 import json
 import socket
 import time
@@ -20,17 +19,23 @@ from pathlib import Path
 from typing import Any, Dict
 
 try:
-    from .monitoring_config import resolve_system_monitor_config
+    from .monitoring_config import (
+        DEFAULT_CONFIG_PATH,
+        load_monitoring_config,
+        resolve_monitoring_config,
+    )
 except ImportError:
-    from monitoring_config import resolve_system_monitor_config
+    from monitoring_config import (
+        DEFAULT_CONFIG_PATH,
+        load_monitoring_config,
+        resolve_monitoring_config,
+    )
 
-# 🔧 Konfigurationsdatei laden
-CONFIG_PATH = "/opt/mediamtx-monitoring-backend/config/collector.yaml"
-config: Dict[str, Any] = {}
-redis_cfg: Dict[str, Any] = {}
-REDIS_HOST = "localhost"
-REDIS_PORT = 6379
-system_monitor_cfg = resolve_system_monitor_config(config)
+config = resolve_monitoring_config({})
+redis_cfg = config["redis"]
+REDIS_HOST = redis_cfg["host"]
+REDIS_PORT = redis_cfg["port"]
+system_monitor_cfg = config["system_monitor"]
 REDIS_KEY = system_monitor_cfg["redis_key"]
 JSON_OUTPUT_PATH = system_monitor_cfg["output_json_path"]
 INTERVAL_SECONDS = system_monitor_cfg["interval_seconds"]
@@ -38,37 +43,32 @@ r = None
 psutil = None
 
 
-def load_config(path: str = CONFIG_PATH) -> Dict[str, Any]:
-    try:
-        with open(path, "r", encoding="utf-8") as config_file:
-            return yaml.safe_load(config_file) or {}
-    except Exception as exc:
-        print(f"❌ Fehler beim Laden der Konfigurationsdatei: {exc}")
-        sys.exit(1)
-
-
-def configure_runtime(runtime_config: Dict[str, Any]) -> None:
+def configure_runtime(raw_config: Dict[str, Any]) -> None:
     global config, redis_cfg, REDIS_HOST, REDIS_PORT
     global system_monitor_cfg, REDIS_KEY, JSON_OUTPUT_PATH, INTERVAL_SECONDS
 
-    config = runtime_config
-    redis_cfg = config.get("redis", {}) or {}
-    REDIS_HOST = redis_cfg.get("host", "localhost")
-    REDIS_PORT = redis_cfg.get("port", 6379)
-    system_monitor_cfg = resolve_system_monitor_config(config)
+    config = resolve_monitoring_config(raw_config)
+    redis_cfg = config["redis"]
+    REDIS_HOST = redis_cfg["host"]
+    REDIS_PORT = redis_cfg["port"]
+    system_monitor_cfg = config["system_monitor"]
     REDIS_KEY = system_monitor_cfg["redis_key"]
     JSON_OUTPUT_PATH = system_monitor_cfg["output_json_path"]
     INTERVAL_SECONDS = system_monitor_cfg["interval_seconds"]
 
 
-def initialize_runtime() -> None:
+def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
     global r, psutil
 
     import psutil as psutil_module
     import redis
 
     psutil = psutil_module
-    configure_runtime(load_config())
+    try:
+        configure_runtime(load_monitoring_config(config_path))
+    except Exception as exc:
+        print(f"❌ Fehler beim Laden der Konfigurationsdatei: {exc}")
+        sys.exit(1)
     try:
         r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
         r.ping()

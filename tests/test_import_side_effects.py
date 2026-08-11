@@ -11,14 +11,21 @@ class ProductModuleImportTests(unittest.TestCase):
             import builtins
             import sys
             import types
+            from pathlib import Path
             from unittest import mock
 
             real_open = builtins.open
+            real_path_open = Path.open
 
             def guarded_open(path, *args, **kwargs):
                 if str(path).startswith("/opt/mediamtx-monitoring-backend"):
                     raise AssertionError(f"production path read during import: {path}")
                 return real_open(path, *args, **kwargs)
+
+            def guarded_path_open(path, *args, **kwargs):
+                if str(path).startswith("/opt/mediamtx-monitoring-backend"):
+                    raise AssertionError(f"production path read during import: {path}")
+                return real_path_open(path, *args, **kwargs)
 
             redis_module = types.ModuleType("redis")
             redis_module.Redis = mock.Mock(
@@ -45,6 +52,7 @@ class ProductModuleImportTests(unittest.TestCase):
 
             with (
                 mock.patch("builtins.open", side_effect=guarded_open),
+                mock.patch("pathlib.Path.open", side_effect=guarded_path_open),
                 mock.patch("requests.get", side_effect=AssertionError("HTTP used during import")),
                 mock.patch.dict(
                     sys.modules,

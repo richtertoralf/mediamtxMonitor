@@ -13,46 +13,53 @@ import logging
 from pathlib import Path
 
 import redis
-import yaml
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
 try:
-    from .monitoring_config import resolve_system_monitor_config
+    from .monitoring_config import (
+        DEFAULT_CONFIG_PATH,
+        load_monitoring_config,
+        resolve_monitoring_config,
+    )
 except ImportError:
-    from monitoring_config import resolve_system_monitor_config
+    from monitoring_config import (
+        DEFAULT_CONFIG_PATH,
+        load_monitoring_config,
+        resolve_monitoring_config,
+    )
 
-CONFIG_PATH = "/opt/mediamtx-monitoring-backend/config/collector.yaml"
-config = {}
-REDIS_HOST = "localhost"
-REDIS_PORT = 6379
-REDIS_KEY = "mediamtx:streams:latest"
-SYSTEM_REDIS_KEY = resolve_system_monitor_config(config)["redis_key"]
+config = resolve_monitoring_config({})
+redis_cfg = config["redis"]
+REDIS_HOST = redis_cfg["host"]
+REDIS_PORT = redis_cfg["port"]
+REDIS_KEY = redis_cfg["key"]
+SYSTEM_REDIS_KEY = config["system_monitor"]["redis_key"]
 r = None
 
 
-def load_config(path: str = CONFIG_PATH) -> dict:
+def load_runtime_config(path: Path | str = DEFAULT_CONFIG_PATH) -> dict:
     try:
-        with open(path, "r", encoding="utf-8") as config_file:
-            return yaml.safe_load(config_file) or {}
+        return resolve_monitoring_config(load_monitoring_config(path))
     except Exception as exc:
         print(f"⚠️ Fehler beim Laden der Konfiguration: {exc}")
-        return {}
+        return resolve_monitoring_config({})
 
 
-def initialize_runtime() -> None:
-    global config, REDIS_HOST, REDIS_PORT, REDIS_KEY, SYSTEM_REDIS_KEY, r
+def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
+    global config, redis_cfg, REDIS_HOST, REDIS_PORT, REDIS_KEY
+    global SYSTEM_REDIS_KEY, r
 
-    config = load_config()
-    redis_cfg = config.get("redis", {}) or {}
-    REDIS_HOST = redis_cfg.get("host", "localhost")
-    REDIS_PORT = redis_cfg.get("port", 6379)
-    REDIS_KEY = redis_cfg.get("key", "mediamtx:streams:latest")
-    SYSTEM_REDIS_KEY = resolve_system_monitor_config(config)["redis_key"]
+    config = load_runtime_config(config_path)
+    redis_cfg = config["redis"]
+    REDIS_HOST = redis_cfg["host"]
+    REDIS_PORT = redis_cfg["port"]
+    REDIS_KEY = redis_cfg["key"]
+    SYSTEM_REDIS_KEY = config["system_monitor"]["redis_key"]
 
-    log_cfg = config.get("logging", {})
-    log_level = getattr(logging, log_cfg.get("level", "INFO").upper(), logging.INFO)
+    log_cfg = config["logging"]
+    log_level = getattr(logging, log_cfg["level"].upper(), logging.INFO)
     logging.basicConfig(
         level=log_level,
         format="%(asctime)s [%(levelname)s] %(message)s",
@@ -82,7 +89,8 @@ app = FastAPI(
 )
 
 # 📁 Statische Dateien einbinden (Frontend)
-static_dir = Path("/opt/mediamtx-monitoring-backend/static")
+static_dir = Path(config["api_server"]["static_dir"])
+index_file = config["api_server"]["index_file"]
 app.mount(
     "/static",
     StaticFiles(directory=static_dir, check_dir=False),
@@ -92,7 +100,7 @@ app.mount(
 @app.get("/")
 def serve_index():
     """Liefert die HTML-Startseite (Frontend)."""
-    return FileResponse(static_dir / "index.html")
+    return FileResponse(static_dir / index_file)
 
 @app.get("/api/streams", response_class=JSONResponse, summary="Streamdaten abrufen")
 def get_streams():
@@ -110,12 +118,12 @@ def get_streams():
     except json.JSONDecodeError:
         systeminfo = {}
 
-    frontend_cfg = config.get("frontend", {})
+    frontend_cfg = config["frontend"]
 
     return JSONResponse(content={
         "streams": streams,
-        "snapshot_refresh_ms": frontend_cfg.get("snapshot_refresh_ms", 2000),
-        "streamlist_refresh_ms": frontend_cfg.get("streamlist_refresh_ms", 5000),
+        "snapshot_refresh_ms": frontend_cfg["snapshot_refresh_ms"],
+        "streamlist_refresh_ms": frontend_cfg["streamlist_refresh_ms"],
         "systeminfo": systeminfo
     })
 
@@ -123,9 +131,9 @@ def main() -> None:
     import uvicorn
 
     # Host und Port aus YAML holen (Fallback optional)
-    server_cfg = load_config().get("api_server", {})
-    host = server_cfg.get("listen_host", "127.0.0.1")
-    port = server_cfg.get("listen_port", 8080)
+    server_cfg = load_runtime_config()["api_server"]
+    host = server_cfg["listen_host"]
+    port = server_cfg["listen_port"]
 
     uvicorn.run(app, host=host, port=port)
 
