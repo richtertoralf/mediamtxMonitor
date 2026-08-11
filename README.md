@@ -5,6 +5,11 @@ SRT-Metriken und Systemdaten in einem kleinen Web-Dashboard. Das Frontend bleibt
 Vanilla JavaScript. Redis puffert die vom Collector gelesenen Daten, FastAPI
 liefert API und Dashboard aus.
 
+Voraussetzung ist **MediaMTX v1.20.0 oder neuer**. Der Collector prüft die
+laufende Version über `/v3/info` und meldet ältere oder nicht eindeutig
+erkennbare Versionen als nicht unterstützt. Details zum erfassten Datenmodell
+stehen in [docs/MEDIAMTX_V1_20_DATA.md](docs/MEDIAMTX_V1_20_DATA.md).
+
 ## Dienste
 
 MediaMTX und der Monitor laufen auf derselben Maschine als getrennte
@@ -58,8 +63,8 @@ sudo ./install.sh 1.20.0
 
 Die vollständige Neuinstallation wurde mit MediaMTX v1.20.0 auf Ubuntu Server
 24.04 LTS amd64 getestet. Die gewünschte MediaMTX-Version wird vom Benutzer
-gewählt; ein optionales führendes `v` ist erlaubt. Der Installer sucht nicht
-automatisch nach der neuesten Version.
+gewählt und muss mindestens v1.20.0 sein; ein optionales führendes `v` ist
+erlaubt. Der Installer sucht nicht automatisch nach der neuesten Version.
 
 Der Installer ermittelt:
 
@@ -125,6 +130,7 @@ Werte bleiben mit Ausnahme der dokumentierten Monitor-Anpassungen maßgeblich.
 
 ```bash
 systemctl is-active mediamtx mediamtx-api mediamtx-collector mediamtx-system
+curl -fsS http://127.0.0.1:9997/v3/info | python3 -m json.tool
 curl -fsS http://127.0.0.1:9997/v3/paths/list | python3 -m json.tool
 curl -fsS http://127.0.0.1:8080/api/streams | python3 -m json.tool
 ```

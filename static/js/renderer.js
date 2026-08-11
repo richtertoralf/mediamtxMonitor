@@ -29,6 +29,58 @@ function formatBytes(bytes) {
   return `${val.toFixed(4)} ${units[i]}`;
 }
 
+function formatSampleRate(sampleRate) {
+  const value = Number(sampleRate);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  if (value >= 1000) return `${Number((value / 1000).toFixed(1))} kHz`;
+  return `${value} Hz`;
+}
+
+function formatChannels(channelCount) {
+  const value = Number(channelCount);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  if (value === 1) return "Mono";
+  if (value === 2) return "Stereo";
+  return `${value} Kanäle`;
+}
+
+function renderMedia(stream) {
+  const media = stream?.media || {};
+  const lines = [];
+
+  for (const track of media.video || []) {
+    const parts = [track.displayCodec || track.codec].filter(Boolean);
+    if (track.width != null && track.height != null) {
+      parts.push(`${track.width}×${track.height}`);
+    } else if (track.width != null) {
+      parts.push(`${track.width} px breit`);
+    } else if (track.height != null) {
+      parts.push(`${track.height} px hoch`);
+    }
+    if (parts.length) lines.push(`Video: ${parts.join(" · ")}`);
+  }
+
+  for (const track of media.audio || []) {
+    const parts = [track.displayCodec || track.codec].filter(Boolean);
+    const sampleRate = formatSampleRate(track.sampleRate);
+    const channels = formatChannels(track.channelCount);
+    if (sampleRate) parts.push(sampleRate);
+    if (channels) parts.push(channels);
+    if (parts.length) lines.push(`Audio: ${parts.join(" · ")}`);
+  }
+
+  for (const track of media.other || []) {
+    const codec = track.displayCodec || track.codec;
+    if (codec) lines.push(`Medium: ${codec}`);
+  }
+
+  if (!lines.length && Array.isArray(stream?.tracks) && stream.tracks.length) {
+    lines.push(`Tracks: ${stream.tracks.join(", ")}`);
+  }
+
+  return lines.map(line => `${line}<br/>`).join("");
+}
+
 /**
  * Rendert einen einzelnen Reader-Block (rechte Spalte).
  * @param {Object} reader - Reader-Objekt mit Typ, ID und Details
@@ -38,7 +90,8 @@ export function renderReader(reader) {
   const markerClass = {
     srtConn: "marker-srt",
     rtmpConn: "marker-rtmp",
-    hlsMuxer: "marker-hls",
+    rtmpsConn: "marker-rtmp",
+    hlsSession: "marker-hls",
     webRTCSession: "marker-webrtc",
   }[reader.type] || "";
 
@@ -49,7 +102,8 @@ export function renderReader(reader) {
   // Finaler Wert: API bevorzugt, sonst berechnet.
   const finalRate = rateApi > 0 ? rateApi : rateCalc;
 
-  const bytesSent = Number(reader?.details?.bytesSent) || 0;
+  const bytesSent = Number(reader?.details?.outboundBytes)
+    || (reader.type === "srtConn" ? Number(reader?.details?.bytesSent) : 0) || 0;
 
   let html = `
     <div class="reader-block">
@@ -58,12 +112,6 @@ export function renderReader(reader) {
       Rate: ${finalRate > 0 ? finalRate.toFixed(2) : "0.00"} Mbps<br/>
       Gesendet: ${formatBytes(bytesSent)}
   `;
-
-  // HLS: optional letzter Abrufzeitpunkt zeigen.
-  if (reader.type === "hlsMuxer" && reader?.details?.lastRequest) {
-    const ts = new Date(reader.details.lastRequest);
-    html += ` (letzter Abruf: ${isNaN(ts.getTime()) ? reader.details.lastRequest : ts.toLocaleTimeString()})`;
-  }
 
   html += "</div>";
   return html;
@@ -83,26 +131,32 @@ function renderStreamLeft(stream) {
   const calcRate = Number(src.bitrate_mbps) || 0;
   const finalRate = apiRate > 0 ? apiRate : calcRate;
 
-  // RTT: API (SRT) bevorzugt, sonst berechnete RTT (rtt.py).
-  const rttApi = Number(stream.source?.details?.msRTT) || 0;
-  const rttCalc = Number(stream.source?.rtt_ms) || 0;
-  const rttFinal = rttApi > 0 ? rttApi : rttCalc;
+  // SRT liefert eine Transport-RTT; bei anderen Protokollen ist nur ICMP-Ping verfügbar.
+  const latencyLabel = src.type === "srtConn" ? "RTT" : "Ping";
+  const latencyValue = src.type === "srtConn"
+    ? Number(src.transport_rtt_ms || details.msRTT)
+    : Number(src.icmp_rtt_ms);
+  const latencyLine = Number.isFinite(latencyValue) && latencyValue > 0
+    ? `${latencyLabel}: ${latencyValue.toFixed(2)} ms<br/>`
+    : "";
 
 
   // Empfangen: bevorzugt Detailzähler, fallback auf Path-Feld.
-  const bytesRx = details.bytesReceived != null
-    ? Number(details.bytesReceived)
-    : Number(stream.bytesReceived || 0);
+  const bytesRx = details.inboundBytes != null
+    ? Number(details.inboundBytes)
+    : (src.type === "srtConn" && details.bytesReceived != null
+      ? Number(details.bytesReceived)
+      : Number(stream.inboundBytes || 0));
 
   return `
     <div class="stream-left">
       <div class="stream-title">${stream.name}</div>
       Publisher (${src.type || "-"})<br/>
       Remote: ${details.remoteAddr || "-"}<br/>
-      RTT: ${rttFinal > 0 ? rttFinal.toFixed(2) : "0.00"} ms<br/>
+      ${latencyLine}
       Rate: ${finalRate > 0 ? finalRate.toFixed(2) : "0.00"} Mbps<br/>
       Empfangen: ${formatBytes(bytesRx)}<br/>
-      Tracks: ${Array.isArray(stream.tracks) && stream.tracks.length ? stream.tracks.join(", ") : "-"}<br/>
+      ${renderMedia(stream)}
     </div>
   `;
 }
@@ -124,7 +178,10 @@ function buildPreviewIframeSrc(streamName) {
 export function renderStreamCard(stream) {
   // Readers typisiert sortieren: SRT → RTMP → HLS → WebRTC.
   const readersSorted = [...(stream.readers || [])].sort((a, b) => {
-    const order = { srtConn: 1, rtmpConn: 2, hlsMuxer: 3, webRTCSession: 4 };
+    const order = {
+      srtConn: 1, rtmpConn: 2, rtmpsConn: 3, rtspSession: 4,
+      rtspsSession: 5, hlsSession: 6, webRTCSession: 7, moqSession: 8,
+    };
     return (order[a.type] || 99) - (order[b.type] || 99);
   });
 
@@ -177,7 +234,10 @@ export function updateStreamCard(card, stream) {
 
   // Leser erneut sortieren und rendern.
   const readersSorted = [...(stream.readers || [])].sort((a, b) => {
-    const order = { srtConn: 1, rtmpConn: 2, hlsMuxer: 3, webRTCSession: 4 };
+    const order = {
+      srtConn: 1, rtmpConn: 2, rtmpsConn: 3, rtspSession: 4,
+      rtspsSession: 5, hlsSession: 6, webRTCSession: 7, moqSession: 8,
+    };
     return (order[a.type] || 99) - (order[b.type] || 99);
   });
 

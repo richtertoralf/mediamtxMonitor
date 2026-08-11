@@ -7,6 +7,7 @@ readonly MEDIAMTX_CONFIG="/usr/local/etc/mediamtx.yml"
 readonly SERVICE_DIR="/etc/systemd/system"
 readonly SERVICE_USER="mediamtxmon"
 readonly SERVICE_GROUP="mediamtxmon"
+readonly MINIMUM_MEDIAMTX_VERSION="1.20.0"
 
 fail() {
   printf 'Fehler: %s\n' "$*" >&2
@@ -34,6 +35,16 @@ if [[ ! "$VERSION_INPUT" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   exit 2
 fi
 readonly MEDIAMTX_VERSION="${VERSION_INPUT#v}"
+version_is_at_least() {
+  local current_major current_minor current_patch minimum_major minimum_minor minimum_patch
+  IFS=. read -r current_major current_minor current_patch <<< "$1"
+  IFS=. read -r minimum_major minimum_minor minimum_patch <<< "$2"
+  (( current_major > minimum_major )) ||
+    (( current_major == minimum_major && current_minor > minimum_minor )) ||
+    (( current_major == minimum_major && current_minor == minimum_minor && current_patch >= minimum_patch ))
+}
+version_is_at_least "$MEDIAMTX_VERSION" "$MINIMUM_MEDIAMTX_VERSION" || \
+  fail "MediaMTX v$MEDIAMTX_VERSION wird nicht unterstützt; erforderlich ist v$MINIMUM_MEDIAMTX_VERSION oder neuer."
 printf 'Gewählte MediaMTX-Version: v%s\n' "$MEDIAMTX_VERSION"
 printf 'Die automatische Ergänzung der offiziellen MediaMTX-Konfiguration wurde mit MediaMTX v1.20.0 getestet.\n'
 

@@ -13,10 +13,10 @@ json_data=$(curl -s "$API_URL")
 # Filtern und Formatieren der gewünschten Informationen für jeden aktiven Stream
 echo "$json_data" | jq -r '
 .items[] |
-select(.ready == true) |
-[.name, .source.type, (.tracks | join(", ")), .bytesReceived, .bytesSent, ([.readers[].type] | join(", "))] |
+select(.online == true) |
+[.name, .source.type, ([.tracks2[].codec] | join(", ")), .inboundBytes, .outboundBytes, ([.readers[].type] | join(", "))] |
 @tsv' | while IFS=$'\t' read -r name type tracks bytes_rx bytes_tx readers; do
-    status="✅"  # nur grüner Status, weil .ready bereits true ist
+    status="✅"  # nur grüner Status, weil .online bereits true ist
     [ -z "$readers" ] && readers="-"
     printf " %-3s %-24s %-12s %-24s %-15s %-15s %-10s\n" \
            "$status" "$name" "$type" "$tracks" "$bytes_rx" "$bytes_tx" "$readers"

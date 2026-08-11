@@ -3,7 +3,7 @@
 bitrate.py – Einfache, generische Bitratenberechnung (Publisher & Reader)
 
 Dieses Modul berechnet eine Bitrate (in Mbit/s) aus kumulierten Byte-Zählern
-(z. B. bytesReceived/bytesSent) mittels Delta über die Zeit (ΔBytes / Δt).
+(z. B. inboundBytes/outboundBytes) mittels Delta über die Zeit (ΔBytes / Δt).
 Der Zustand (letzter Zählerstand und Zeitstempel) wird in Redis gehalten.
 
 Einsatz:
@@ -53,7 +53,7 @@ def calc_bitrate(
     key : str
         Eindeutiger Schlüssel je Verbindung, z. B. "pub:stream:rtmpConn:abc123".
     bytes_now : int
-        Aktueller kumulierter Byte-Zähler (z. B. bytesReceived/bytesSent).
+        Aktueller kumulierter Byte-Zähler (z. B. inboundBytes/outboundBytes).
     now : float | None
         Aktueller Zeitstempel in Sekunden (time.time()). Wird None übergeben,
         wird time.time() verwendet (Standard).

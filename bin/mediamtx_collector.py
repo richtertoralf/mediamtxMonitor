@@ -25,11 +25,11 @@ Konfiguration:
       ignore_loopback: true # Reader von 127.0.0.0/8 bzw. ::1 ausblenden
 
 Ablauf:
-1) MediaMTX-API abfragen (Paths, SRT/RTMP/WebRTC/RTSP, HLS).
+1) MediaMTX-Version und API abfragen (Paths und Protokoll-Sessions/-Verbindungen).
 2) Pro Path:
    - Publisher-Details auflösen (je nach Typ).
-   - Publisher-Bitrate: API (SRT) bevorzugen; sonst Delta aus bytesReceived.
-   - Reader-Liste auflösen; pro Reader Bitrate: API (SRT) bevorzugen; sonst Delta aus bytesSent.
+   - Publisher-Bitrate: API (SRT) bevorzugen; sonst Delta aus inboundBytes.
+   - Reader-Liste auflösen; pro Reader Bitrate: API (SRT) bevorzugen; sonst Delta aus outboundBytes.
 3) Aggregiertes Objekt in Redis schreiben (Key aus config).
 4) Optional JSON-Datei für Debug/Inspektion.
 
@@ -55,6 +55,16 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 # Einheitliche Bitraten-Berechnung (Publisher & Reader)
 from bitrate import calc_bitrate
+from mediamtx_model import (
+    DETAIL_ENDPOINTS,
+    MINIMUM_MEDIAMTX_VERSION,
+    OPTIONAL_SECURE_ENDPOINTS,
+    build_media_model,
+    get_details_by_type,
+    index_details,
+    is_supported_version,
+    track_codecs,
+)
 
 # RTT nur für Publisher (Nicht-SRT)
 from rtt import measure_publisher_rtt_ms
@@ -132,21 +142,27 @@ except Exception as e:
 # ---------------------------------------------------------------------------
 
 
-def fetch(endpoint: str) -> Dict[str, Any]:
+def fetch(endpoint: str, params: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     """
     Holt JSON vom MediaMTX-API-Endpunkt. Gibt dict mit 'items' zurück (Liste),
     oder {'items': []} bei Fehlern.
     """
     url = f"{API_BASE}{endpoint}"
     try:
-        res = requests.get(url, timeout=3.0)
+        res = requests.get(url, params=params, timeout=3.0)
         res.raise_for_status()
         data = res.json()
-        # MediaMTX liefert i. d. R. {'items': [...]}
-        if isinstance(data, dict) and "items" in data:
+        if isinstance(data, dict):
             return data
         return {"items": []}
     except Exception as e:
+        if (
+            endpoint in OPTIONAL_SECURE_ENDPOINTS
+            and isinstance(e, requests.HTTPError)
+            and e.response is not None
+            and e.response.status_code == 404
+        ):
+            return {"items": []}
         logging.warning(f"⚠️ API-Fehler {url}: {e}")
         return {"items": []}
 
@@ -166,35 +182,6 @@ def is_loopback(remote: str) -> bool:
     return False
 
 
-def get_details_by_type(
-    obj_type: Optional[str],
-    obj_id: Optional[str],
-    name: str,
-    srtconns: Dict[str, Any],
-    rtmpconns: Dict[str, Any],
-    webrtcs: Dict[str, Any],
-    rtspconns: Dict[str, Any],
-    hls_by_path: Dict[str, Any],
-) -> Dict[str, Any]:
-    """
-    Liefert das Detailobjekt passend zum Verbindungstyp.
-    Für HLS auf Reader-Seite wird per Path aufgelöst.
-    """
-    if obj_type == "srtConn":
-        return srtconns.get(obj_id or "", {})
-    if obj_type == "rtmpConn":
-        return rtmpconns.get(obj_id or "", {})
-    if obj_type == "webRTCSession":
-        return webrtcs.get(obj_id or "", {})
-    if obj_type == "rtspSession":
-        # RTSP mappt häufig über 'session' statt 'id'
-        return rtspconns.get(obj_id or "", {})
-    if obj_type == "hlsMuxer":
-        # HLS-Reader werden über den Pfad gefunden
-        return hls_by_path.get(name, {})
-    return {}
-
-
 # ---------------------------------------------------------------------------
 # Kernfunktion: Sammeln und Speichern
 # ---------------------------------------------------------------------------
@@ -206,18 +193,24 @@ def collect_and_store() -> None:
     reichert diese um berechnete Bitraten an und schreibt das Ergebnis
     nach Redis und optional als JSON-Datei.
     """
-    # API-Aufrufe (alle Listen einmal zentral einsammeln)
+    info = fetch("/v3/info")
+    mediamtx_version = info.get("version")
+    if not is_supported_version(mediamtx_version):
+        required = ".".join(str(part) for part in MINIMUM_MEDIAMTX_VERSION)
+        shown_version = mediamtx_version or "unbekannt"
+        logging.error(
+            "❌ MediaMTX %s wird nicht unterstützt; erforderlich ist v%s oder neuer.",
+            shown_version,
+            required,
+        )
+        return
+
+    # API-Aufrufe (alle Protokolllisten einmal zentral einsammeln)
     paths = fetch("/v3/paths/list").get("items", [])
-    srtconns = {s.get("id"): s for s in fetch("/v3/srtconns/list").get("items", [])}
-    rtmpconns = {x.get("id"): x for x in fetch("/v3/rtmpconns/list").get("items", [])}
-    webrtcs = {
-        w.get("id"): w for w in fetch("/v3/webrtcsessions/list").get("items", [])
-    }
-    rtspconns = {
-        rs.get("session"): rs for rs in fetch("/v3/rtspconns/list").get("items", [])
-    }
-    hlsmuxers = fetch("/v3/hlsmuxers/list").get("items", [])
-    hls_by_path = {h.get("path"): h for h in hlsmuxers}
+    details = index_details({
+        obj_type: fetch(endpoint).get("items", [])
+        for obj_type, endpoint in DETAIL_ENDPOINTS.items()
+    })
 
     aggregated = []
     now = time.time()
@@ -235,21 +228,27 @@ def collect_and_store() -> None:
         # Publisher/Source auflösen
         src_type: Optional[str] = source.get("type")
         src_id: Optional[str] = source.get("id")
-        src_details = get_details_by_type(
-            src_type, src_id, name, srtconns, rtmpconns, webrtcs, rtspconns, hls_by_path
-        )
+        src_details = get_details_by_type(src_type, src_id, details)
+        tracks2 = path.get("tracks2", []) or []
 
         # Grundobjekt für die Ausgabe
         entry: Dict[str, Any] = {
             "name": name,
+            "mediamtxVersion": mediamtx_version,
             "source": {
                 "type": src_type,
                 "id": src_id,
                 "details": src_details,
             },
-            "tracks": path.get("tracks", []),
-            "bytesReceived": int(path.get("bytesReceived") or 0),
-            "bytesSent": int(path.get("bytesSent") or 0),
+            "tracks2": tracks2,
+            "tracks": track_codecs(tracks2),
+            "media": build_media_model(tracks2),
+            "inboundBytes": int(path.get("inboundBytes") or 0),
+            "outboundBytes": int(path.get("outboundBytes") or 0),
+            "inboundFramesInError": int(path.get("inboundFramesInError") or 0),
+            "forwardDestinations": fetch(
+                "/v3/paths/forward/list", params={"path": name}
+            ).get("items", []),
             "readers": [],
         }
 
@@ -258,10 +257,13 @@ def collect_and_store() -> None:
         # ---------------------------
         # API-Rate bevorzugen (nur SRT liefert typischerweise mbpsReceiveRate)
         api_rx_mbps = src_details.get("mbpsReceiveRate")
-        # Fallback: aus Bytes-Deltas (bytesReceived) berechnen
+        # Fallback: aus Byte-Deltas berechnen. SRT behält native Transportzähler.
         # Quelle bytes: bevorzugt die Detailverbindung, sonst Path-Feld
         pub_bytes_now = int(
-            src_details.get("bytesReceived") or entry["bytesReceived"] or 0
+            src_details.get("inboundBytes")
+            or (src_details.get("bytesReceived") if src_type == "srtConn" else 0)
+            or entry["inboundBytes"]
+            or 0
         )
 
         pub_key = (
@@ -285,10 +287,14 @@ def collect_and_store() -> None:
             entry["source"]["bitrate_mbps"] = float(pub_calc_mbps or 0.0)
 
         # -----------------------------------------
-        # --- Publisher-RTT (nur für Nicht-SRT) ---
+        # SRT liefert Transport-RTT; für andere Protokolle bleibt ICMP separat.
         # -----------------------------------------
         remote = src_details.get("remoteAddr", "")
-        if (src_type != "srtConn") and remote:
+        if src_type == "srtConn" and src_details.get("msRTT") is not None:
+            entry["source"]["transport_rtt_ms"] = round(
+                float(src_details["msRTT"]), 2
+            )
+        elif remote:
             try:
                 rtt_ms = measure_configured_rtt(
                     r,
@@ -297,7 +303,7 @@ def collect_and_store() -> None:
                     measure_func=measure_publisher_rtt_ms,
                 )
                 if rtt_ms is not None:
-                    entry["source"]["rtt_ms"] = round(rtt_ms, 2)
+                    entry["source"]["icmp_rtt_ms"] = round(rtt_ms, 2)
             except Exception as e:
                 logging.debug(f"RTT-Messung fehlgeschlagen für {name} ({remote}): {e}")
 
@@ -309,9 +315,7 @@ def collect_and_store() -> None:
             rid: Optional[str] = rd.get("id")
 
             # Detailobjekt zum Reader
-            rd_details = get_details_by_type(
-                rtype, rid, name, srtconns, rtmpconns, webrtcs, rtspconns, hls_by_path
-            )
+            rd_details = get_details_by_type(rtype, rid, details)
 
             # Optional lokale/loopback-Reader ignorieren
             if IGNORE_LOOPBACK:
@@ -319,9 +323,13 @@ def collect_and_store() -> None:
                 if is_loopback(remote):
                     continue
 
-            # Reader-Bitrate: API (SRT) bevorzugen, sonst Delta aus bytesSent
+            # Reader-Bitrate: API (SRT) bevorzugen, sonst Delta aus outboundBytes
             api_tx_mbps = rd_details.get("mbpsSendRate")
-            rd_bytes_now = int(rd_details.get("bytesSent") or 0)
+            rd_bytes_now = int(
+                rd_details.get("outboundBytes")
+                or (rd_details.get("bytesSent") if rtype == "srtConn" else 0)
+                or 0
+            )
 
             rd_key = f"rd:{name}:{rtype}:{rid or rd_details.get('remoteAddr') or 'n/a'}"
             rd_calc_mbps = None
