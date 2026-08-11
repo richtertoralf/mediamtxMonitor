@@ -1,15 +1,8 @@
 /**
- * renderer.js – Render-Funktionen für Streamkarten (Publisher + Readers)
+ * MediaMTX Monitor - Stream card renderer.
  *
- * - Zeigt links die Publisher-Infos inkl. Rate:
- *   bevorzugt API-Wert (z. B. SRT mbpsReceiveRate), sonst berechnete Bitrate
- *   aus dem Collector (stream.source.bitrate_mbps).
- * - Zeigt rechts die Reader inkl. Rate:
- *   bevorzugt API-Wert (mbpsSendRate), sonst berechnete Bitrate reader.bitrate_mbps.
- *
- * Hinweis:
- * Die berechneten Bitraten stammen aus dem Backend (Collector) via bitrate.py.
- * Dieses Frontend macht keine eigene Delta-Berechnung.
+ * Renders the normalized stream snapshot as a permanent IN / Preview / OUT
+ * signal-flow view. Protocol-specific metrics remain explicitly labelled.
  */
 
 function escapeHtml(value) {
@@ -22,33 +15,223 @@ function escapeHtml(value) {
   })[character]);
 }
 
-/**
- * Formatiert Bytes in eine lesbare Einheit.
- * @param {number} bytes - Bytewert (kumuliert)
- * @returns {string} Formatierter String, z. B. "12.3 MB"
- */
+function optionalNumber(value) {
+  if (value == null || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function firstAvailable(...values) {
+  return values.find(value => value !== null && value !== undefined) ?? null;
+}
+
+function formatNumber(value, digits) {
+  const number = optionalNumber(value);
+  return number == null ? null : number.toFixed(digits);
+}
+
+function formatCount(value) {
+  const number = optionalNumber(value);
+  return number == null ? null : `${number}`;
+}
+
 function formatBytes(bytes) {
-  if (bytes == null || isNaN(bytes)) return "–";
+  let value = optionalNumber(bytes);
+  if (value == null) return null;
   const units = ["B", "KB", "MB", "GB", "TB"];
-  let i = 0;
-  let val = Number(bytes);
-  while (val >= 1024 && i < units.length - 1) {
-    val /= 1024;
-    i++;
+  let unitIndex = 0;
+  while (Math.abs(value) >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex++;
   }
-  return `${val.toFixed(4)} ${units[i]}`;
+  return `${value.toFixed(unitIndex === 0 ? 0 : 2)} ${units[unitIndex]}`;
+}
+
+function formatConnectionAge(created) {
+  if (!created) return null;
+  const createdAt = Date.parse(created);
+  if (!Number.isFinite(createdAt)) return null;
+  const seconds = Math.max(0, Math.floor((Date.now() - createdAt) / 1000));
+  if (seconds < 60) return `${seconds} s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} min`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)} h`;
+  return `${Math.floor(seconds / 86400)} d`;
+}
+
+function protocolLabel(type) {
+  return {
+    srtConn: "SRT",
+    rtmpConn: "RTMP",
+    rtmpsConn: "RTMPS",
+    rtspConn: "RTSP",
+    rtspSession: "RTSP",
+    rtspsConn: "RTSPS",
+    rtspsSession: "RTSPS",
+    hlsSession: "HLS",
+    webRTCSession: "WebRTC",
+    moqSession: "MoQ",
+  }[type] || type || "—";
+}
+
+function protocolMarkerClass(type) {
+  if (type === "srtConn") return "marker-srt";
+  if (type === "rtmpConn" || type === "rtmpsConn") return "marker-rtmp";
+  if (type === "hlsSession") return "marker-hls";
+  if (type === "webRTCSession") return "marker-webrtc";
+  return "marker-generic";
+}
+
+function metric(label, value, unit = null) {
+  return value == null ? null : {label, value, unit};
+}
+
+function renderMetrics(metrics) {
+  const available = metrics.filter(Boolean);
+  if (!available.length) return "";
+  return `
+    <dl class="metric-grid">
+      ${available.map(item => `
+        <div class="metric">
+          <dt>
+            <span class="metric-label">${escapeHtml(item.label)}</span>
+            ${item.unit == null
+              ? ""
+              : `<span class="metric-unit">${escapeHtml(item.unit)}</span>`}
+          </dt>
+          <dd>${escapeHtml(item.value)}</dd>
+        </div>
+      `).join("")}
+    </dl>
+  `;
+}
+
+function renderConnectionHeading(type, details) {
+  const remote = details?.remoteAddr || "—";
+  return `
+    <div class="connection-heading">
+      <span class="protocol-marker ${protocolMarkerClass(type)}"></span>
+      <span>${escapeHtml(protocolLabel(type))}</span>
+      <span class="remote-address">· ${escapeHtml(remote)}</span>
+    </div>
+  `;
+}
+
+function connectionRate(connection, direction) {
+  const details = connection?.details || {};
+  const health = connection?.srt_health || {};
+  const nativeRate = direction === "in"
+    ? firstAvailable(health.rx_mbps, details.mbpsReceiveRate)
+    : firstAvailable(health.tx_mbps, details.mbpsSendRate);
+  return firstAvailable(nativeRate, connection?.bitrate_mbps);
+}
+
+function connectionTotal(connection, direction, stream) {
+  const details = connection?.details || {};
+  if (direction === "in") {
+    return firstAvailable(
+      details.inboundBytes,
+      connection?.type === "srtConn" ? details.bytesReceived : null,
+      stream?.inboundBytes,
+    );
+  }
+  return firstAvailable(
+    details.outboundBytes,
+    connection?.type === "srtConn" ? details.bytesSent : null,
+  );
+}
+
+function pingValue(connection) {
+  return firstAvailable(connection?.ping_rtt_ms, connection?.icmp_rtt_ms);
+}
+
+function renderSrtMetrics(connection, direction, totalBytes) {
+  const details = connection?.details || {};
+  const health = connection?.srt_health || {};
+  const rateLabel = direction === "in" ? "RX" : "TX";
+  const rate = connectionRate(connection, direction);
+  const lossRate = direction === "in"
+    ? details.packetsReceivedLossRate
+    : details.packetsSendLossRate;
+  const loss = lossRate != null
+    ? metric("Loss", formatNumber(lossRate, 2), "%")
+    : metric("Loss", formatCount(health.loss_packets), "pkt");
+
+  return renderMetrics([
+    metric(rateLabel, rate == null ? "—" : formatNumber(rate, 2), "Mbit/s"),
+    metric("Total", formatBytes(totalBytes)),
+    metric("RTT", formatNumber(firstAvailable(
+      connection?.transport_rtt_ms,
+      health.rtt_ms,
+      details.msRTT,
+    ), 2), "ms"),
+    loss,
+    metric("Retrans", formatCount(health.retrans_packets), "pkt"),
+    metric("Drop", formatCount(health.drop_packets), "pkt"),
+    metric("Link", formatNumber(
+      firstAvailable(health.link_capacity_mbps, details.mbpsLinkCapacity),
+      1,
+    ), "Mbit/s"),
+    metric("Reserve", formatNumber(health.reserve_ratio, 1), "×"),
+    metric("Belated", formatCount(health.belated_packets), "pkt"),
+    metric("Undecrypt", formatCount(health.undecrypt_packets), "pkt"),
+    metric("Age", formatConnectionAge(details.created)),
+  ]);
+}
+
+function renderNonSrtMetrics(connection, direction, totalBytes) {
+  const details = connection?.details || {};
+  const type = connection?.type;
+  const rateLabel = direction === "in" ? "RX" : "TX";
+  const rate = connectionRate(connection, direction);
+  const metrics = [
+    metric(rateLabel, rate == null
+      ? "—"
+      : formatNumber(rate, 2), "Mbit/s"),
+    metric("Total", formatBytes(totalBytes)),
+    metric("Ping", formatNumber(pingValue(connection), 2), "ms"),
+  ];
+
+  if (type === "rtspSession" || type === "rtspsSession") {
+    if (direction === "in") {
+      metrics.push(
+        metric("Jitter", formatNumber(details.inboundRTPPacketsJitter, 2), "ms"),
+        metric("Loss", formatCount(details.inboundRTPPacketsLost), "pkt"),
+        metric("RTP Error", formatCount(details.inboundRTPPacketsInError)),
+        metric("RTCP Error", formatCount(details.inboundRTCPPacketsInError)),
+      );
+    } else {
+      metrics.push(
+        metric("Loss", formatCount(details.outboundRTPPacketsReportedLost), "pkt"),
+        metric("Discard", formatCount(details.outboundRTPPacketsDiscarded)),
+      );
+    }
+  }
+
+  if ((type === "rtmpConn" || type === "rtmpsConn") && direction === "out") {
+    metrics.push(metric("Discard", formatCount(details.outboundFramesDiscarded)));
+  }
+
+  metrics.push(metric("Age", formatConnectionAge(details.created)));
+  return renderMetrics(metrics);
+}
+
+function renderConnectionMetrics(connection, direction, stream = null) {
+  const totalBytes = connectionTotal(connection, direction, stream);
+  return connection?.type === "srtConn"
+    ? renderSrtMetrics(connection, direction, totalBytes)
+    : renderNonSrtMetrics(connection, direction, totalBytes);
 }
 
 function formatSampleRate(sampleRate) {
-  const value = Number(sampleRate);
-  if (!Number.isFinite(value) || value <= 0) return null;
+  const value = optionalNumber(sampleRate);
+  if (value == null || value <= 0) return null;
   if (value >= 1000) return `${Number((value / 1000).toFixed(1))} kHz`;
   return `${value} Hz`;
 }
 
 function formatChannels(channelCount) {
-  const value = Number(channelCount);
-  if (!Number.isFinite(value) || value <= 0) return null;
+  const value = optionalNumber(channelCount);
+  if (value == null || value <= 0) return null;
   if (value === 1) return "Mono";
   if (value === 2) return "Stereo";
   return `${value} Kanäle`;
@@ -67,7 +250,7 @@ function renderMedia(stream) {
     } else if (track.height != null) {
       parts.push(`${track.height} px hoch`);
     }
-    if (parts.length) lines.push(`Video: ${parts.join(" · ")}`);
+    if (parts.length) lines.push(parts.join(" · "));
   }
 
   for (const track of media.audio || []) {
@@ -76,173 +259,99 @@ function renderMedia(stream) {
     const channels = formatChannels(track.channelCount);
     if (sampleRate) parts.push(sampleRate);
     if (channels) parts.push(channels);
-    if (parts.length) lines.push(`Audio: ${parts.join(" · ")}`);
+    if (parts.length) lines.push(parts.join(" · "));
   }
 
   for (const track of media.other || []) {
     const codec = track.displayCodec || track.codec;
-    if (codec) lines.push(`Medium: ${codec}`);
+    if (codec) lines.push(codec);
   }
 
   if (!lines.length && Array.isArray(stream?.tracks) && stream.tracks.length) {
-    lines.push(`Tracks: ${stream.tracks.join(", ")}`);
+    lines.push(stream.tracks.join(" · "));
   }
 
-  return lines.map(line => `${escapeHtml(line)}<br/>`).join("");
+  if (!lines.length) return '<div class="media-empty">Keine Media-Details</div>';
+  return `<div class="media-lines">${lines.map(line =>
+    `<div>${escapeHtml(line)}</div>`).join("")}</div>`;
 }
 
-/**
- * Rendert einen einzelnen Reader-Block (rechte Spalte).
- * @param {Object} reader - Reader-Objekt mit Typ, ID und Details
- * @returns {string} HTML-Fragment
- */
-export function renderReader(reader) {
-  const markerClass = {
-    srtConn: "marker-srt",
-    rtmpConn: "marker-rtmp",
-    rtmpsConn: "marker-rtmp",
-    hlsSession: "marker-hls",
-    webRTCSession: "marker-webrtc",
-  }[reader.type] || "";
-
-  const remote = reader?.details?.remoteAddr || "-";
-  const rateApi = Number(reader?.details?.mbpsSendRate) || 0;
-  const rateCalc = Number(reader?.bitrate_mbps) || 0;
-
-  // Finaler Wert: API bevorzugt, sonst berechnet.
-  const finalRate = rateApi > 0 ? rateApi : rateCalc;
-
-  const bytesSent = Number(reader?.details?.outboundBytes)
-    || (reader.type === "srtConn" ? Number(reader?.details?.bytesSent) : 0) || 0;
-
-  let html = `
-    <div class="reader-block">
-      <span class="${markerClass}"></span>Typ: ${escapeHtml(reader.type)}<br/>
-      Remote: ${escapeHtml(remote)}<br/>
-      ${reader.type === "srtConn"
-        ? renderSrtHealth(reader?.srt_health || {}, "tx_mbps", finalRate)
-        : `Rate: ${finalRate > 0 ? finalRate.toFixed(2) : "0.00"} Mbps<br/>`}
-      Gesendet: ${formatBytes(bytesSent)}
-  `;
-
-  html += "</div>";
-  return html;
-}
-
-function healthNumber(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : null;
-}
-
-export function renderSrtHealth(health, rateField, fallbackRate = 0) {
+function readerDetails(reader) {
+  const details = reader?.details || {};
   const lines = [];
-  const nativeRate = healthNumber(health?.[rateField]);
-  const calculatedRate = healthNumber(fallbackRate);
-  const rate = nativeRate != null && nativeRate > 0 ? nativeRate : calculatedRate;
-  const link = healthNumber(health?.link_capacity_mbps);
-  const reserve = healthNumber(health?.reserve_ratio);
-  const rtt = healthNumber(health?.rtt_ms);
-  const retrans = healthNumber(health?.retrans_packets);
-  const drop = healthNumber(health?.drop_packets);
-  const belated = healthNumber(health?.belated_packets);
-
-  if (rate != null && rate > 0) lines.push(`${rateField === "rx_mbps" ? "RX" : "TX"}: ${rate.toFixed(2)} Mbit/s`);
-  if (link != null && link > 0) lines.push(`Link: ${link.toFixed(2)} Mbit/s`);
-  if (reserve != null && reserve > 0) lines.push(`Reserve: ${reserve.toFixed(1)}×`);
-  if (rtt != null && rtt > 0) lines.push(`RTT: ${Number(rtt.toFixed(2))} ms`);
-  if (retrans != null && retrans >= 0) lines.push(`Retrans: ${retrans} pkt`);
-  if (drop != null && drop >= 0) lines.push(`Drop: ${drop} pkt`);
-  if (belated != null && belated > 0) lines.push(`Belated: ${belated} pkt`);
-  return lines.map(line => `${line}<br/>`).join("");
+  if (reader?.type === "hlsSession") {
+    if (details.userAgent) lines.push(`Agent: ${details.userAgent}`);
+    if (details.isCDN != null) lines.push(`CDN: ${details.isCDN ? "ja" : "nein"}`);
+  }
+  return lines.length
+    ? `<div class="connection-notes">${lines.map(escapeHtml).join("<br>")}</div>`
+    : "";
 }
 
-/**
- * Rendert den linken Block (Publisher/Ingest) einer Streamkarte.
- * @param {Object} stream - Aggregierte Streamdaten
- * @returns {string} HTML-Fragment
- */
-export function renderStreamLeft(stream) {
-  const src = stream?.source || {};
-  const details = src.details || {};
-
-  // API-Rate (SRT) bevorzugen, sonst berechnete Rate aus dem Collector.
-  const apiRate = Number(details.mbpsReceiveRate) || 0;
-  const calcRate = Number(src.bitrate_mbps) || 0;
-  const finalRate = apiRate > 0 ? apiRate : calcRate;
-
-  // SRT liefert eine Transport-RTT; bei anderen Protokollen ist nur ICMP-Ping verfügbar.
-  const latencyLabel = src.type === "srtConn" ? "RTT" : "Ping";
-  const latencyValue = src.type === "srtConn"
-    ? Number(src.transport_rtt_ms || details.msRTT)
-    : Number(src.icmp_rtt_ms);
-  const latencyLine = Number.isFinite(latencyValue) && latencyValue > 0
-    ? `${latencyLabel}: ${latencyValue.toFixed(2)} ms<br/>`
-    : "";
-  const sourceHealth = {...(src.srt_health || {})};
-  if (
-    src.type === "srtConn"
-    && !(healthNumber(sourceHealth.rtt_ms) > 0)
-    && Number.isFinite(latencyValue)
-    && latencyValue > 0
-  ) {
-    sourceHealth.rtt_ms = latencyValue;
-  }
-
-
-  // Empfangen: bevorzugt Detailzähler, fallback auf Path-Feld.
-  const bytesRx = details.inboundBytes != null
-    ? Number(details.inboundBytes)
-    : (src.type === "srtConn" && details.bytesReceived != null
-      ? Number(details.bytesReceived)
-      : Number(stream.inboundBytes || 0));
-
+/** Render one permanent OUT connection block. */
+export function renderReader(reader, index = 0) {
   return `
-    <div class="stream-left">
-      <div class="stream-title">${escapeHtml(stream.name)}</div>
-      Publisher (${escapeHtml(src.type || "-")})<br/>
-      Remote: ${escapeHtml(details.remoteAddr || "-")}<br/>
-      ${src.type === "srtConn"
-        ? renderSrtHealth(sourceHealth, "rx_mbps", finalRate)
-        : `${latencyLine}Rate: ${finalRate > 0 ? finalRate.toFixed(2) : "0.00"} Mbps<br/>`}
-      Empfangen: ${formatBytes(bytesRx)}<br/>
-      ${renderMedia(stream)}
-    </div>
+    <section class="reader-block">
+      <h3>Reader ${index + 1}</h3>
+      ${renderConnectionHeading(reader?.type, reader?.details || {})}
+      ${renderConnectionMetrics(reader, "out")}
+      ${readerDetails(reader)}
+    </section>
+  `;
+}
+
+/** Compatibility export for focused SRT metric tests. */
+export function renderSrtHealth(health, rateField, fallbackRate = null, details = {}) {
+  const direction = rateField === "rx_mbps" ? "in" : "out";
+  const connection = {
+    type: "srtConn",
+    bitrate_mbps: fallbackRate,
+    details,
+    srt_health: health || {},
+  };
+  return renderSrtMetrics(connection, direction, null);
+}
+
+/** Render the IN column without stream-level media information. */
+export function renderStreamLeft(stream) {
+  const source = stream?.source || {};
+  return `
+    <section class="stream-left flow-panel" aria-label="Eingangsverbindung">
+      <h2 class="panel-title">IN</h2>
+      ${renderConnectionHeading(source.type, source.details || {})}
+      ${renderConnectionMetrics(source, "in", stream)}
+    </section>
   `;
 }
 
 function buildPreviewIframeSrc(streamName) {
-  const encodedPath = streamName
+  const encodedPath = String(streamName || "")
     .split("/")
     .map(segment => encodeURIComponent(segment))
     .join("/");
-
   return `http://${window.location.hostname}:8889/__preview__/${encodedPath}?controls=false&muted=true&autoplay=true&playsInline=true`;
 }
 
-/**
- * Rendert eine komplette Streamkarte (links Publisher, Mitte Vorschaustream, rechts Readers).
- * @param {Object} stream - Aggregiertes Stream-Objekt mit source, tracks, readers etc.
- * @returns {HTMLDivElement} DOM-Element der Streamkarte
- */
-export function renderStreamCard(stream) {
-  // Readers typisiert sortieren: SRT → RTMP → HLS → WebRTC.
-  const readersSorted = [...(stream.readers || [])].sort((a, b) => {
-    const order = {
-      srtConn: 1, rtmpConn: 2, rtmpsConn: 3, rtspSession: 4,
-      rtspsSession: 5, hlsSession: 6, webRTCSession: 7, moqSession: 8,
-    };
-    return (order[a.type] || 99) - (order[b.type] || 99);
-  });
+function sortedReaders(stream) {
+  const order = {
+    srtConn: 1, rtmpConn: 2, rtmpsConn: 3, rtspSession: 4,
+    rtspsSession: 5, hlsSession: 6, webRTCSession: 7, moqSession: 8,
+  };
+  return [...(stream?.readers || [])].sort((a, b) =>
+    (order[a.type] || 99) - (order[b.type] || 99));
+}
 
-  const div = document.createElement("div");
-  div.className = "stream-card";
+function renderHeaderContent(stream) {
+  const outCount = stream?.readers?.length || 0;
+  return `
+    <div class="stream-name">${escapeHtml(stream?.name || "—")}</div>
+    <div class="stream-status"><span class="live-dot"></span>LIVE · ${outCount} OUT</div>
+  `;
+}
 
-  const left = renderStreamLeft(stream);
-
-  const previewSrc = buildPreviewIframeSrc(stream.name);
-
-  const center = `
-  <div class="stream-center">
+function renderCenterContent(stream) {
+  return `
+    <h2 class="panel-title">PREVIEW</h2>
     <iframe
       class="preview-frame"
       loading="lazy"
@@ -250,51 +359,52 @@ export function renderStreamCard(stream) {
       allow="autoplay"
       referrerpolicy="no-referrer">
     </iframe>
-  </div>
-`;
+    <div class="media-summary">${renderMedia(stream)}</div>
+  `;
+}
 
-  const right = `
-    <div class="stream-right">
-      <span class="label">Readers (${readersSorted.length}):</span>
-      ${readersSorted.map(renderReader).join("")}
+function renderRightContent(stream) {
+  const readers = sortedReaders(stream);
+  return `
+    <h2 class="panel-title">OUT</h2>
+    ${readers.length
+      ? readers.map((reader, index) => renderReader(reader, index)).join("")
+      : '<div class="no-readers">Keine OUT-Verbindung</div>'}
+  `;
+}
+
+/** Render a complete stream card with a fixed semantic three-part flow. */
+export function renderStreamCard(stream) {
+  const card = document.createElement("article");
+  card.className = "stream-card";
+  card.innerHTML = `
+    <header class="stream-header">${renderHeaderContent(stream)}</header>
+    <div class="stream-flow">
+      ${renderStreamLeft(stream)}
+      <section class="stream-center flow-panel" aria-label="Preview und Media">
+        ${renderCenterContent(stream)}
+      </section>
+      <section class="stream-right flow-panel" aria-label="Ausgangsverbindungen">
+        ${renderRightContent(stream)}
+      </section>
     </div>
   `;
 
-  div.innerHTML = left + center + right;
-
-  const preview = div.querySelector(".preview-frame");
-  preview.setAttribute("src", previewSrc);
-  preview.setAttribute("title", `Preview: ${stream.name}`);
-
-  return div;
+  const preview = card.querySelector(".preview-frame");
+  preview.setAttribute("src", buildPreviewIframeSrc(stream?.name));
+  preview.setAttribute("title", `Preview: ${stream?.name || ""}`);
+  return card;
 }
 
-/**
- * Aktualisiert eine bestehende Streamkarte im DOM (ohne komplettes Re-Rendern).
- * @param {HTMLDivElement} card - Root-Element der Streamkarte
- * @param {Object} stream - Aktuelle Streamdaten
- */
+/** Update changing metrics while preserving the existing preview iframe. */
 export function updateStreamCard(card, stream) {
+  const header = card.querySelector(".stream-header");
   const left = card.querySelector(".stream-left");
+  const media = card.querySelector(".media-summary");
   const right = card.querySelector(".stream-right");
 
-  if (left) {
-    left.innerHTML = renderStreamLeft(stream);
-  }
-
-  // Leser erneut sortieren und rendern.
-  const readersSorted = [...(stream.readers || [])].sort((a, b) => {
-    const order = {
-      srtConn: 1, rtmpConn: 2, rtmpsConn: 3, rtspSession: 4,
-      rtspsSession: 5, hlsSession: 6, webRTCSession: 7, moqSession: 8,
-    };
-    return (order[a.type] || 99) - (order[b.type] || 99);
-  });
-
-  if (right) {
-    right.innerHTML = `
-      <span class="label">Readers (${readersSorted.length}):</span>
-      ${readersSorted.map(renderReader).join("")}
-    `;
-  }
+  if (header) header.innerHTML = renderHeaderContent(stream);
+  if (left) left.outerHTML = renderStreamLeft(stream);
+  if (media) media.innerHTML = renderMedia(stream);
+  if (right) right.innerHTML = renderRightContent(stream);
 }
