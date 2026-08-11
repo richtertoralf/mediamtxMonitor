@@ -69,10 +69,14 @@ class ProductModuleImportTests(unittest.TestCase):
                 import bin.mediamtx_systeminfo as systeminfo
                 import bin.monitoring_config
                 import bin.redis_keys
+                import bin.redis_store
 
             assert collector.r is None
             assert api.r is None
             assert systeminfo.r is None
+            assert collector.snapshot_store is None
+            assert api.snapshot_store is None
+            assert systeminfo.snapshot_store is None
             """
         )
 

@@ -75,6 +75,7 @@ try:
         reader_connection_key,
         reader_srt_health_key,
     )
+    from .redis_store import RedisStore
     from .srt_health import build_srt_health
 except ImportError:
     from bitrate import calc_bitrate
@@ -101,6 +102,7 @@ except ImportError:
         reader_connection_key,
         reader_srt_health_key,
     )
+    from redis_store import RedisStore
     from srt_health import build_srt_health
 
 
@@ -125,6 +127,7 @@ BITRATE_TTL = BITRATE_CFG["ttl"]
 IGNORE_LOOPBACK = BITRATE_CFG["ignore_loopback"]
 RTT_CFG = config["rtt"]
 r = None
+snapshot_store = None
 
 
 def configure_runtime(raw_config: Dict[str, Any]) -> None:
@@ -152,7 +155,7 @@ def configure_runtime(raw_config: Dict[str, Any]) -> None:
 
 
 def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
-    global r
+    global r, snapshot_store
 
     import redis
 
@@ -164,6 +167,7 @@ def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
     try:
         r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
         r.ping()
+        snapshot_store = RedisStore(r)
         logging.info("🔌 Verbindung zu Redis hergestellt.")
     except Exception as exc:
         logging.error(f"❌ Verbindung zu Redis fehlgeschlagen: {exc}")
@@ -427,7 +431,7 @@ def collect_and_store() -> None:
     # Ergebnis nach Redis und optional als JSON-Datei schreiben
     # -----------------------------------------------------------------------
     try:
-        r.set(REDIS_KEY, json.dumps(aggregated))
+        snapshot_store.write_snapshot(REDIS_KEY, aggregated)
         logging.info(
             f"✅ {len(aggregated)} Pfade in Redis gespeichert (Key: {REDIS_KEY})."
         )

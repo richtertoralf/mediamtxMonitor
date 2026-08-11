@@ -24,12 +24,14 @@ try:
         load_monitoring_config,
         resolve_monitoring_config,
     )
+    from .redis_store import RedisStore
 except ImportError:
     from monitoring_config import (
         DEFAULT_CONFIG_PATH,
         load_monitoring_config,
         resolve_monitoring_config,
     )
+    from redis_store import RedisStore
 
 config = resolve_monitoring_config({})
 redis_cfg = config["redis"]
@@ -40,6 +42,7 @@ REDIS_KEY = system_monitor_cfg["redis_key"]
 JSON_OUTPUT_PATH = system_monitor_cfg["output_json_path"]
 INTERVAL_SECONDS = system_monitor_cfg["interval_seconds"]
 r = None
+snapshot_store = None
 psutil = None
 
 
@@ -58,7 +61,7 @@ def configure_runtime(raw_config: Dict[str, Any]) -> None:
 
 
 def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
-    global r, psutil
+    global r, snapshot_store, psutil
 
     import psutil as psutil_module
     import redis
@@ -72,6 +75,7 @@ def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
     try:
         r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
         r.ping()
+        snapshot_store = RedisStore(r)
         logging.info("🔌 Verbindung zu Redis hergestellt.")
     except Exception as exc:
         logging.error(f"❌ Verbindung zu Redis fehlgeschlagen: {exc}")
@@ -183,7 +187,7 @@ def collect_and_store():
         data.update(bitrate)
         logging.debug(f"📶 Netzwerk: RX {bitrate['net_mbit_rx']} Mbit/s, TX {bitrate['net_mbit_tx']} Mbit/s")
 
-        r.set(REDIS_KEY, json.dumps(data))
+        snapshot_store.write_snapshot(REDIS_KEY, data)
         logging.debug("📊 Systemdaten in Redis gespeichert.")
 
         Path(JSON_OUTPUT_PATH).write_text(json.dumps(data, indent=2))
@@ -215,10 +219,9 @@ def extract_temperature(temp_data):
 # 📤 API-Datenstruktur bereitstellen
 def get_system_info():
     try:
-        raw = r.get(REDIS_KEY)
-        if not raw:
+        data = snapshot_store.read_snapshot(REDIS_KEY)
+        if data is None:
             return {}
-        data = json.loads(raw)
 
         return {
             "cpu_percent": data["cpu_percent"],

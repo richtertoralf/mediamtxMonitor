@@ -8,7 +8,6 @@ Die Konfiguration erfolgt zentral über collector.yaml.
 """
 
 from contextlib import asynccontextmanager
-import json
 import logging
 from pathlib import Path
 
@@ -23,12 +22,14 @@ try:
         load_monitoring_config,
         resolve_monitoring_config,
     )
+    from .redis_store import RedisStore, SnapshotDecodeError
 except ImportError:
     from monitoring_config import (
         DEFAULT_CONFIG_PATH,
         load_monitoring_config,
         resolve_monitoring_config,
     )
+    from redis_store import RedisStore, SnapshotDecodeError
 
 config = resolve_monitoring_config({})
 redis_cfg = config["redis"]
@@ -37,6 +38,7 @@ REDIS_PORT = redis_cfg["port"]
 REDIS_KEY = redis_cfg["key"]
 SYSTEM_REDIS_KEY = config["system_monitor"]["redis_key"]
 r = None
+snapshot_store = None
 
 
 def load_runtime_config(path: Path | str = DEFAULT_CONFIG_PATH) -> dict:
@@ -49,7 +51,7 @@ def load_runtime_config(path: Path | str = DEFAULT_CONFIG_PATH) -> dict:
 
 def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
     global config, redis_cfg, REDIS_HOST, REDIS_PORT, REDIS_KEY
-    global SYSTEM_REDIS_KEY, r
+    global SYSTEM_REDIS_KEY, r, snapshot_store
 
     config = load_runtime_config(config_path)
     redis_cfg = config["redis"]
@@ -68,6 +70,7 @@ def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
     try:
         r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
         r.ping()
+        snapshot_store = RedisStore(r)
         logging.info("🔌 Verbindung zu Redis hergestellt.")
     except Exception as exc:
         logging.error(f"❌ Redis-Verbindung fehlgeschlagen: {exc}")
@@ -105,17 +108,19 @@ def serve_index():
 @app.get("/api/streams", response_class=JSONResponse, summary="Streamdaten abrufen")
 def get_streams():
     """Liefert aktuelle Streamdaten aus Redis, inkl. UI-Refresh-Konfiguration und Systeminfos."""
-    raw = r.get(REDIS_KEY)
     try:
-        streams = json.loads(raw) if raw else []
-    except json.JSONDecodeError:
+        streams = snapshot_store.read_snapshot(REDIS_KEY)
+        if streams is None:
+            streams = []
+    except SnapshotDecodeError:
         streams = []
 
     # Systeminfos aus Redis holen
-    system_raw = r.get(SYSTEM_REDIS_KEY)
     try:
-        systeminfo = json.loads(system_raw) if system_raw else {}
-    except json.JSONDecodeError:
+        systeminfo = snapshot_store.read_snapshot(SYSTEM_REDIS_KEY)
+        if systeminfo is None:
+            systeminfo = {}
+    except SnapshotDecodeError:
         systeminfo = {}
 
     frontend_cfg = config["frontend"]
