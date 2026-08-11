@@ -48,10 +48,9 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import requests
-
 try:
     from .bitrate import calc_bitrate
+    from .mediamtx_client import MediaMTXClient, MediaMTXError, MediaMTXHTTPError
     from .mediamtx_model import (
         DETAIL_ENDPOINTS,
         MINIMUM_MEDIAMTX_VERSION,
@@ -79,6 +78,7 @@ try:
     from .srt_health import build_srt_health
 except ImportError:
     from bitrate import calc_bitrate
+    from mediamtx_client import MediaMTXClient, MediaMTXError, MediaMTXHTTPError
     from mediamtx_model import (
         DETAIL_ENDPOINTS,
         MINIMUM_MEDIAMTX_VERSION,
@@ -128,6 +128,7 @@ IGNORE_LOOPBACK = BITRATE_CFG["ignore_loopback"]
 RTT_CFG = config["rtt"]
 r = None
 snapshot_store = None
+mediamtx_client = None
 
 
 def configure_runtime(raw_config: Dict[str, Any]) -> None:
@@ -155,7 +156,7 @@ def configure_runtime(raw_config: Dict[str, Any]) -> None:
 
 
 def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
-    global r, snapshot_store
+    global r, snapshot_store, mediamtx_client
 
     import redis
 
@@ -172,6 +173,7 @@ def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
     except Exception as exc:
         logging.error(f"❌ Verbindung zu Redis fehlgeschlagen: {exc}")
         sys.exit(1)
+    mediamtx_client = MediaMTXClient(API_BASE)
 
 
 # ---------------------------------------------------------------------------
@@ -184,20 +186,17 @@ def fetch(endpoint: str, params: Optional[Dict[str, str]] = None) -> Dict[str, A
     Holt JSON vom MediaMTX-API-Endpunkt. Gibt dict mit 'items' zurück (Liste),
     oder {'items': []} bei Fehlern.
     """
-    url = f"{API_BASE}{endpoint}"
+    url = mediamtx_client.build_url(endpoint)
     try:
-        res = requests.get(url, params=params, timeout=3.0)
-        res.raise_for_status()
-        data = res.json()
+        data = mediamtx_client.get_json(endpoint, params=params)
         if isinstance(data, dict):
             return data
         return {"items": []}
-    except Exception as e:
+    except MediaMTXError as e:
         if (
             endpoint in OPTIONAL_SECURE_ENDPOINTS
-            and isinstance(e, requests.HTTPError)
-            and e.response is not None
-            and e.response.status_code == 404
+            and isinstance(e, MediaMTXHTTPError)
+            and e.status_code == 404
         ):
             return {"items": []}
         logging.warning(f"⚠️ API-Fehler {url}: {e}")

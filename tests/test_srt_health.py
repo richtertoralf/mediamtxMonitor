@@ -27,6 +27,14 @@ class FakeRedis:
         return True
 
 
+class FakeMediaMTXClient:
+    def __init__(self, get_json):
+        self.get_json = get_json
+
+    def build_url(self, endpoint):
+        return f"http://localhost:9997{endpoint}"
+
+
 class CounterDeltaTests(unittest.TestCase):
     def setUp(self):
         self.redis = FakeRedis()
@@ -118,6 +126,7 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
         self.redis = FakeRedis()
         self.collector.r = self.redis
         self.collector.snapshot_store = RedisStore(self.redis)
+        self.collector.mediamtx_client = FakeMediaMTXClient(self.fetch)
         self.srt_details = [
             {
                 "id": "srt-publisher",
@@ -165,10 +174,7 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
         return {"items": []}
 
     def collect(self):
-        with (
-            mock.patch.object(self.collector, "fetch", side_effect=self.fetch),
-            mock.patch.object(Path, "write_text"),
-        ):
+        with mock.patch.object(Path, "write_text"):
             self.collector.collect_and_store()
         return json.loads(self.redis.values[self.collector.REDIS_KEY])
 

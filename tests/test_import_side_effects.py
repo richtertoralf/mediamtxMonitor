@@ -67,6 +67,7 @@ class ProductModuleImportTests(unittest.TestCase):
                 import bin.mediamtx_collector as collector
                 import bin.mediamtx_api as api
                 import bin.mediamtx_systeminfo as systeminfo
+                import bin.mediamtx_client
                 import bin.monitoring_config
                 import bin.redis_keys
                 import bin.redis_store
@@ -75,6 +76,7 @@ class ProductModuleImportTests(unittest.TestCase):
             assert api.r is None
             assert systeminfo.r is None
             assert collector.snapshot_store is None
+            assert collector.mediamtx_client is None
             assert api.snapshot_store is None
             assert systeminfo.snapshot_store is None
             """
