@@ -45,7 +45,8 @@ fi
 for path in \
     "${REPO_DIR}/bin" \
     "${REPO_DIR}/static" \
-    "${REPO_DIR}/config/collector.yaml"
+    "${REPO_DIR}/config/collector.yaml" \
+    "${REPO_DIR}/VERSION"
 do
     [[ -e "${path}" ]] || {
         echo "Fehler: Repository-Datei fehlt:"
@@ -102,15 +103,21 @@ CONFIG_CHANGES="$(
         "${TARGET}/config/collector.yaml"
 )"
 
+VERSION_CHANGES="$(
+    compare_file \
+        "${REPO_DIR}/VERSION" \
+        "${TARGET}/VERSION"
+)"
+
 
 if [[ -z "${BIN_CHANGES}" &&
       -z "${STATIC_CHANGES}" &&
-      -z "${CONFIG_CHANGES}" ]]; then
+      -z "${CONFIG_CHANGES}" &&
+      -z "${VERSION_CHANGES}" ]]; then
 
     echo "Keine deploybaren Änderungen gefunden."
     exit 0
 fi
-
 
 echo
 echo "Änderungen für Dev-Deployment:"
@@ -125,6 +132,12 @@ fi
 if [[ -n "${CONFIG_CHANGES}" ]]; then
     echo "--- config/collector.yaml"
     printf '%s\n' "${CONFIG_CHANGES}"
+    echo
+fi
+
+if [[ -n "${VERSION_CHANGES}" ]]; then
+    echo "--- VERSION"
+    printf '%s\n' "${VERSION_CHANGES}"
     echo
 fi
 
@@ -172,6 +185,15 @@ if [[ -n "${CONFIG_CHANGES}" ]]; then
         "${TARGET}/config/collector.yaml"
 fi
 
+if [[ -n "${VERSION_CHANGES}" ]]; then
+    sudo install \
+        -o mediamtxmon \
+        -g mediamtxmon \
+        -m 0644 \
+        "${REPO_DIR}/VERSION" \
+        "${TARGET}/VERSION"
+fi
+
 
 # ------------------------------------------------------------
 # Dienste
@@ -196,7 +218,7 @@ if [[ -n "${BIN_CHANGES}" || -n "${CONFIG_CHANGES}" ]]; then
         "${SERVICE_SYSTEM}"
 else
     echo
-    echo "Nur Frontend-Dateien geändert."
+    echo "Kein Backend und keine collector.yaml geändert."
     echo "Kein Service-Neustart erforderlich."
 fi
 

@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 readonly INSTALL_DIR="/opt/mediamtx-monitoring-backend"
 readonly MEDIAMTX_BIN="/usr/local/bin/mediamtx"
+readonly MONITOR_CLI="/usr/local/bin/mediamtx-monitor"
 readonly MEDIAMTX_CONFIG="/usr/local/etc/mediamtx.yml"
 readonly SERVICE_DIR="/etc/systemd/system"
 readonly SERVICE_USER="mediamtxmon"
@@ -62,6 +63,12 @@ systemctl reset-failed
 if [ -e "$MEDIAMTX_BIN" ] || [ -L "$MEDIAMTX_BIN" ]; then
   printf 'Entferne MediaMTX: %s\n' "$MEDIAMTX_BIN"
   rm -f -- "$MEDIAMTX_BIN"
+fi
+
+# Monitor-Kommando entfernen.
+if [ -e "$MONITOR_CLI" ] || [ -L "$MONITOR_CLI" ]; then
+  printf 'Entferne Monitor-Kommando: %s\n' "$MONITOR_CLI"
+  rm -f -- "$MONITOR_CLI"
 fi
 
 # MediaMTX-Konfiguration entfernen.

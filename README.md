@@ -100,6 +100,20 @@ RTSP und WebRTC und ergänzt ausschließlich die On-Demand-Vorschauregel.
 Zusätzlich installiert der Installer FFmpeg, Redis und eine Python-Venv mit den
 Monitor-Abhängigkeiten.
 
+## Version und Upgrade
+
+Die installierte Monitor-Version und ein Produktions-Upgrade werden über das
+mitinstallierte Kommando verwaltet:
+
+```bash
+mediamtx-monitor --version
+sudo mediamtx-monitor --upgrade
+```
+
+Das Upgrade aktualisiert Programmcode und Python-Abhängigkeiten im bestehenden
+venv. Die lokale `config/collector.yaml` bleibt erhalten. Für eine
+Erstinstallation ist weiterhin `install.sh` zu verwenden.
+
 ## Dienste und Benutzer
 
 | Dienst | Benutzer | Aufgabe |

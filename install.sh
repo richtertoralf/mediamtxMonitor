@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 readonly INSTALL_DIR="/opt/mediamtx-monitoring-backend"
 readonly MEDIAMTX_BIN="/usr/local/bin/mediamtx"
+readonly MONITOR_CLI="/usr/local/bin/mediamtx-monitor"
 readonly MEDIAMTX_CONFIG="/usr/local/etc/mediamtx.yml"
 readonly SERVICE_DIR="/etc/systemd/system"
 readonly SERVICE_USER="mediamtxmon"
@@ -146,6 +147,8 @@ printf 'Architektur: dpkg=%s, uname=%s -> MediaMTX linux_%s\n' \
 
 required_sources=(
   "$SCRIPT_DIR/requirements.txt"
+  "$SCRIPT_DIR/VERSION"
+  "$SCRIPT_DIR/mediamtx-monitor"
   "$SCRIPT_DIR/config/collector.yaml"
   "$SCRIPT_DIR/config/monitor-preview-path.yml"
   "$SCRIPT_DIR/systemd/mediamtx.service"
@@ -165,6 +168,7 @@ done
 existing_targets=(
   "$INSTALL_DIR"
   "$MEDIAMTX_BIN"
+  "$MONITOR_CLI"
   "$MEDIAMTX_CONFIG"
   "$SERVICE_DIR/mediamtx.service"
   "$SERVICE_DIR/mediamtx-api.service"
@@ -304,6 +308,7 @@ useradd \
 
 install -d -m 0755 /usr/local/bin /usr/local/etc
 install -o root -g root -m 0755 "$TEMP_DIR/extract/mediamtx" "$MEDIAMTX_BIN"
+install -o root -g root -m 0755 "$SCRIPT_DIR/mediamtx-monitor" "$MONITOR_CLI"
 install -o root -g root -m 0644 "$TEMP_DIR/mediamtx.yml" "$MEDIAMTX_CONFIG"
 
 install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 0755 "$INSTALL_DIR"
@@ -316,6 +321,7 @@ install -d -m 0755 \
 install -m 0644 "$SCRIPT_DIR"/bin/*.py "$INSTALL_DIR/bin/"
 install -m 0644 "$SCRIPT_DIR/config/collector.yaml" "$INSTALL_DIR/config/collector.yaml"
 install -m 0644 "$SCRIPT_DIR/requirements.txt" "$INSTALL_DIR/requirements.txt"
+install -m 0644 "$SCRIPT_DIR/VERSION" "$INSTALL_DIR/VERSION"
 install -m 0644 "$SCRIPT_DIR/static/index.html" "$INSTALL_DIR/static/index.html"
 install -m 0644 "$SCRIPT_DIR"/static/css/*.css "$INSTALL_DIR/static/css/"
 install -m 0644 "$SCRIPT_DIR"/static/js/*.js "$INSTALL_DIR/static/js/"

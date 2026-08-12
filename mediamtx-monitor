@@ -1,0 +1,163 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly DEFAULT_INSTALL_DIR="/opt/mediamtx-monitoring-backend"
+readonly INSTALL_DIR="${MEDIAMTX_MONITOR_INSTALL_DIR:-$DEFAULT_INSTALL_DIR}"
+readonly DEFAULT_CLI_PATH="/usr/local/bin/mediamtx-monitor"
+readonly CLI_PATH="${MEDIAMTX_MONITOR_CLI_PATH:-$DEFAULT_CLI_PATH}"
+readonly REPOSITORY_URL="${MEDIAMTX_MONITOR_REPOSITORY_URL:-https://github.com/richtertoralf/mediamtxMonitor.git}"
+readonly SERVICE_USER="${MEDIAMTX_MONITOR_SERVICE_USER:-mediamtxmon}"
+
+readonly SERVICES=(
+  mediamtx-api.service
+  mediamtx-collector.service
+  mediamtx-system.service
+)
+
+fail() {
+  printf 'Error: %s\n' "$*" >&2
+  exit 1
+}
+
+usage() {
+  printf 'Usage: mediamtx-monitor --version | --upgrade\n' >&2
+}
+
+read_version() {
+  local version_file=$1
+  local version
+
+  [ -r "$version_file" ] || fail "Version file is missing or unreadable: $version_file"
+  IFS= read -r version < "$version_file" || true
+  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
+    fail "Invalid version in $version_file"
+  printf '%s' "$version"
+}
+
+require_upgrade_commands() {
+  local command_name
+  for command_name in git rsync systemctl; do
+    command -v "$command_name" >/dev/null 2>&1 || fail "Required command is missing: $command_name"
+  done
+}
+
+upgrade_dependencies() {
+  local requirements_file="$INSTALL_DIR/requirements.txt"
+  local python_bin="$INSTALL_DIR/venv/bin/python"
+
+  [ -x "$python_bin" ] || fail "Existing Python environment is missing: $python_bin"
+  if [ "$INSTALL_DIR" = "$DEFAULT_INSTALL_DIR" ]; then
+    command -v runuser >/dev/null 2>&1 || fail "Required command is missing: runuser"
+    runuser -u "$SERVICE_USER" -- env HOME="$INSTALL_DIR" "$python_bin" -m pip install \
+      --disable-pip-version-check \
+      -r "$requirements_file"
+  else
+    "$python_bin" -m pip install --disable-pip-version-check -r "$requirements_file"
+  fi
+}
+
+install_application_file() {
+  local source_file=$1
+  local destination_file=$2
+
+  if [ "$INSTALL_DIR" = "$DEFAULT_INSTALL_DIR" ]; then
+    install -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0644 "$source_file" "$destination_file"
+  else
+    install -m 0644 "$source_file" "$destination_file"
+  fi
+}
+
+install_cli() {
+  local source_file=$1
+
+  if [ "$CLI_PATH" = "$DEFAULT_CLI_PATH" ]; then
+    install -o root -g root -m 0755 "$source_file" "$CLI_PATH"
+  else
+    install -m 0755 "$source_file" "$CLI_PATH"
+  fi
+}
+
+upgrade() {
+  local temp_dir source_dir installed_version available_version service status
+
+  [ -d "$INSTALL_DIR" ] || {
+    printf 'No existing MediaMTX Monitor installation found.\n' >&2
+    printf 'Run install.sh first.\n' >&2
+    exit 1
+  }
+  [ "$INSTALL_DIR" != "$DEFAULT_INSTALL_DIR" ] || [ "${EUID:-$(id -u)}" -eq 0 ] || \
+    fail "Root privileges are required. Run: sudo mediamtx-monitor --upgrade"
+
+  installed_version=$(read_version "$INSTALL_DIR/VERSION")
+  require_upgrade_commands
+
+  temp_dir=$(mktemp -d)
+  trap "rm -rf -- '$temp_dir'" EXIT
+  source_dir="$temp_dir/repository"
+
+  printf 'Downloading...\n'
+  git clone --depth 1 "$REPOSITORY_URL" "$source_dir" >/dev/null
+  available_version=$(read_version "$source_dir/VERSION")
+
+  printf 'Installed: %s\n' "$installed_version"
+  printf 'Available: %s\n\n' "$available_version"
+  if [ "$installed_version" = "$available_version" ]; then
+    printf 'MediaMTX Monitor is already up to date: %s\n' "$installed_version"
+    return 0
+  fi
+
+  for source_path in bin static requirements.txt mediamtx-monitor; do
+    [ -e "$source_dir/$source_path" ] || fail "Downloaded repository is incomplete: $source_path"
+  done
+
+  printf 'Updating application...\n'
+  rsync -rl --delete --exclude='__pycache__/' --exclude='*.pyc' \
+    "$source_dir/bin/" "$INSTALL_DIR/bin/"
+  rsync -rl --delete "$source_dir/static/" "$INSTALL_DIR/static/"
+  install_application_file "$source_dir/requirements.txt" "$INSTALL_DIR/requirements.txt"
+  install_cli "$source_dir/mediamtx-monitor"
+
+  printf 'Updating Python dependencies...\n'
+  upgrade_dependencies
+  install_application_file "$source_dir/VERSION" "$INSTALL_DIR/VERSION"
+  if [ "$INSTALL_DIR" = "$DEFAULT_INSTALL_DIR" ]; then
+    chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/bin" "$INSTALL_DIR/static"
+  fi
+
+  printf 'Restarting services...\n'
+  systemctl restart "${SERVICES[@]}"
+  printf '\n'
+  for service in "${SERVICES[@]}"; do
+    if status=$(systemctl is-active "$service"); then
+      printf '%-20s %s\n' "${service%.service}" "$status"
+    else
+      printf '%-20s %s\n' "${service%.service}" "${status:-failed}" >&2
+      fail "Service is not active after upgrade: $service"
+    fi
+  done
+
+  printf '\nUpgrade complete: %s -> %s\n' "$installed_version" "$available_version"
+}
+
+main() {
+  if [ "$#" -ne 1 ]; then
+    usage
+    exit 2
+  fi
+
+  case "$1" in
+    --version)
+      printf 'MediaMTX Monitor %s\n' "$(read_version "$INSTALL_DIR/VERSION")"
+      ;;
+    --upgrade)
+      upgrade
+      ;;
+    *)
+      printf 'Unknown option: %s\n' "$1" >&2
+      usage
+      exit 2
+      ;;
+  esac
+}
+
+main "$@"

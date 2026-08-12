@@ -53,6 +53,7 @@ Freigabe ausgeführt werden.
 bin/                  → /opt/mediamtx-monitoring-backend/bin/
 static/               → /opt/mediamtx-monitoring-backend/static/
 config/collector.yaml → /opt/mediamtx-monitoring-backend/config/collector.yaml
+VERSION               → /opt/mediamtx-monitoring-backend/VERSION
 ```
 
 `__pycache__/` und `*.pyc` werden ignoriert.
