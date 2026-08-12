@@ -134,6 +134,8 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
                 "mbpsReceiveRate": 4.0,
                 "mbpsLinkCapacity": 12.0,
                 "msRTT": 20,
+                "msReceiveTsbPdDelay": 2000,
+                "msSendTsbPdDelay": 9999,
                 "packetsReceivedRetrans": 10,
             },
             {
@@ -141,7 +143,14 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
                 "remoteAddr": "192.0.2.11:9000",
                 "mbpsSendRate": 3.5,
                 "mbpsLinkCapacity": 10.5,
+                "msReceiveTsbPdDelay": 8888,
+                "msSendTsbPdDelay": 1500,
                 "packetsRetrans": 4,
+            },
+            {
+                "id": "srt-reader-2",
+                "remoteAddr": "192.0.2.12:9000",
+                "msSendTsbPdDelay": 750,
             },
         ]
         self.rtmp_details = [
@@ -158,7 +167,10 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
                     {
                         "name": "srt-path",
                         "source": {"type": "srtConn", "id": "srt-publisher"},
-                        "readers": [{"type": "srtConn", "id": "srt-reader"}],
+                        "readers": [
+                            {"type": "srtConn", "id": "srt-reader"},
+                            {"type": "srtConn", "id": "srt-reader-2"},
+                        ],
                     },
                     {
                         "name": "rtmp-path",
@@ -228,8 +240,15 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
 
         self.assertEqual(srt_path["source"]["srt_health"]["rx_mbps"], 4.0)
         self.assertEqual(srt_path["readers"][0]["srt_health"]["tx_mbps"], 3.5)
+        self.assertEqual(srt_path["source"]["srt_latency_ms"], 2000)
+        self.assertEqual(srt_path["readers"][0]["srt_latency_ms"], 1500)
+        self.assertEqual(srt_path["readers"][1]["srt_latency_ms"], 750)
+        self.assertNotEqual(srt_path["source"]["srt_latency_ms"], 9999)
+        self.assertNotEqual(srt_path["readers"][0]["srt_latency_ms"], 8888)
         self.assertNotIn("srt_health", rtmp_path["source"])
         self.assertNotIn("srt_health", rtmp_path["readers"][0])
+        self.assertNotIn("srt_latency_ms", rtmp_path["source"])
+        self.assertNotIn("srt_latency_ms", rtmp_path["readers"][0])
 
         health_keys = {
             key for key in self.redis.values if key.startswith("srt-health:")
@@ -267,6 +286,24 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
         self.assertEqual(snapshot[0]["readers"][0]["bitrate_mbps"], 0.0)
         self.assertIsNone(snapshot[1]["source"]["bitrate_mbps"])
         self.assertIsNone(snapshot[1]["readers"][0]["bitrate_mbps"])
+
+    def test_missing_and_null_srt_latency_remain_unavailable(self):
+        self.srt_details[0].pop("msReceiveTsbPdDelay")
+        self.srt_details[1]["msSendTsbPdDelay"] = None
+
+        snapshot = self.collect()
+
+        self.assertNotIn("srt_latency_ms", snapshot[0]["source"])
+        self.assertNotIn("srt_latency_ms", snapshot[0]["readers"][0])
+
+    def test_zero_srt_latency_is_preserved(self):
+        self.srt_details[0]["msReceiveTsbPdDelay"] = 0
+        self.srt_details[1]["msSendTsbPdDelay"] = 0
+
+        snapshot = self.collect()
+
+        self.assertEqual(snapshot[0]["source"]["srt_latency_ms"], 0)
+        self.assertEqual(snapshot[0]["readers"][0]["srt_latency_ms"], 0)
 
     def test_rtsp_rtmp_and_hls_keep_missing_rates_null_and_raw_metrics(self):
         protocol_details = {

@@ -40,9 +40,11 @@ const srtPublisher = renderStreamLeft({
     details: {
       remoteAddr: "192.0.2.3:9000",
       bytesReceived: 4096,
+      msSendTsbPdDelay: 9999,
       packetsReceivedLossRate: 0,
       created: "2020-01-01T00:00:00Z",
     },
+    srt_latency_ms: 2000,
     srt_health: {
       link_capacity_mbps: 12.5,
       reserve_ratio: 3.3,
@@ -58,6 +60,8 @@ assert.match(srtPublisher, /192\.0\.2\.3:9000/);
 assertMetric(srtPublisher, "RX", "3.75", "Mbit/s");
 assertMetric(srtPublisher, "Total", "4.00 KB");
 assertMetric(srtPublisher, "RTT", "24.00", "ms");
+assertMetric(srtPublisher, "Latency", "2000", "ms");
+assert.doesNotMatch(srtPublisher, /9999/);
 assertMetric(srtPublisher, "Loss", "0.00", "%");
 assertMetric(srtPublisher, "Retrans", "0", "pkt");
 assertMetric(srtPublisher, "Drop", "0", "pkt");
@@ -70,8 +74,10 @@ const srtReader = renderReader({
   details: {
     remoteAddr: "192.0.2.1:9000",
     bytesSent: 999999,
+    msReceiveTsbPdDelay: 8888,
     packetsSendLossRate: 0,
   },
+  srt_latency_ms: 1500,
   bitrate_mbps: 9.99,
   srt_health: {
     tx_mbps: 4.25,
@@ -86,6 +92,8 @@ const srtReader = renderReader({
 assert.match(srtReader, /Reader 1/);
 assertMetric(srtReader, "TX", "4.25", "Mbit/s");
 assertMetric(srtReader, "RTT", "31.00", "ms");
+assertMetric(srtReader, "Latency", "1500", "ms");
+assert.doesNotMatch(srtReader, /8888/);
 assertMetric(srtReader, "Loss", "0.00", "%");
 assertMetric(srtReader, "Drop", "0", "pkt");
 assert.doesNotMatch(srtReader, /Ping/);
@@ -166,6 +174,14 @@ assertMetric(hlsReader, "Total", "0 B");
 assert.match(hlsReader, /Agent: Field Player\/1\.0/);
 assert.match(hlsReader, /CDN: nein/);
 assert.doesNotMatch(hlsReader, /RTT|Ping|Loss|Jitter/);
+assert.doesNotMatch(hlsReader, /Latency/);
+
+const missingSrtLatency = renderReader({
+  type: "srtConn",
+  srt_latency_ms: null,
+  details: {msSendTsbPdDelay: null},
+});
+assert.doesNotMatch(missingSrtLatency, /Latency/);
 
 const healthOnly = renderSrtHealth({
   rx_mbps: 4.2,

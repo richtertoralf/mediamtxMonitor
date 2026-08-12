@@ -164,6 +164,7 @@ function renderSrtMetrics(connection, direction, totalBytes) {
       health.rtt_ms,
       details.msRTT,
     ), 2), "ms"),
+    metric("Latency", formatCount(connection?.srt_latency_ms), "ms"),
     loss,
     metric("Retrans", formatCount(health.retrans_packets), "pkt"),
     metric("Drop", formatCount(health.drop_packets), "pkt"),

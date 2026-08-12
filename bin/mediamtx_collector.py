@@ -336,6 +336,10 @@ def collect_and_store() -> None:
                 logging.debug(f"RTT-Messung fehlgeschlagen für {name} ({remote}): {e}")
 
         if src_type == "srtConn":
+            if src_details.get("msReceiveTsbPdDelay") is not None:
+                entry["source"]["srt_latency_ms"] = src_details[
+                    "msReceiveTsbPdDelay"
+                ]
             entry["source"]["srt_health"] = build_srt_health(
                 r,
                 key=publisher_srt_health_key(
@@ -396,6 +400,10 @@ def collect_and_store() -> None:
                 "details": rd_details,
             }
             if rtype == "srtConn":
+                if rd_details.get("msSendTsbPdDelay") is not None:
+                    reader_entry["srt_latency_ms"] = rd_details[
+                        "msSendTsbPdDelay"
+                    ]
                 reader_entry["srt_health"] = build_srt_health(
                     r,
                     key=reader_srt_health_key(
