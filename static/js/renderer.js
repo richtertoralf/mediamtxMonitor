@@ -81,8 +81,8 @@ function protocolMarkerClass(type) {
   return "marker-generic";
 }
 
-function metric(label, value, unit = null) {
-  return value == null ? null : {label, value, unit};
+function metric(label, value, unit = null, assessment = null) {
+  return value == null ? null : {label, value, unit, assessment};
 }
 
 function renderMetrics(metrics) {
@@ -91,7 +91,7 @@ function renderMetrics(metrics) {
   return `
     <dl class="metric-grid">
       ${available.map(item => `
-        <div class="metric">
+        <div class="metric${item.assessment ? " metric-with-assessment" : ""}">
           <dt>
             <span class="metric-label">${escapeHtml(item.label)}</span>
             ${item.unit == null
@@ -99,6 +99,7 @@ function renderMetrics(metrics) {
               : `<span class="metric-unit">${escapeHtml(item.unit)}</span>`}
           </dt>
           <dd>${escapeHtml(item.value)}</dd>
+          ${item.assessment || ""}
         </div>
       `).join("")}
     </dl>
@@ -144,6 +145,30 @@ function pingValue(connection) {
   return firstAvailable(connection?.ping_rtt_ms, connection?.icmp_rtt_ms);
 }
 
+function renderSrtRttAssessment(rttValue, latencyValue) {
+  const rtt = optionalNumber(rttValue);
+  const latency = optionalNumber(latencyValue);
+  if (rtt == null || rtt < 0 || latency == null || latency <= 0) return null;
+
+  const ratio = rtt / latency;
+  const status = ratio < 0.25 ? "good" : ratio <= 0.33 ? "warning" : "critical";
+  const percentage = ratio * 100;
+  const percentageLabel = percentage === 0
+    ? "0%"
+    : percentage < 1 ? "<1%" : `${Math.round(percentage)}%`;
+  const fillPercentage = Number((Math.min(ratio / 0.40, 1) * 100).toFixed(2));
+
+  return `
+    <div class="srt-rtt-assessment srt-rtt-${status}"
+         aria-label="RTT-Latency-Nutzung: ${escapeHtml(percentageLabel)}">
+      <span class="srt-rtt-track" aria-hidden="true">
+        <span class="srt-rtt-fill" style="width: ${fillPercentage}%"></span>
+      </span>
+      <span class="srt-rtt-percentage">${escapeHtml(percentageLabel)}</span>
+    </div>
+  `;
+}
+
 function renderSrtMetrics(connection, direction, totalBytes) {
   const details = connection?.details || {};
   const health = connection?.srt_health || {};
@@ -155,15 +180,21 @@ function renderSrtMetrics(connection, direction, totalBytes) {
   const loss = lossRate != null
     ? metric("Loss", formatNumber(lossRate, 2), "%")
     : metric("Loss", formatCount(health.loss_packets), "pkt");
+  const rtt = firstAvailable(
+    connection?.transport_rtt_ms,
+    health.rtt_ms,
+    details.msRTT,
+  );
 
   return renderMetrics([
     metric(rateLabel, rate == null ? "—" : formatNumber(rate, 2), "Mbit/s"),
     metric("Total", formatBytes(totalBytes)),
-    metric("RTT", formatNumber(firstAvailable(
-      connection?.transport_rtt_ms,
-      health.rtt_ms,
-      details.msRTT,
-    ), 2), "ms"),
+    metric(
+      "RTT",
+      formatNumber(rtt, 2),
+      "ms",
+      renderSrtRttAssessment(rtt, connection?.srt_latency_ms),
+    ),
     metric("Latency", formatCount(connection?.srt_latency_ms), "ms"),
     loss,
     metric("Retrans", formatCount(health.retrans_packets), "pkt"),

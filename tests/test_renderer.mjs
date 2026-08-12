@@ -29,6 +29,16 @@ function assertMetric(html, label, value, unit = null) {
   assert.match(html, expression);
 }
 
+function assertRttAssessment(html, status, percentageLabel, fillPercentage) {
+  const escapedLabel = percentageLabel.replace("<", "&lt;");
+  assert.match(html, new RegExp(
+    `class="srt-rtt-assessment srt-rtt-${status}"[\\s\\S]*`
+      + `aria-label="RTT-Latency-Nutzung: ${escapedLabel}"[\\s\\S]*`
+      + `style="width: ${fillPercentage}%"[\\s\\S]*`
+      + `<span class="srt-rtt-percentage">${escapedLabel}<\\/span>`,
+  ));
+}
+
 
 const srtPublisher = renderStreamLeft({
   name: "camera/srt",
@@ -61,6 +71,7 @@ assertMetric(srtPublisher, "RX", "3.75", "Mbit/s");
 assertMetric(srtPublisher, "Total", "4.00 KB");
 assertMetric(srtPublisher, "RTT", "24.00", "ms");
 assertMetric(srtPublisher, "Latency", "2000", "ms");
+assertRttAssessment(srtPublisher, "good", "1%", 3);
 assert.doesNotMatch(srtPublisher, /9999/);
 assertMetric(srtPublisher, "Loss", "0.00", "%");
 assertMetric(srtPublisher, "Retrans", "0", "pkt");
@@ -93,6 +104,7 @@ assert.match(srtReader, /Reader 1/);
 assertMetric(srtReader, "TX", "4.25", "Mbit/s");
 assertMetric(srtReader, "RTT", "31.00", "ms");
 assertMetric(srtReader, "Latency", "1500", "ms");
+assertRttAssessment(srtReader, "good", "2%", 5.17);
 assert.doesNotMatch(srtReader, /8888/);
 assertMetric(srtReader, "Loss", "0.00", "%");
 assertMetric(srtReader, "Drop", "0", "pkt");
@@ -182,6 +194,69 @@ const missingSrtLatency = renderReader({
   details: {msSendTsbPdDelay: null},
 });
 assert.doesNotMatch(missingSrtLatency, /Latency/);
+assert.doesNotMatch(missingSrtLatency, /srt-rtt-assessment/);
+
+const healthySrtIn = renderStreamLeft({
+  source: {
+    type: "srtConn",
+    transport_rtt_ms: 70,
+    srt_latency_ms: 2000,
+    details: {},
+  },
+});
+assertMetric(healthySrtIn, "RTT", "70.00", "ms");
+assertMetric(healthySrtIn, "Latency", "2000", "ms");
+assertRttAssessment(healthySrtIn, "good", "4%", 8.75);
+
+const warningSrtOut = renderReader({
+  type: "srtConn",
+  srt_latency_ms: 2000,
+  details: {msRTT: 600},
+});
+assertMetric(warningSrtOut, "RTT", "600.00", "ms");
+assertMetric(warningSrtOut, "Latency", "2000", "ms");
+assertRttAssessment(warningSrtOut, "warning", "30%", 75);
+
+const criticalSrtOut = renderReader({
+  type: "srtConn",
+  srt_latency_ms: 2000,
+  details: {msRTT: 900},
+});
+assertRttAssessment(criticalSrtOut, "critical", "45%", 100);
+
+const percentageCases = [
+  {ratio: 0, label: "0%", fill: 0},
+  {ratio: 0.0033, label: "<1%", fill: 0.82},
+  {ratio: 0.0349, label: "3%", fill: 8.72},
+  {ratio: 0.30, label: "30%", fill: 75},
+  {ratio: 1.24, label: "124%", fill: 100},
+];
+for (const {ratio, label, fill} of percentageCases) {
+  const html = renderReader({
+    type: "srtConn",
+    srt_latency_ms: 100,
+    details: {msRTT: ratio * 100},
+  });
+  const status = ratio < 0.25 ? "good" : ratio <= 0.33 ? "warning" : "critical";
+  assertRttAssessment(html, status, label, fill);
+}
+
+for (const latency of [undefined, null, 0]) {
+  const unavailableAssessment = renderReader({
+    type: "srtConn",
+    srt_latency_ms: latency,
+    details: {msRTT: 100},
+  });
+  assert.doesNotMatch(unavailableAssessment, /srt-rtt-assessment/);
+}
+
+const missingRttAssessment = renderReader({
+  type: "srtConn",
+  srt_latency_ms: 2000,
+  details: {msRTT: null},
+});
+assert.doesNotMatch(missingRttAssessment, /srt-rtt-assessment/);
+assert.doesNotMatch(rtmpReader, /srt-rtt-assessment/);
 
 const healthOnly = renderSrtHealth({
   rx_mbps: 4.2,
@@ -205,6 +280,9 @@ assert.match(rendererStyles, /\.metric dd\s*\{[^}]*white-space:\s*nowrap;/s);
 assert.match(rendererStyles, /\.metric dt\s*\{[^}]*white-space:\s*nowrap;/s);
 assert.match(rendererStyles, /\.metric-label\s*\{[^}]*white-space:\s*nowrap;/s);
 assert.match(rendererStyles, /\.metric-grid\s*\{[^}]*border:\s*1px solid var\(--border\);/s);
+assert.doesNotMatch(rendererStyles, /\.metric\s*\{[^}]*flex-wrap:\s*wrap;/s);
+assert.match(rendererStyles, /\.metric-with-assessment\s*\{[^}]*flex-wrap:\s*wrap;/s);
+assert.match(rendererStyles, /\.srt-rtt-track\s*\{[^}]*flex:\s*1 1 auto;/s);
 
 
 const injectionPayloads = [

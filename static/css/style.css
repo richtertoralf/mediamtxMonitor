@@ -12,6 +12,9 @@
   --marker-hls: #4fa8ef;
   --marker-webrtc: #65c879;
   --marker-generic: #9aa5ad;
+  --status-good: #65b97a;
+  --status-warning: #d4a94f;
+  --status-critical: #d0645f;
 }
 
 * {
@@ -206,6 +209,10 @@ body > h1 {
   line-height: 1.14;
 }
 
+.metric-with-assessment {
+  flex-wrap: wrap;
+}
+
 .metric dt,
 .metric dd {
   margin: 0;
@@ -222,6 +229,45 @@ body > h1 {
   font-weight: 650;
   white-space: nowrap;
 }
+
+.srt-rtt-assessment {
+  display: flex;
+  flex: 0 0 100%;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  padding-top: 2px;
+}
+
+.srt-rtt-track {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 9px;
+  overflow: hidden;
+  background: #41484d;
+  border-radius: 999px;
+}
+
+.srt-rtt-fill {
+  display: block;
+  height: 100%;
+  background: currentColor;
+  border-radius: inherit;
+}
+
+.srt-rtt-percentage {
+  flex: 0 0 auto;
+  min-width: 2.5em;
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.srt-rtt-good { color: var(--status-good); }
+.srt-rtt-warning { color: var(--status-warning); }
+.srt-rtt-critical { color: var(--status-critical); }
 
 .metric-label {
   color: var(--text-muted);
