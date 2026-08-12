@@ -50,9 +50,10 @@ upgrade_dependencies() {
     command -v runuser >/dev/null 2>&1 || fail "Required command is missing: runuser"
     runuser -u "$SERVICE_USER" -- env HOME="$INSTALL_DIR" "$python_bin" -m pip install \
       --disable-pip-version-check \
+      --upgrade \
       -r "$requirements_file"
   else
-    "$python_bin" -m pip install --disable-pip-version-check -r "$requirements_file"
+    "$python_bin" -m pip install --disable-pip-version-check --upgrade -r "$requirements_file"
   fi
 }
 

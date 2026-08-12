@@ -78,7 +78,7 @@ fi
         (self.install_dir / "config/collector.yaml").write_text("local: true\n", encoding="utf-8")
         self._write_executable(
             self.install_dir / "venv/bin/python",
-            "#!/usr/bin/env bash\nprintf 'python %s\n' \"$*\" >> \"$FAKE_LOG\"\n",
+            "#!/usr/bin/env bash\nprintf '%s %s\n' \"$0\" \"$*\" >> \"$FAKE_LOG\"\n",
         )
 
     def _create_source(self, version: str = "0.1.1") -> None:
@@ -122,7 +122,9 @@ fi
         result = self._run("--upgrade")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("already up to date: 0.1.0", result.stdout)
-        self.assertNotIn("systemctl", self.log_file.read_text(encoding="utf-8"))
+        log = self.log_file.read_text(encoding="utf-8")
+        self.assertNotIn("python -m pip install", log)
+        self.assertNotIn("systemctl", log)
 
     def test_upgrade_updates_program_dependencies_version_and_services(self) -> None:
         self._create_installation()
@@ -138,7 +140,11 @@ fi
         )
         self.assertEqual((self.install_dir / "VERSION").read_text(encoding="utf-8"), "0.1.1\n")
         log = self.log_file.read_text(encoding="utf-8")
-        self.assertIn(f"python -m pip install --disable-pip-version-check -r {self.install_dir}/requirements.txt", log)
+        self.assertIn(
+            f"{self.install_dir}/venv/bin/python -m pip install "
+            f"--disable-pip-version-check --upgrade -r {self.install_dir}/requirements.txt",
+            log,
+        )
         self.assertIn(f"systemctl restart {' '.join(SERVICES)}", log)
         for service in SERVICES:
             self.assertIn(f"systemctl is-active {service}", log)
