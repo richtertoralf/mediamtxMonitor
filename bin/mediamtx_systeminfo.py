@@ -16,7 +16,7 @@ import time
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Callable, Dict
 
 try:
     from .monitoring_config import (
@@ -240,6 +240,23 @@ def get_system_info():
         logging.warning(f"⚠️ Fehler beim Parsen von Systemdaten: {e}")
         return {}
 
+
+def _run_interval_loop(job: Callable[[], None], interval_seconds: float) -> None:
+    next_run = time.monotonic() + interval_seconds
+    while True:
+        time.sleep(max(0.0, next_run - time.monotonic()))
+        try:
+            job()
+        except Exception:
+            logging.exception("❌ Unbehandelter Fehler im Systemmonitor-Durchlauf.")
+
+        next_run += interval_seconds
+        now = time.monotonic()
+        if next_run <= now:
+            missed_intervals = int((now - next_run) // interval_seconds) + 1
+            next_run += missed_intervals * interval_seconds
+
+
 def main() -> None:
     logging.basicConfig(
         level=logging.DEBUG,
@@ -247,18 +264,11 @@ def main() -> None:
     )
     initialize_runtime()
 
-    from apscheduler.schedulers.background import BackgroundScheduler
-
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(collect_and_store, "interval", seconds=INTERVAL_SECONDS)
-    scheduler.start()
     logging.info("🚀 Systemmonitor gestartet.")
 
     try:
-        while True:
-            time.sleep(60)
+        _run_interval_loop(collect_and_store, INTERVAL_SECONDS)
     except (KeyboardInterrupt, SystemExit):
-        scheduler.shutdown()
         logging.info("🛑 Systemmonitor gestoppt.")
 
 

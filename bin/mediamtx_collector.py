@@ -46,7 +46,7 @@ import logging
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 try:
     from .bitrate import calc_bitrate
@@ -436,6 +436,22 @@ def collect_and_store() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _run_interval_loop(job: Callable[[], None], interval_seconds: float) -> None:
+    next_run = time.monotonic() + interval_seconds
+    while True:
+        time.sleep(max(0.0, next_run - time.monotonic()))
+        try:
+            job()
+        except Exception:
+            logging.exception("❌ Unbehandelter Fehler im Collector-Durchlauf.")
+
+        next_run += interval_seconds
+        now = time.monotonic()
+        if next_run <= now:
+            missed_intervals = int((now - next_run) // interval_seconds) + 1
+            next_run += missed_intervals * interval_seconds
+
+
 def main(run_once: bool = False) -> None:
     """
     Startet den Collector einmalig oder als dauerhaften Hintergrundjob.
@@ -446,21 +462,14 @@ def main(run_once: bool = False) -> None:
     )
     initialize_runtime()
 
-    from apscheduler.schedulers.background import BackgroundScheduler
-
     if run_once:
         collect_and_store()
         return
 
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(collect_and_store, "interval", seconds=INTERVAL)
-    scheduler.start()
     logging.info("🚀 Stream-Collector gestartet.")
     try:
-        while True:
-            time.sleep(60)
+        _run_interval_loop(collect_and_store, INTERVAL)
     except KeyboardInterrupt:
-        scheduler.shutdown()
         logging.info("🛑 Collector gestoppt.")
 
 

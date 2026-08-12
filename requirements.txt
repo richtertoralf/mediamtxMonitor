@@ -1,6 +1,6 @@
 psutil
 redis
-apscheduler
-uvicorn[standard]
+uvicorn
 fastapi
 requests
+PyYAML
