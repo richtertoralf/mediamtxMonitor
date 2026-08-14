@@ -5,12 +5,14 @@ from bin.redis_keys import (
     DEFAULT_STREAM_SNAPSHOT_KEY,
     DEFAULT_SYSTEM_SNAPSHOT_KEY,
     bitrate_state_keys,
+    connection_history_key,
     publisher_connection_key,
     publisher_rtt_keys,
     publisher_srt_health_key,
     reader_connection_key,
     reader_srt_health_key,
     srt_counter_key,
+    stream_snapshot_freshness_key,
 )
 
 
@@ -19,8 +21,27 @@ class SnapshotKeyTests(unittest.TestCase):
         self.assertEqual(DEFAULT_STREAM_SNAPSHOT_KEY, "mediamtx:streams:latest")
         self.assertEqual(DEFAULT_SYSTEM_SNAPSHOT_KEY, "mediamtx:system:latest")
 
+    def test_stream_freshness_is_a_snapshot_sidecar(self):
+        self.assertEqual(
+            stream_snapshot_freshness_key("mediamtx:streams:latest"),
+            "mediamtx:streams:latest:collected_at",
+        )
+
 
 class ConnectionStateKeyTests(unittest.TestCase):
+    def test_history_wraps_existing_publisher_and_reader_identity(self):
+        publisher = publisher_connection_key("stream", "srtConn", "pub-id")
+        reader = reader_connection_key("stream", "srtConn", "reader-id")
+
+        self.assertEqual(
+            connection_history_key(publisher),
+            "history:pub:stream:srtConn:pub-id",
+        )
+        self.assertEqual(
+            connection_history_key(reader),
+            "history:rd:stream:srtConn:reader-id",
+        )
+
     def test_publisher_bitrate_keys_match_existing_schema(self):
         base_key = publisher_connection_key("stream", "srtConn", "123")
         self.assertEqual(base_key, "pub:stream:srtConn:123")

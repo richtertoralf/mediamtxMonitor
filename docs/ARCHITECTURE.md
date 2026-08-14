@@ -81,6 +81,8 @@ Metric Enrichment (bitrate, RTT, protocol metrics)
         v
 Redis Snapshot / Redis Measurement State
         |
+        +-- Redis Short History (ca. 60 s)
+        |
         v
 FastAPI
         |
@@ -118,7 +120,7 @@ Die folgenden Ebenen sind fachlich und im Code nachvollziehbar zu trennen:
 2. **Normalized Monitoring Data:** Stabiler, MediaMTX-Monitor-spezifischer
    Vertrag für Node, Stream, Publisher, Reader und Medieninformationen.
 3. **Metrics:** Gemessene oder berechnete Werte wie Byte-Zähler, Bitrate, RTT,
-   Retransmissions und Reserve. Messwerte sind noch keine Bewertung.
+   Retransmissions und SRT-Link-Capacity. Messwerte sind noch keine Bewertung.
 4. **Health Evaluation:** Nachvollziehbare Bewertung normalisierter Metriken mit
    Status, Regeln und Gründen. Sie bleibt von Erfassung und Berechnung getrennt.
 5. **Presentation:** Formatierung, Sortierung und sichere Darstellung für API
@@ -174,6 +176,43 @@ Der Redis Store kapselt Verbindung, JSON-Snapshots sowie deren Lese- und
 Schreibfehler. Redis dient sowohl als aktueller Snapshot-Speicher als auch als
 kurzlebiger Zustand für Delta- und Glättungsberechnungen; diese Rollen müssen in
 API und Key-Namen unterscheidbar bleiben.
+
+Pro Verbindung wird zusätzlich eine zeitlich begrenzte Kurzzeithistorie als
+Redis Sorted Set geführt. Der Score ist der reale Messzeitpunkt; alte Samples
+werden zeitbasiert entfernt und verwaiste Histories laufen per TTL aus. Diese
+History ist kein Langzeitarchiv. Die optionalen 10-s- und 60-s-Fenster werden
+aus derselben Rohhistorie berechnet.
+
+Die Laufzeitauswertung hält SRT-Transport-RTT und ICMP-Ping getrennt. Für beide
+werden p50 und p95 linear interpoliert; die jeweilige Variation ist
+`p95 - p50`. Bereits durch den Collector aus nativen SRT-Gesamtzählern gebildete
+Intervallereignisse werden innerhalb der Fenster summiert. Daraus entsteht in
+dieser Stufe keine Health- oder Stability-Bewertung.
+
+### Collector-Cadence und Current State
+
+MediaMTX ist die einzige Quelle für aktuell existierende Publisher und Reader.
+Der Collector liest die Path-Topologie ungefähr einmal pro Sekunde und fragt in
+diesem schnellen Pfad nur die Detaillisten der dort tatsächlich referenzierten
+Verbindungstypen ab. Der Current Snapshot wird nach jedem erfolgreichen
+Path-Poll vollständig ersetzt. Ein separater Redis-Wert `collected_at` zum
+Snapshot-Key macht den Zeitpunkt des letzten erfolgreichen Schreibens in der
+API sichtbar.
+
+Langsamer wechselnde bzw. diagnostische Daten bleiben im seriellen Collector,
+werden aber seltener aktualisiert: die MediaMTX-Version alle 60 Sekunden,
+Path-Forward-Ziele und die optionale JSON-Diagnosedatei alle 5 Sekunden.
+ICMP-Messungen behalten ihre eigene, langsamere Cache-Cadence; ein gecachter
+Ping-Wert wird nicht bei jedem schnellen Poll als neue unabhängige
+History-Messung gespeichert.
+
+MediaMTX-Connection-IDs werden als eigenständige aktuelle Connections
+behandelt. Der Monitor führt keine IP-, Port- oder zeitbasierte Deduplizierung
+reconnectender Reader durch. Mehrere gleichzeitig von MediaMTX gemeldete
+Connections werden gleichzeitig dargestellt. Kurzzeithistorien sind strikt vom
+Current State getrennt: Sie dürfen nach einem Disconnect bis zu ihrer TTL
+fortbestehen, werden aber weder zur Connection-Erkennung noch zur
+Snapshot-Zusammenführung verwendet.
 
 ### Redis Key Schema
 
@@ -270,6 +309,7 @@ bin/
 ├── redis_keys.py                # zentrales Key-Schema, falls separat sinnvoll
 ├── bitrate.py                   # Bitratenmetrik
 ├── rtt.py                       # RTT-Metrik
+├── connection_history.py        # 60-s-History und Fensterstatistiken
 ├── srt_health.py                # SRT-Metriken; Bewertung später getrennt
 ├── health.py                    # erst bei konkreter Health-Bewertung
 └── system_metrics.py            # testbare Host-Erfassung, bei Extraktion
@@ -312,4 +352,7 @@ Verhalten erhalten, passende Tests besitzen und separat deploybar sein.
 14. Modulimporte erzeugen keine Netzwerkverbindungen, Scheduler oder Loops.
 15. Installation und Deployment bleiben außerhalb der fachlichen Monitoring-
     Logik.
-
+16. MediaMTX allein bestimmt den aktuellen Connection-Bestand; History erzeugt
+    oder verlängert keinen Current State.
+17. Reconnectende Reader werden nicht anhand von Adresse, Port oder Zeitfenster
+    dedupliziert.

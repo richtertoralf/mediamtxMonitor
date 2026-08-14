@@ -12,7 +12,10 @@ Konfiguration:
 - /opt/mediamtx-monitoring-backend/config/collector.yaml
   Erwartete Keys (Beispiele; alle optional mit Defaults):
     api_base_url: "http://localhost:9997"
-    interval_seconds: 10
+    interval_seconds: 1
+    version_refresh_seconds: 60
+    forward_refresh_seconds: 5
+    output_refresh_seconds: 5
     output_json_path: "/tmp/mediamtx_streams.json"
     redis:
       host: "localhost"
@@ -41,6 +44,7 @@ Voraussetzung:
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass, field
 import json
 import logging
 import sys
@@ -49,7 +53,19 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 try:
+    from redis.exceptions import RedisError
+except ImportError:  # Unit tests load product modules without runtime dependencies.
+    class RedisError(Exception):
+        pass
+
+try:
     from .bitrate import calc_bitrate
+    from .connection_history import (
+        HISTORY_RETENTION_SECONDS,
+        HISTORY_TTL_SECONDS,
+        build_history_sample,
+        summarize_history,
+    )
     from .mediamtx_client import MediaMTXClient, MediaMTXError, MediaMTXHTTPError
     from .mediamtx_model import (
         DETAIL_ENDPOINTS,
@@ -66,16 +82,24 @@ try:
     )
     from .rtt import measure_publisher_rtt_ms
     from .redis_keys import (
+        connection_history_key,
         publisher_connection_key,
         publisher_srt_health_key,
         reader_connection_key,
         reader_srt_health_key,
+        stream_snapshot_freshness_key,
     )
     from .redis_store import RedisStore
     from .srt_health import build_srt_health
     from .stream_normalizer import connection_identity, normalize_stream
 except ImportError:
     from bitrate import calc_bitrate
+    from connection_history import (
+        HISTORY_RETENTION_SECONDS,
+        HISTORY_TTL_SECONDS,
+        build_history_sample,
+        summarize_history,
+    )
     from mediamtx_client import MediaMTXClient, MediaMTXError, MediaMTXHTTPError
     from mediamtx_model import (
         DETAIL_ENDPOINTS,
@@ -92,10 +116,12 @@ except ImportError:
     )
     from rtt import measure_publisher_rtt_ms
     from redis_keys import (
+        connection_history_key,
         publisher_connection_key,
         publisher_srt_health_key,
         reader_connection_key,
         reader_srt_health_key,
+        stream_snapshot_freshness_key,
     )
     from redis_store import RedisStore
     from srt_health import build_srt_health
@@ -119,6 +145,7 @@ IGNORE_PATH_PREFIXES = COLLECTOR_CFG["ignore_path_prefixes"]
 BITRATE_CFG = config["bitrate"]
 BITRATE_MIN_DT = BITRATE_CFG["min_dt"]
 BITRATE_SMOOTH_ALPHA: Optional[float] = BITRATE_CFG["smooth_alpha"]
+BITRATE_SMOOTH_REFERENCE_SECONDS = BITRATE_CFG["smooth_reference_seconds"]
 BITRATE_TTL = BITRATE_CFG["ttl"]
 IGNORE_LOOPBACK = BITRATE_CFG["ignore_loopback"]
 RTT_CFG = config["rtt"]
@@ -127,10 +154,32 @@ snapshot_store = None
 mediamtx_client = None
 
 
+@dataclass
+class PollCache:
+    """Small in-process cache for data that does not belong in the 1 Hz path."""
+
+    mediamtx_version: Optional[str] = None
+    next_version_refresh: float = 0.0
+    next_forward_refresh: float = 0.0
+    next_output_write: float = 0.0
+    next_icmp_history_sample: float = 0.0
+    forward_destinations: Dict[str, Any] = field(default_factory=dict)
+
+
+poll_cache = PollCache()
+
+
+def reset_poll_cache() -> None:
+    """Reset slow-path state, primarily for runtime reconfiguration and tests."""
+    global poll_cache
+    poll_cache = PollCache()
+
+
 def configure_runtime(raw_config: Dict[str, Any]) -> None:
     global config, API_BASE, REDIS_CFG, REDIS_HOST, REDIS_PORT, REDIS_KEY
     global COLLECTOR_CFG, JSON_OUTPUT_PATH, INTERVAL, IGNORE_PATH_PREFIXES
-    global BITRATE_CFG, BITRATE_MIN_DT, BITRATE_SMOOTH_ALPHA, BITRATE_TTL
+    global BITRATE_CFG, BITRATE_MIN_DT, BITRATE_SMOOTH_ALPHA
+    global BITRATE_SMOOTH_REFERENCE_SECONDS, BITRATE_TTL
     global IGNORE_LOOPBACK, RTT_CFG
 
     config = resolve_monitoring_config(raw_config)
@@ -146,9 +195,13 @@ def configure_runtime(raw_config: Dict[str, Any]) -> None:
     BITRATE_CFG = config["bitrate"]
     BITRATE_MIN_DT = BITRATE_CFG["min_dt"]
     BITRATE_SMOOTH_ALPHA = BITRATE_CFG["smooth_alpha"]
+    BITRATE_SMOOTH_REFERENCE_SECONDS = BITRATE_CFG[
+        "smooth_reference_seconds"
+    ]
     BITRATE_TTL = BITRATE_CFG["ttl"]
     IGNORE_LOOPBACK = BITRATE_CFG["ignore_loopback"]
     RTT_CFG = config["rtt"]
+    reset_poll_cache()
 
 
 def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
@@ -177,10 +230,16 @@ def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
 # ---------------------------------------------------------------------------
 
 
-def fetch(endpoint: str, params: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+def fetch(
+    endpoint: str,
+    params: Optional[Dict[str, str]] = None,
+    *,
+    required: bool = False,
+) -> Dict[str, Any]:
     """
-    Holt JSON vom MediaMTX-API-Endpunkt. Gibt dict mit 'items' zurück (Liste),
-    oder {'items': []} bei Fehlern.
+    Holt JSON vom MediaMTX-API-Endpunkt. Optionale Abfragen liefern bei Fehlern
+    eine leere Liste; Fehler verpflichtender Current-State-Abfragen werden
+    weitergereicht, damit kein leerer oder teilweise veralteter Snapshot entsteht.
     """
     url = mediamtx_client.build_url(endpoint)
     try:
@@ -195,6 +254,8 @@ def fetch(endpoint: str, params: Optional[Dict[str, str]] = None) -> Dict[str, A
             and e.status_code == 404
         ):
             return {"items": []}
+        if required:
+            raise
         logging.warning(f"⚠️ API-Fehler {url}: {e}")
         return {"items": []}
 
@@ -223,19 +284,103 @@ def first_available(mapping: Dict[str, Any], *field_names: str) -> Any:
     return None
 
 
+def _update_connection_history(
+    connection: Dict[str, Any],
+    *,
+    history_key: str,
+    direction: str,
+    timestamp: float,
+    include_icmp: bool,
+) -> None:
+    """Persist optional live history without breaking the current snapshot."""
+    sample = build_history_sample(
+        connection,
+        direction,
+        timestamp,
+        include_icmp=include_icmp,
+    )
+    try:
+        snapshot_store.append_history_sample(
+            history_key,
+            sample,
+            timestamp=timestamp,
+            retention_seconds=HISTORY_RETENTION_SECONDS,
+            ttl_seconds=HISTORY_TTL_SECONDS,
+        )
+        samples = snapshot_store.read_history(
+            history_key,
+            from_timestamp=timestamp - 60,
+            to_timestamp=timestamp,
+        )
+        summary = summarize_history(samples, timestamp)
+        if summary:
+            connection["window_metrics"] = summary
+    except (RedisError, ConnectionError, TimeoutError, TypeError, ValueError) as exc:
+        logging.warning("Kurzzeithistorie konnte nicht geschrieben werden: %s", exc)
+
+
 # ---------------------------------------------------------------------------
 # Kernfunktion: Sammeln und Speichern
 # ---------------------------------------------------------------------------
 
 
-def collect_and_store() -> None:
+def collect_and_store() -> Dict[str, float]:
     """
     Sammelt Pfad-, Publisher- und Reader-Infos aus der MediaMTX-API,
     reichert diese um berechnete Bitraten an und schreibt das Ergebnis
     nach Redis und optional als JSON-Datei.
     """
-    info = fetch("/v3/info")
-    mediamtx_version = info.get("version")
+    cycle_started = time.perf_counter()
+    metrics = {
+        "api_duration_ms": 0.0,
+        "api_request_count": 0.0,
+        "history_duration_ms": 0.0,
+        "redis_snapshot_duration_ms": 0.0,
+        "icmp_duration_ms": 0.0,
+    }
+
+    def cycle_fetch(
+        endpoint: str,
+        params: Optional[Dict[str, str]] = None,
+        *,
+        required: bool = False,
+    ) -> Dict[str, Any]:
+        started = time.perf_counter()
+        try:
+            return fetch(endpoint, params=params, required=required)
+        finally:
+            metrics["api_duration_ms"] += (
+                time.perf_counter() - started
+            ) * 1000
+            metrics["api_request_count"] += 1
+
+    now = time.time()
+    version_refresh = COLLECTOR_CFG["version_refresh_seconds"]
+    if poll_cache.mediamtx_version is None or now >= poll_cache.next_version_refresh:
+        try:
+            info = cycle_fetch("/v3/info", required=True)
+        except MediaMTXError as exc:
+            logging.warning("MediaMTX-Version konnte nicht gelesen werden: %s", exc)
+            metrics["cycle_duration_ms"] = (
+                time.perf_counter() - cycle_started
+            ) * 1000
+            return metrics
+        mediamtx_version = info.get("version")
+        if not is_supported_version(mediamtx_version):
+            required = ".".join(str(part) for part in MINIMUM_MEDIAMTX_VERSION)
+            shown_version = mediamtx_version or "unbekannt"
+            logging.error(
+                "❌ MediaMTX %s wird nicht unterstützt; erforderlich ist v%s oder neuer.",
+                shown_version,
+                required,
+            )
+            metrics["cycle_duration_ms"] = (
+                time.perf_counter() - cycle_started
+            ) * 1000
+            return metrics
+        poll_cache.mediamtx_version = str(mediamtx_version)
+        poll_cache.next_version_refresh = now + version_refresh
+    mediamtx_version = poll_cache.mediamtx_version
     if not is_supported_version(mediamtx_version):
         required = ".".join(str(part) for part in MINIMUM_MEDIAMTX_VERSION)
         shown_version = mediamtx_version or "unbekannt"
@@ -244,28 +389,64 @@ def collect_and_store() -> None:
             shown_version,
             required,
         )
-        return
+        metrics["cycle_duration_ms"] = (
+            time.perf_counter() - cycle_started
+        ) * 1000
+        return metrics
 
-    # API-Aufrufe (alle Protokolllisten einmal zentral einsammeln)
-    paths = fetch("/v3/paths/list").get("items", [])
+    try:
+        paths = cycle_fetch("/v3/paths/list", required=True).get("items", [])
+    except MediaMTXError as exc:
+        logging.warning("MediaMTX-Paths konnten nicht gelesen werden: %s", exc)
+        metrics["cycle_duration_ms"] = (
+            time.perf_counter() - cycle_started
+        ) * 1000
+        return metrics
+    visible_paths = [
+        path
+        for path in paths
+        if not any(
+            str(path.get("name", "")).startswith(prefix)
+            for prefix in IGNORE_PATH_PREFIXES
+        )
+    ]
+    active_types = {
+        connection.get("type")
+        for path in visible_paths
+        for connection in [
+            path.get("source", {}) or {},
+            *((path.get("readers", []) or [])),
+        ]
+        if connection.get("type") in DETAIL_ENDPOINTS
+    }
     details = index_details({
-        obj_type: fetch(endpoint).get("items", [])
-        for obj_type, endpoint in DETAIL_ENDPOINTS.items()
+        obj_type: cycle_fetch(DETAIL_ENDPOINTS[obj_type]).get("items", [])
+        for obj_type in DETAIL_ENDPOINTS
+        if obj_type in active_types
     })
 
+    if now >= poll_cache.next_forward_refresh:
+        poll_cache.forward_destinations = {
+            str(path.get("name", "")): cycle_fetch(
+                "/v3/paths/forward/list",
+                params={"path": str(path.get("name", ""))},
+            ).get("items", [])
+            for path in visible_paths
+        }
+        poll_cache.next_forward_refresh = (
+            now + COLLECTOR_CFG["forward_refresh_seconds"]
+        )
+
     aggregated = []
-    now = time.time()
+    include_icmp_history = now >= poll_cache.next_icmp_history_sample
+    if include_icmp_history:
+        poll_cache.next_icmp_history_sample = now + float(
+            RTT_CFG["min_period_s"]
+        )
 
-    for path in paths:
+    for path in visible_paths:
         name: str = path.get("name", "")
-
-        if any(name.startswith(prefix) for prefix in IGNORE_PATH_PREFIXES):
-            logging.debug(f"⏭️ Interner Pfad ignoriert: {name}")
-            continue
-
-        forward_destinations = fetch(
-            "/v3/paths/forward/list", params={"path": name}
-        ).get("items", [])
+        forward_destinations = poll_cache.forward_destinations.get(name, [])
         entry = normalize_stream(
             path,
             details,
@@ -306,6 +487,7 @@ def collect_and_store() -> None:
                 now=now,
                 min_dt=BITRATE_MIN_DT,
                 smooth_alpha=BITRATE_SMOOTH_ALPHA,
+                smooth_reference_seconds=BITRATE_SMOOTH_REFERENCE_SECONDS,
                 ttl=BITRATE_TTL,
             )
 
@@ -324,6 +506,7 @@ def collect_and_store() -> None:
             )
         elif remote:
             try:
+                icmp_started = time.perf_counter()
                 rtt_ms = measure_configured_rtt(
                     r,
                     remote_addr=remote,
@@ -334,6 +517,10 @@ def collect_and_store() -> None:
                     entry["source"]["icmp_rtt_ms"] = round(rtt_ms, 2)
             except Exception as e:
                 logging.debug(f"RTT-Messung fehlgeschlagen für {name} ({remote}): {e}")
+            finally:
+                metrics["icmp_duration_ms"] += (
+                    time.perf_counter() - icmp_started
+                ) * 1000
 
         if src_type == "srtConn":
             if src_details.get("msReceiveTsbPdDelay") is not None:
@@ -352,6 +539,19 @@ def collect_and_store() -> None:
                 ttl=BITRATE_TTL,
                 transport_rtt_ms=entry["source"].get("transport_rtt_ms"),
             )
+
+        if src_type:
+            history_started = time.perf_counter()
+            _update_connection_history(
+                entry["source"],
+                history_key=connection_history_key(pub_key),
+                direction="publisher",
+                timestamp=now,
+                include_icmp=include_icmp_history,
+            )
+            metrics["history_duration_ms"] += (
+                time.perf_counter() - history_started
+            ) * 1000
 
         # ------------------------
         # Reader-Liste aufbereiten
@@ -384,6 +584,7 @@ def collect_and_store() -> None:
                     now=now,
                     min_dt=BITRATE_MIN_DT,
                     smooth_alpha=BITRATE_SMOOTH_ALPHA,
+                    smooth_reference_seconds=BITRATE_SMOOTH_REFERENCE_SECONDS,
                     ttl=BITRATE_TTL,
                 )
 
@@ -400,6 +601,10 @@ def collect_and_store() -> None:
                 "details": rd_details,
             }
             if rtype == "srtConn":
+                if rd_details.get("msRTT") is not None:
+                    reader_entry["transport_rtt_ms"] = round(
+                        float(rd_details["msRTT"]), 2
+                    )
                 if rd_details.get("msSendTsbPdDelay") is not None:
                     reader_entry["srt_latency_ms"] = rd_details[
                         "msSendTsbPdDelay"
@@ -414,7 +619,19 @@ def collect_and_store() -> None:
                     details=rd_details,
                     direction="reader",
                     ttl=BITRATE_TTL,
+                    transport_rtt_ms=reader_entry.get("transport_rtt_ms"),
                 )
+            history_started = time.perf_counter()
+            _update_connection_history(
+                reader_entry,
+                history_key=connection_history_key(rd_key),
+                direction="reader",
+                timestamp=now,
+                include_icmp=include_icmp_history,
+            )
+            metrics["history_duration_ms"] += (
+                time.perf_counter() - history_started
+            ) * 1000
             entry["readers"].append(reader_entry)
 
         aggregated.append(entry)
@@ -422,21 +639,49 @@ def collect_and_store() -> None:
     # -----------------------------------------------------------------------
     # Ergebnis nach Redis und optional als JSON-Datei schreiben
     # -----------------------------------------------------------------------
+    collected_at = time.time()
+    snapshot_started = time.perf_counter()
     try:
         snapshot_store.write_snapshot(REDIS_KEY, aggregated)
+        snapshot_store.write_snapshot(
+            stream_snapshot_freshness_key(REDIS_KEY), collected_at
+        )
         logging.info(
             f"✅ {len(aggregated)} Pfade in Redis gespeichert (Key: {REDIS_KEY})."
         )
     except Exception as e:
         logging.error(f"❌ Redis-Fehler beim Schreiben von {REDIS_KEY}: {e}")
+    finally:
+        metrics["redis_snapshot_duration_ms"] = (
+            time.perf_counter() - snapshot_started
+        ) * 1000
 
-    try:
-        Path(JSON_OUTPUT_PATH).write_text(
-            json.dumps(aggregated, indent=2), encoding="utf-8"
-        )
-        logging.info(f"💾 JSON gespeichert unter {JSON_OUTPUT_PATH}")
-    except Exception as e:
-        logging.error(f"❌ Fehler beim Schreiben der JSON-Datei: {e}")
+    if now >= poll_cache.next_output_write:
+        try:
+            Path(JSON_OUTPUT_PATH).write_text(
+                json.dumps(aggregated, indent=2), encoding="utf-8"
+            )
+            poll_cache.next_output_write = (
+                now + COLLECTOR_CFG["output_refresh_seconds"]
+            )
+            logging.info(f"💾 JSON gespeichert unter {JSON_OUTPUT_PATH}")
+        except Exception as e:
+            logging.error(f"❌ Fehler beim Schreiben der JSON-Datei: {e}")
+
+    metrics["cycle_duration_ms"] = (
+        time.perf_counter() - cycle_started
+    ) * 1000
+    logging.debug(
+        "Collector cycle %.2f ms (MediaMTX %.2f ms/%d requests, "
+        "history %.2f ms, snapshot Redis %.2f ms, ICMP %.2f ms)",
+        metrics["cycle_duration_ms"],
+        metrics["api_duration_ms"],
+        int(metrics["api_request_count"]),
+        metrics["history_duration_ms"],
+        metrics["redis_snapshot_duration_ms"],
+        metrics["icmp_duration_ms"],
+    )
+    return metrics
 
 
 # ---------------------------------------------------------------------------

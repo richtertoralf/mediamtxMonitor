@@ -94,6 +94,7 @@ class MonitoringConfigTests(unittest.TestCase):
         self.assertEqual(resolve_bitrate_config(config), {
             "min_dt": 1.25,
             "smooth_alpha": None,
+            "smooth_reference_seconds": 5.0,
             "ttl": 90,
             "ignore_loopback": False,
         })

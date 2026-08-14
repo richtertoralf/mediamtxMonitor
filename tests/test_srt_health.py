@@ -15,6 +15,7 @@ class FakeRedis:
     def __init__(self):
         self.values = {}
         self.expirations = {}
+        self.sorted_sets = {}
 
     def get(self, key):
         return self.values.get(key)
@@ -25,6 +26,26 @@ class FakeRedis:
 
     def ping(self):
         return True
+
+    def zadd(self, key, members):
+        self.sorted_sets.setdefault(key, {}).update(members)
+
+    def zremrangebyscore(self, key, minimum, maximum):
+        values = self.sorted_sets.setdefault(key, {})
+        for member, score in list(values.items()):
+            if score <= float(maximum):
+                del values[member]
+
+    def expire(self, key, seconds):
+        self.expirations[key] = seconds
+
+    def zrangebyscore(self, key, minimum, maximum):
+        values = self.sorted_sets.get(key, {})
+        return [
+            member
+            for member, score in sorted(values.items(), key=lambda item: item[1])
+            if float(minimum) <= score <= float(maximum)
+        ]
 
 
 class FakeMediaMTXClient:
@@ -68,15 +89,18 @@ class SrtHealthModelTests(unittest.TestCase):
             self.redis, key=key, details=details, direction=direction, ttl=300
         )
 
-    def test_publisher_reserve_is_link_divided_by_rx(self):
-        health = self.health({"mbpsReceiveRate": 4.0, "mbpsLinkCapacity": 12.8})
-        self.assertEqual(health["reserve_ratio"], 3.2)
-
-    def test_reader_reserve_is_link_divided_by_tx(self):
-        health = self.health(
+    def test_link_capacity_is_preserved_without_derived_reserve(self):
+        publisher = self.health(
+            {"mbpsReceiveRate": 4.0, "mbpsLinkCapacity": 12.8}
+        )
+        reader = self.health(
             {"mbpsSendRate": 4.25, "mbpsLinkCapacity": 11.4}, "reader"
         )
-        self.assertEqual(health["reserve_ratio"], 2.68)
+
+        self.assertEqual(publisher["link_capacity_mbps"], 12.8)
+        self.assertEqual(reader["link_capacity_mbps"], 11.4)
+        self.assertNotIn("reserve_ratio", publisher)
+        self.assertNotIn("reserve_ratio", reader)
 
     def test_retrans_drop_and_belated_are_interval_values(self):
         first = {
@@ -127,6 +151,7 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
         self.collector.r = self.redis
         self.collector.snapshot_store = RedisStore(self.redis)
         self.collector.mediamtx_client = FakeMediaMTXClient(self.fetch)
+        self.collector.reset_poll_cache()
         self.srt_details = [
             {
                 "id": "srt-publisher",
@@ -143,6 +168,7 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
                 "remoteAddr": "192.0.2.11:9000",
                 "mbpsSendRate": 3.5,
                 "mbpsLinkCapacity": 10.5,
+                "msRTT": 31,
                 "msReceiveTsbPdDelay": 8888,
                 "msSendTsbPdDelay": 1500,
                 "packetsRetrans": 4,
@@ -240,6 +266,26 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
 
         self.assertEqual(srt_path["source"]["srt_health"]["rx_mbps"], 4.0)
         self.assertEqual(srt_path["readers"][0]["srt_health"]["tx_mbps"], 3.5)
+        self.assertEqual(srt_path["source"]["transport_rtt_ms"], 20.0)
+        self.assertEqual(srt_path["readers"][0]["transport_rtt_ms"], 31.0)
+        self.assertEqual(
+            srt_path["source"]["window_metrics"]["timing_source"],
+            "transport_rtt_ms",
+        )
+        self.assertEqual(
+            srt_path["source"]["window_metrics"]["timing"]["10s"],
+            {
+                "sample_count": 1,
+                "p50_ms": 20.0,
+                "p95_ms": 20.0,
+                "variation_ms": 0.0,
+            },
+        )
+        self.assertEqual(
+            srt_path["readers"][0]["window_metrics"]["timing"]["60s"]
+            ["sample_count"],
+            1,
+        )
         self.assertEqual(srt_path["source"]["srt_latency_ms"], 2000)
         self.assertEqual(srt_path["readers"][0]["srt_latency_ms"], 1500)
         self.assertEqual(srt_path["readers"][1]["srt_latency_ms"], 750)
@@ -249,6 +295,23 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
         self.assertNotIn("srt_health", rtmp_path["readers"][0])
         self.assertNotIn("srt_latency_ms", rtmp_path["source"])
         self.assertNotIn("srt_latency_ms", rtmp_path["readers"][0])
+
+        history_keys = set(self.redis.sorted_sets)
+        self.assertIn(
+            "history:pub:srt-path:srtConn:srt-publisher", history_keys
+        )
+        self.assertIn(
+            "history:rd:srt-path:srtConn:srt-reader", history_keys
+        )
+        self.assertIn(
+            "history:rd:srt-path:srtConn:srt-reader-2", history_keys
+        )
+        self.assertEqual(
+            self.redis.expirations[
+                "history:pub:srt-path:srtConn:srt-publisher"
+            ],
+            120,
+        )
 
         health_keys = {
             key for key in self.redis.values if key.startswith("srt-health:")
@@ -275,6 +338,43 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
             health_keys,
             {key for key in self.redis.values if key.startswith("srt-health:")},
         )
+
+    def test_reconnect_with_new_mediamtx_id_gets_separate_history(self):
+        self.collect()
+        reconnected = dict(self.srt_details[0])
+        reconnected["id"] = "srt-publisher-reconnected"
+        self.srt_details.append(reconnected)
+
+        original_fetch = self.fetch
+
+        def reconnect_fetch(endpoint, params=None):
+            response = original_fetch(endpoint, params)
+            if endpoint == "/v3/paths/list":
+                response["items"][0]["source"]["id"] = reconnected["id"]
+            return response
+
+        self.collector.mediamtx_client = FakeMediaMTXClient(reconnect_fetch)
+        self.collect()
+
+        self.assertIn(
+            "history:pub:srt-path:srtConn:srt-publisher",
+            self.redis.sorted_sets,
+        )
+        self.assertIn(
+            "history:pub:srt-path:srtConn:srt-publisher-reconnected",
+            self.redis.sorted_sets,
+        )
+
+    def test_history_write_failure_does_not_block_current_snapshot(self):
+        with mock.patch.object(
+            self.collector.snapshot_store,
+            "append_history_sample",
+            side_effect=ConnectionError("history unavailable"),
+        ):
+            snapshot = self.collect()
+
+        self.assertEqual(snapshot[0]["name"], "srt-path")
+        self.assertNotIn("window_metrics", snapshot[0]["source"])
 
     def test_native_zero_rate_is_distinct_from_unavailable_rate(self):
         self.srt_details[0]["mbpsReceiveRate"] = 0

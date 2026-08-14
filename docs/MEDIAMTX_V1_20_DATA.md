@@ -42,6 +42,14 @@ dieser Berechnung. Die SRT-Transportzähler `bytesReceived` und `bytesSent`
 bleiben dabei SRT-spezifische Felder und sind nicht mit den gleichnamigen,
 deprecated Feldern anderer API-Objekte zu verwechseln.
 
+Die von MediaMTX v1.20.0 gelieferten Felder `packetsReceivedRetrans`,
+`packetsReceivedLoss`, `packetsReceivedDrop`, `packetsReceivedBelated`,
+`packetsReceivedUndecrypt`, `packetsRetrans`, `packetsSendLoss` und
+`packetsSendDrop` sind Gesamtzähler der jeweiligen SRT-Verbindung. Der Monitor
+bildet daraus bereits reset-sichere Ereignisdeltas je Collector-Intervall. Die
+Kurzzeithistorie speichert diese normalisierten Intervallwerte und summiert sie
+für 10-s- und 60-s-Fenster; sie bildet nicht erneut Counter-Deltas.
+
 Nur SRT liefert derzeit mit `msRTT` eine echte Transport-RTT für die
 Hauptanzeige. Die bestehende ICMP-Messung für andere Publisher bleibt erhalten,
 wird im internen Source-Modell jedoch separat als `icmp_rtt_ms` gespeichert.

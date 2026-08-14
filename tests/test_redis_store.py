@@ -9,6 +9,8 @@ class FakeRedis:
     def __init__(self):
         self.values = {}
         self.set_calls = []
+        self.sorted_sets = {}
+        self.expirations = {}
 
     def get(self, key):
         return self.values.get(key)
@@ -16,6 +18,27 @@ class FakeRedis:
     def set(self, key, value):
         self.set_calls.append((key, value))
         self.values[key] = value
+
+    def zadd(self, key, members):
+        values = self.sorted_sets.setdefault(key, {})
+        values.update(members)
+
+    def zremrangebyscore(self, key, minimum, maximum):
+        values = self.sorted_sets.setdefault(key, {})
+        for member, score in list(values.items()):
+            if score <= float(maximum):
+                del values[member]
+
+    def expire(self, key, seconds):
+        self.expirations[key] = seconds
+
+    def zrangebyscore(self, key, minimum, maximum):
+        values = self.sorted_sets.get(key, {})
+        return [
+            member
+            for member, score in sorted(values.items(), key=lambda item: item[1])
+            if float(minimum) <= score <= float(maximum)
+        ]
 
 
 class FailingRedis:
@@ -81,6 +104,49 @@ class RedisStoreTests(unittest.TestCase):
         self.store.write_snapshot("snapshot", snapshot)
 
         self.assertEqual(snapshot, before)
+
+    def test_history_is_ordered_time_trimmed_and_expires(self):
+        for timestamp in (100.0, 130.0, 166.0):
+            self.store.append_history_sample(
+                "history:pub:stream:srtConn:id",
+                {"timestamp": timestamp, "transport_rtt_ms": timestamp},
+                timestamp=timestamp,
+                retention_seconds=65,
+                ttl_seconds=120,
+            )
+
+        self.assertEqual(
+            self.store.read_history(
+                "history:pub:stream:srtConn:id",
+                from_timestamp=100,
+                to_timestamp=200,
+            ),
+            [
+                {"timestamp": 130.0, "transport_rtt_ms": 130.0},
+                {"timestamp": 166.0, "transport_rtt_ms": 166.0},
+            ],
+        )
+        self.assertEqual(
+            self.redis.expirations["history:pub:stream:srtConn:id"], 120
+        )
+
+    def test_separate_history_keys_do_not_mix_samples(self):
+        self.store.append_history_sample(
+            "history:pub:stream:srtConn:first",
+            {"timestamp": 10.0, "transport_rtt_ms": 20},
+            timestamp=10.0,
+            retention_seconds=65,
+            ttl_seconds=120,
+        )
+        self.store.append_history_sample(
+            "history:pub:stream:srtConn:second",
+            {"timestamp": 10.0, "transport_rtt_ms": 30},
+            timestamp=10.0,
+            retention_seconds=65,
+            ttl_seconds=120,
+        )
+
+        self.assertEqual(len(self.redis.sorted_sets), 2)
 
 
 if __name__ == "__main__":

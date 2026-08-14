@@ -1,0 +1,138 @@
+"""
+MediaMTX Monitor - short connection history.
+
+Builds compact samples from normalized publisher and reader connections.
+History is live-only and intentionally limited to about one minute.
+"""
+
+from __future__ import annotations
+
+import math
+from typing import Any, Mapping
+
+
+HISTORY_RETENTION_SECONDS = 65
+HISTORY_TTL_SECONDS = 120
+
+_SRT_EVENT_FIELDS = (
+    "retrans_packets",
+    "loss_packets",
+    "drop_packets",
+    "belated_packets",
+    "undecrypt_packets",
+)
+
+_WINDOW_SECONDS = (10, 60)
+
+
+def build_history_sample(
+    connection: Mapping[str, Any],
+    direction: str,
+    timestamp: float,
+    *,
+    include_icmp: bool = True,
+) -> dict[str, Any]:
+    """Return a compact sample containing only available normalized metrics."""
+    sample: dict[str, Any] = {"timestamp": timestamp}
+    rate_name = "rx_mbps" if direction == "publisher" else "tx_mbps"
+    bitrate = connection.get("bitrate_mbps")
+    if bitrate is not None:
+        sample[rate_name] = bitrate
+
+    if connection.get("transport_rtt_ms") is not None:
+        sample["transport_rtt_ms"] = connection["transport_rtt_ms"]
+    elif include_icmp and connection.get("icmp_rtt_ms") is not None:
+        sample["icmp_rtt_ms"] = connection["icmp_rtt_ms"]
+
+    if connection.get("srt_latency_ms") is not None:
+        sample["srt_latency_ms"] = connection["srt_latency_ms"]
+
+    srt_metrics = connection.get("srt_health", {}) or {}
+    if srt_metrics.get("link_capacity_mbps") is not None:
+        sample["link_capacity_mbps"] = srt_metrics["link_capacity_mbps"]
+    for field in _SRT_EVENT_FIELDS:
+        if srt_metrics.get(field) is not None:
+            sample[field] = srt_metrics[field]
+
+    return sample
+
+
+def _numeric_values(
+    samples: list[Mapping[str, Any]], field: str
+) -> list[float]:
+    values = []
+    for sample in samples:
+        value = sample.get(field)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            number = float(value)
+            if math.isfinite(number):
+                values.append(number)
+    return values
+
+
+def _percentile(values: list[float], percentile: float) -> float:
+    """Return a linearly interpolated percentile for one or more values."""
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    position = (len(ordered) - 1) * percentile
+    lower = math.floor(position)
+    upper = math.ceil(position)
+    if lower == upper:
+        return ordered[lower]
+    return ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower)
+
+
+def summarize_history(
+    samples: list[Mapping[str, Any]], timestamp: float
+) -> dict[str, Any]:
+    """Calculate optional 10- and 60-second timing and event summaries."""
+    timing_field = None
+    if any(sample.get("transport_rtt_ms") is not None for sample in samples):
+        timing_field = "transport_rtt_ms"
+    elif any(sample.get("icmp_rtt_ms") is not None for sample in samples):
+        timing_field = "icmp_rtt_ms"
+
+    timing = {}
+    events = {}
+    for seconds in _WINDOW_SECONDS:
+        window_name = f"{seconds}s"
+        window = [
+            sample
+            for sample in samples
+            if isinstance(sample.get("timestamp"), (int, float))
+            and sample["timestamp"] > timestamp - seconds
+            and sample["timestamp"] <= timestamp
+        ]
+
+        if timing_field is not None:
+            values = _numeric_values(window, timing_field)
+            if values:
+                p50 = round(_percentile(values, 0.50), 2)
+                p95 = round(_percentile(values, 0.95), 2)
+                timing[window_name] = {
+                    "sample_count": len(values),
+                    "p50_ms": p50,
+                    "p95_ms": p95,
+                    "variation_ms": round(p95 - p50, 2),
+                }
+
+        event_window = {}
+        for field in _SRT_EVENT_FIELDS:
+            values = _numeric_values(window, field)
+            if values:
+                event_window[field] = round(sum(values), 2)
+        if event_window:
+            events[window_name] = event_window
+
+    summary: dict[str, Any] = {}
+    if timing:
+        summary["timing_source"] = timing_field
+        summary["timing"] = timing
+        if "10s" in timing and "60s" in timing:
+            summary["p50_delta_ms"] = round(
+                timing["10s"]["p50_ms"] - timing["60s"]["p50_ms"], 2
+            )
+    if events:
+        summary["events"] = events
+    return summary

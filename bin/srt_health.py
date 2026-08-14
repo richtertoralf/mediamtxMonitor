@@ -82,8 +82,6 @@ def build_srt_health(
         health[rate_name] = rate
     if link is not None:
         health["link_capacity_mbps"] = link
-    if rate is not None and link is not None:
-        health["reserve_ratio"] = round(link / rate, 2)
     if rtt is not None:
         health["rtt_ms"] = rtt
 

@@ -17,7 +17,10 @@ logging:
 
 collector:
   output_json_path: "/tmp/mediamtx_streams.json"
-  interval_seconds: 5
+  interval_seconds: 1
+  version_refresh_seconds: 60
+  forward_refresh_seconds: 5
+  output_refresh_seconds: 5
   ignore_path_prefixes:
     - "__preview__/"
 
@@ -29,11 +32,15 @@ rtt:
   timeout_s: 0.9
   key_prefix: "rtt:pub"
 
+bitrate:
+  smooth_alpha: 0.5
+  smooth_reference_seconds: 5
+
 system_monitor:
   redis_key: "mediamtx:system:latest"
   output_json_path: "/tmp/mediamtx_system.json"
   interval_seconds: 10
 
 frontend:
-  snapshot_refresh_ms: 2000
-  streamlist_refresh_ms: 5000
+  snapshot_refresh_ms: 1000
+  streamlist_refresh_ms: 1000

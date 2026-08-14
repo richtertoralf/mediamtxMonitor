@@ -23,6 +23,7 @@ try:
         resolve_monitoring_config,
     )
     from .redis_store import RedisStore, SnapshotDecodeError
+    from .redis_keys import stream_snapshot_freshness_key
 except ImportError:
     from monitoring_config import (
         DEFAULT_CONFIG_PATH,
@@ -30,6 +31,7 @@ except ImportError:
         resolve_monitoring_config,
     )
     from redis_store import RedisStore, SnapshotDecodeError
+    from redis_keys import stream_snapshot_freshness_key
 
 config = resolve_monitoring_config({})
 redis_cfg = config["redis"]
@@ -115,6 +117,13 @@ def get_streams():
     except SnapshotDecodeError:
         streams = []
 
+    try:
+        collected_at = snapshot_store.read_snapshot(
+            stream_snapshot_freshness_key(REDIS_KEY)
+        )
+    except SnapshotDecodeError:
+        collected_at = None
+
     # Systeminfos aus Redis holen
     try:
         systeminfo = snapshot_store.read_snapshot(SYSTEM_REDIS_KEY)
@@ -127,6 +136,7 @@ def get_streams():
 
     return JSONResponse(content={
         "streams": streams,
+        "collected_at": collected_at,
         "snapshot_refresh_ms": frontend_cfg["snapshot_refresh_ms"],
         "streamlist_refresh_ms": frontend_cfg["streamlist_refresh_ms"],
         "systeminfo": systeminfo

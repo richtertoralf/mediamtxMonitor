@@ -25,8 +25,9 @@ Empfehlung:
 
 from __future__ import annotations
 
-import time
 import logging
+import math
+import time
 from typing import Optional
 
 try:
@@ -42,6 +43,7 @@ def calc_bitrate(
     now: Optional[float] = None,
     min_dt: float = 0.5,
     smooth_alpha: Optional[float] = None,
+    smooth_reference_seconds: Optional[float] = None,
     ttl: int = 300,
 ) -> Optional[float]:
     """
@@ -68,6 +70,9 @@ def calc_bitrate(
     smooth_alpha : float | None
         Alpha (0..1) für EWMA-Glättung. None deaktiviert die Glättung.
         Typisch: 0.3..0.7 (z. B. 0.5).
+    smooth_reference_seconds : float | None
+        Referenzintervall für ``smooth_alpha``. Bei abweichendem Messabstand
+        wird Alpha so angepasst, dass die zeitliche Filterwirkung erhalten bleibt.
     ttl : int
         Ablaufzeit (Sekunden) für die gespeicherten Redis-Keys, verhindert Altlasten.
 
@@ -130,6 +135,10 @@ def calc_bitrate(
                 if prev_mbps_str is not None:
                     prev_mbps = float(prev_mbps_str)
                     alpha = float(smooth_alpha)
+                    if smooth_reference_seconds is not None:
+                        reference = float(smooth_reference_seconds)
+                        if reference > 0:
+                            alpha = 1.0 - math.pow(1.0 - alpha, dt / reference)
                     # EWMA: aktueller Wert stärker gewichten je nach alpha
                     mbps = alpha * mbps + (1.0 - alpha) * prev_mbps
                 # Geglätteten Wert speichern

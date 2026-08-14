@@ -4,6 +4,7 @@
  * Diese Funktion ruft den Endpunkt `/api/streams` auf und gibt ein JSON-Objekt zurück:
  * {
  *   streams: [...],                 // Liste der aktuellen Streams
+ *   collected_at: Number | null,    // Zeitpunkt des letzten Collector-Snapshots
  *   snapshot_refresh_ms: Number,   // Intervall für Snapshot-Reload
  *   streamlist_refresh_ms: Number  // Intervall für Streamliste
  * }
@@ -20,7 +21,7 @@ export async function fetchStreamsFromApi() {
     console.error("❌ Fehler beim API-Fetch:", err);
     return {
       streams: [],
-      streamlist_refresh_ms: 5000
+      streamlist_refresh_ms: 1000
     };
   }
 }

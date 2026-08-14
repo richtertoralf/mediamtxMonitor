@@ -10,6 +10,7 @@ DEFAULT_RTT_PUBLISHER_PREFIX = "rtt:pub"
 _PUBLISHER_PREFIX = "pub"
 _READER_PREFIX = "rd"
 _SRT_HEALTH_PREFIX = "srt-health"
+_CONNECTION_HISTORY_PREFIX = "history"
 _BITRATE_PREV_BYTES = "prev_bytes"
 _BITRATE_PREV_TS = "prev_ts"
 _BITRATE_EWMA_MBPS = "ewma_mbps"
@@ -30,6 +31,16 @@ def reader_connection_key(
 ) -> str:
     """Build the existing reader measurement identity."""
     return f"{_READER_PREFIX}:{path}:{connection_type}:{connection_id}"
+
+
+def connection_history_key(connection_key: str) -> str:
+    """Build the short-history key for an existing connection identity."""
+    return f"{_CONNECTION_HISTORY_PREFIX}:{connection_key}"
+
+
+def stream_snapshot_freshness_key(snapshot_key: str) -> str:
+    """Build the collection-timestamp sidecar for a stream snapshot."""
+    return f"{snapshot_key}:collected_at"
 
 
 def bitrate_state_keys(base_key: str) -> tuple[str, str, str]:

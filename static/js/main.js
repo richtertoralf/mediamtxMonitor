@@ -19,25 +19,34 @@
 
 
 import { fetchStreamsFromApi } from "./api.js";
-import { renderStreamCard, updateStreamCard } from "./renderer.js";
+import {
+  formatDataAge,
+  recordSnapshotTelemetry,
+  renderStreamCard,
+  updateStreamCard,
+} from "./renderer.js";
 import { renderSystemInfo } from "./systeminfo.js";
 
 const container = document.getElementById("streams");
 const noStreams = document.getElementById("no-streams");
+const dataAge = document.getElementById("data-age");
 
 const streamCards = new Map(); // Name → DOM-Element
 
-let refreshIntervalMs = 5000; // Defaultwert, wird gleich überschrieben
+let refreshIntervalMs = 1000; // Defaultwert, wird gleich überschrieben
 let refreshTimer = null;
 
 async function updateUI() {
   const result = await fetchStreamsFromApi();
 
   renderSystemInfo(result.systeminfo || {});
+  const ageText = formatDataAge(result.collected_at);
+  dataAge.textContent = ageText || "Datenalter: —";
 
-  const newInterval = result.streamlist_refresh_ms ?? 5000;
+  const newInterval = result.streamlist_refresh_ms ?? 1000;
 
   const streams = result.streams || [];
+  recordSnapshotTelemetry(streams, result.collected_at);
   const seen = new Set();
 
   for (const stream of streams) {

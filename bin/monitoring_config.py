@@ -37,13 +37,17 @@ REDIS_DEFAULTS: Dict[str, Any] = {
 
 COLLECTOR_DEFAULTS: Dict[str, Any] = {
     "output_json_path": "/tmp/mediamtx_streams.json",
-    "interval_seconds": 10,
+    "interval_seconds": 1,
+    "version_refresh_seconds": 60,
+    "forward_refresh_seconds": 5,
+    "output_refresh_seconds": 5,
     "ignore_path_prefixes": ["__preview__/"],
 }
 
 BITRATE_DEFAULTS: Dict[str, Any] = {
     "min_dt": 0.5,
     "smooth_alpha": 0.5,
+    "smooth_reference_seconds": 5.0,
     "ttl": 300,
     "ignore_loopback": True,
 }
@@ -75,8 +79,8 @@ LOGGING_DEFAULTS: Dict[str, Any] = {
 }
 
 FRONTEND_DEFAULTS: Dict[str, Any] = {
-    "snapshot_refresh_ms": 2000,
-    "streamlist_refresh_ms": 5000,
+    "snapshot_refresh_ms": 1000,
+    "streamlist_refresh_ms": 1000,
 }
 
 
@@ -111,6 +115,9 @@ def resolve_collector_config(config: Mapping[str, Any]) -> Dict[str, Any]:
     """Resolve collector scheduling, output, and filtering settings."""
     resolved = _component_config(config, "collector", COLLECTOR_DEFAULTS)
     resolved["interval_seconds"] = int(resolved["interval_seconds"])
+    resolved["version_refresh_seconds"] = int(resolved["version_refresh_seconds"])
+    resolved["forward_refresh_seconds"] = int(resolved["forward_refresh_seconds"])
+    resolved["output_refresh_seconds"] = int(resolved["output_refresh_seconds"])
     resolved["ignore_path_prefixes"] = list(resolved["ignore_path_prefixes"])
     return resolved
 
@@ -121,6 +128,9 @@ def resolve_bitrate_config(config: Mapping[str, Any]) -> Dict[str, Any]:
     resolved["min_dt"] = float(resolved["min_dt"])
     if resolved["smooth_alpha"] is not None:
         resolved["smooth_alpha"] = float(resolved["smooth_alpha"])
+    resolved["smooth_reference_seconds"] = float(
+        resolved["smooth_reference_seconds"]
+    )
     resolved["ttl"] = int(resolved["ttl"])
     resolved["ignore_loopback"] = bool(resolved["ignore_loopback"])
     return resolved

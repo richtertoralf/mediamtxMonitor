@@ -35,6 +35,15 @@ function formatCount(value) {
   return number == null ? null : `${number}`;
 }
 
+/** Format the age of the last successful collector snapshot. */
+export function formatDataAge(collectedAt, nowMs = Date.now()) {
+  const timestamp = optionalNumber(collectedAt);
+  const currentTime = optionalNumber(nowMs);
+  if (timestamp == null || currentTime == null) return null;
+  const ageSeconds = Math.max(0, currentTime / 1000 - timestamp);
+  return `Datenalter: ${ageSeconds.toFixed(1)} s`;
+}
+
 function formatBytes(bytes) {
   let value = optionalNumber(bytes);
   if (value == null) return null;
@@ -81,8 +90,12 @@ function protocolMarkerClass(type) {
   return "marker-generic";
 }
 
-function metric(label, value, unit = null, assessment = null) {
-  return value == null ? null : {label, value, unit, assessment};
+function metric(label, value, unit = null, assessment = null, valueClass = null) {
+  return value == null ? null : {label, value, unit, assessment, valueClass};
+}
+
+function metricFullRow(content) {
+  return content ? {kind: "full-row", content} : null;
 }
 
 function renderMetrics(metrics) {
@@ -91,6 +104,9 @@ function renderMetrics(metrics) {
   return `
     <dl class="metric-grid">
       ${available.map(item => `
+        ${item.kind === "full-row" ? `
+          <div class="metric-full-row">${item.content}</div>
+        ` : `
         <div class="metric${item.assessment ? " metric-with-assessment" : ""}">
           <dt>
             <span class="metric-label">${escapeHtml(item.label)}</span>
@@ -98,9 +114,10 @@ function renderMetrics(metrics) {
               ? ""
               : `<span class="metric-unit">${escapeHtml(item.unit)}</span>`}
           </dt>
-          <dd>${escapeHtml(item.value)}</dd>
+          <dd${item.valueClass ? ` class="${escapeHtml(item.valueClass)}"` : ""}>${escapeHtml(item.value)}</dd>
           ${item.assessment || ""}
         </div>
+        `}
       `).join("")}
     </dl>
   `;
@@ -145,7 +162,190 @@ function pingValue(connection) {
   return firstAvailable(connection?.ping_rtt_ms, connection?.icmp_rtt_ms);
 }
 
-function renderSrtRttAssessment(rttValue, latencyValue) {
+const TELEMETRY_WINDOW_SECONDS = 60;
+const TREND_SCALE_HEADROOM = 1.15;
+const TREND_SCALE_MINIMUM_MS = 100;
+const VARIATION_SCALE_MINIMUM_MS = 50;
+const SPARKLINE_BASELINE_Y = 22;
+const SPARKLINE_VERTICAL_RANGE = 20;
+const telemetryHistories = new Map();
+let trendScaleState = {
+  requiredMaximum: 0,
+  scaleMaximum: TREND_SCALE_MINIMUM_MS,
+  lowerRequiredSince: null,
+};
+let variationScaleState = {
+  requiredMaximum: 0,
+  scaleMaximum: VARIATION_SCALE_MINIMUM_MS,
+  lowerRequiredSince: null,
+};
+
+function connectionTelemetryKey(pathName, role, connection) {
+  const connectionId = connection?.id;
+  if (!pathName || !connection?.type || !connectionId) return null;
+  return `${pathName}:${role}:${connection.type}:${connectionId}`;
+}
+
+function connectionTimingValues(connection) {
+  const timing = connection?.window_metrics?.timing || {};
+  const current = connection?.type === "srtConn"
+    ? firstAvailable(
+      connection?.transport_rtt_ms,
+      connection?.srt_health?.rtt_ms,
+      connection?.details?.msRTT,
+    )
+    : pingValue(connection);
+  return {
+    current: optionalNumber(current),
+    variation10: optionalNumber(timing["10s"]?.variation_ms),
+    variation60: optionalNumber(timing["60s"]?.variation_ms),
+  };
+}
+
+function recordConnectionTelemetry(key, connection, timestamp) {
+  if (!key) return;
+  const values = connectionTimingValues(connection);
+  if (
+    values.current == null
+    && values.variation10 == null
+    && values.variation60 == null
+  ) return;
+  const history = telemetryHistories.get(key) || [];
+  if (history.some(point => point.timestamp === timestamp)) return;
+  history.push({timestamp, ...values});
+  history.sort((left, right) => left.timestamp - right.timestamp);
+  telemetryHistories.set(
+    key,
+    history.filter(point => point.timestamp > timestamp - TELEMETRY_WINDOW_SECONDS),
+  );
+}
+
+function activeTelemetryMaximum(fields) {
+  let maximum = 0;
+  for (const history of telemetryHistories.values()) {
+    for (const point of history) {
+      for (const field of fields) {
+        const value = point[field];
+        if (value != null) maximum = Math.max(maximum, value);
+      }
+    }
+  }
+  return maximum;
+}
+
+function updatedScaleState(state, requiredMaximum, minimum, timestamp) {
+  if (requiredMaximum >= state.requiredMaximum) {
+    return {
+      requiredMaximum,
+      scaleMaximum: Math.max(requiredMaximum * TREND_SCALE_HEADROOM, minimum),
+      lowerRequiredSince: null,
+    };
+  }
+  const lowerRequiredSince = state.lowerRequiredSince ?? timestamp;
+  if (timestamp - lowerRequiredSince >= TELEMETRY_WINDOW_SECONDS) {
+    return {
+      requiredMaximum,
+      scaleMaximum: Math.max(requiredMaximum * TREND_SCALE_HEADROOM, minimum),
+      lowerRequiredSince: null,
+    };
+  }
+  return {...state, lowerRequiredSince};
+}
+
+function updateSharedTrendScales(timestamp) {
+  trendScaleState = updatedScaleState(
+    trendScaleState,
+    activeTelemetryMaximum(["current"]),
+    TREND_SCALE_MINIMUM_MS,
+    timestamp,
+  );
+  variationScaleState = updatedScaleState(
+    variationScaleState,
+    activeTelemetryMaximum(["variation10", "variation60"]),
+    VARIATION_SCALE_MINIMUM_MS,
+    timestamp,
+  );
+}
+
+function trendYPosition(value) {
+  const normalized = Math.sqrt(Math.max(0, value))
+    / Math.sqrt(trendScaleState.scaleMaximum);
+  return SPARKLINE_BASELINE_Y
+    - Math.max(0, Math.min(1, normalized)) * SPARKLINE_VERTICAL_RANGE;
+}
+
+function variationYPosition(value) {
+  const normalized = Math.max(0, value) / variationScaleState.scaleMaximum;
+  return SPARKLINE_BASELINE_Y
+    - Math.max(0, Math.min(1, normalized)) * SPARKLINE_VERTICAL_RANGE;
+}
+
+/** Record one API snapshot without duplicating an already seen collected_at. */
+export function recordSnapshotTelemetry(streams, collectedAt) {
+  const timestamp = optionalNumber(collectedAt);
+  if (timestamp == null) return;
+  const activeKeys = new Set();
+  for (const stream of streams || []) {
+    const publisherKey = connectionTelemetryKey(stream?.name, "publisher", stream?.source);
+    if (publisherKey) {
+      activeKeys.add(publisherKey);
+      recordConnectionTelemetry(publisherKey, stream.source, timestamp);
+    }
+    for (const reader of stream?.readers || []) {
+      const readerKey = connectionTelemetryKey(stream?.name, "reader", reader);
+      if (!readerKey) continue;
+      activeKeys.add(readerKey);
+      recordConnectionTelemetry(readerKey, reader, timestamp);
+    }
+  }
+  for (const key of telemetryHistories.keys()) {
+    if (!activeKeys.has(key)) telemetryHistories.delete(key);
+  }
+  updateSharedTrendScales(timestamp);
+}
+
+/** Reset browser-local telemetry, used when the page reloads and by tests. */
+export function resetTelemetryHistories() {
+  telemetryHistories.clear();
+  trendScaleState = {
+    requiredMaximum: 0,
+    scaleMaximum: TREND_SCALE_MINIMUM_MS,
+    lowerRequiredSince: null,
+  };
+  variationScaleState = {
+    requiredMaximum: 0,
+    scaleMaximum: VARIATION_SCALE_MINIMUM_MS,
+    lowerRequiredSince: null,
+  };
+}
+
+/** Return a copy for focused frontend lifecycle tests. */
+export function telemetryHistoryFor(pathName, role, connection) {
+  const key = connectionTelemetryKey(pathName, role, connection);
+  return key ? [...(telemetryHistories.get(key) || [])] : [];
+}
+
+/** Expose the shared graphical scale for deterministic renderer tests. */
+export function telemetryScaleState() {
+  return {
+    trend: {...trendScaleState},
+    variation: {...variationScaleState},
+  };
+}
+
+/** Map a raw millisecond value through the shared compressed graph scale. */
+export function telemetryTrendY(value) {
+  const number = optionalNumber(value);
+  return number == null ? null : trendYPosition(number);
+}
+
+/** Map a raw variation value through the shared linear variation scale. */
+export function telemetryVariationY(value) {
+  const number = optionalNumber(value);
+  return number == null ? null : variationYPosition(number);
+}
+
+function getSrtRttAssessment(rttValue, latencyValue) {
   const rtt = optionalNumber(rttValue);
   const latency = optionalNumber(latencyValue);
   if (rtt == null || rtt < 0 || latency == null || latency <= 0) return null;
@@ -158,18 +358,147 @@ function renderSrtRttAssessment(rttValue, latencyValue) {
     : percentage < 1 ? "<1%" : `${Math.round(percentage)}%`;
   const fillPercentage = Number((Math.min(ratio / 0.40, 1) * 100).toFixed(2));
 
+  return {status, percentageLabel, fillPercentage};
+}
+
+function renderSrtRttAssessment(assessment) {
+  if (!assessment) return "";
   return `
-    <div class="srt-rtt-assessment srt-rtt-${status}"
-         aria-label="RTT-Latency-Nutzung: ${escapeHtml(percentageLabel)}">
+    <div class="srt-rtt-assessment srt-rtt-${assessment.status}"
+         aria-label="RTT-Latency-Nutzung: ${escapeHtml(assessment.percentageLabel)}">
       <span class="srt-rtt-track" aria-hidden="true">
-        <span class="srt-rtt-fill" style="width: ${fillPercentage}%"></span>
+        <span class="srt-rtt-fill" style="width: ${assessment.fillPercentage}%"></span>
       </span>
-      <span class="srt-rtt-percentage">${escapeHtml(percentageLabel)}</span>
+      <span class="srt-rtt-percentage">${escapeHtml(assessment.percentageLabel)}</span>
     </div>
   `;
 }
 
-function renderSrtMetrics(connection, direction, totalBytes) {
+function renderTrendSeries(history, field, className, xPosition, yPosition) {
+  const segments = [];
+  let currentSegment = [];
+  for (const point of history) {
+    const value = optionalNumber(point[field]);
+    if (value == null) {
+      if (currentSegment.length) segments.push(currentSegment);
+      currentSegment = [];
+      continue;
+    }
+    currentSegment.push(`${xPosition(point.timestamp).toFixed(2)},${yPosition(value).toFixed(2)}`);
+  }
+  if (currentSegment.length) segments.push(currentSegment);
+  const lastPoint = segments.at(-1)?.at(-1);
+  const series = segments.map(points => points.length === 1
+    ? points[0] === lastPoint
+      ? ""
+      : `<circle class="trend-point ${className}" cx="${points[0].split(",")[0]}" cy="${points[0].split(",")[1]}" r="1.8"></circle>`
+    : `<polyline class="trend-line ${className}" points="${points.join(" ")}"></polyline>`
+  ).join("");
+  if (!lastPoint) return series;
+  const [lastX, lastY] = lastPoint.split(",");
+  return `${series}<circle class="trend-end-marker ${className}" cx="${lastX}" cy="${lastY}" r="2.2"></circle>`;
+}
+
+function formatScaleMaximum(value) {
+  const number = optionalNumber(value);
+  if (number == null) return "—";
+  return `${number < 10 ? number.toFixed(1) : Math.round(number)} ms`;
+}
+
+function renderRttTrend(connection, historyKey) {
+  const history = telemetryHistories.get(historyKey) || [];
+  const values = history.flatMap(point => [
+    point.current,
+    point.variation10,
+    point.variation60,
+  ].filter(value => value != null));
+  if (!history.length || !values.length) return "";
+  const latestTimestamp = history[history.length - 1].timestamp;
+  const minimumTimestamp = latestTimestamp - TELEMETRY_WINDOW_SECONDS;
+  const xPosition = timestamp => Math.max(0, Math.min(240,
+    ((timestamp - minimumTimestamp) / TELEMETRY_WINDOW_SECONDS) * 240));
+  const timingLabel = connection?.window_metrics?.timing_source === "icmp_rtt_ms"
+    ? "Ping"
+    : "RTT";
+  const currentValues = connectionTimingValues(connection);
+  const rows = [
+    [timingLabel, "current", "trend-current", trendYPosition, trendScaleState.scaleMaximum],
+    ["Var 10s", "variation10", "trend-variation-10", variationYPosition,
+      variationScaleState.scaleMaximum],
+    ["Var 60s", "variation60", "trend-variation-60", variationYPosition,
+      variationScaleState.scaleMaximum],
+  ];
+  return `
+    <div class="rtt-trend" role="img" aria-label="${timingLabel}-Trend der letzten 60 Sekunden">
+      ${rows.map(([label, field, className, yPosition, scaleMaximum]) => `
+        <div class="sparkline-row sparkline-${field}">
+          <span class="sparkline-label">${escapeHtml(label)}</span>
+          <span class="sparkline-value"><span class="sparkline-number">${escapeHtml(
+            formatNumber(currentValues[field], 1) ?? "—",
+          )}</span>${currentValues[field] == null
+            ? ""
+            : '<span class="sparkline-unit">ms</span>'}</span>
+          <span class="sparkline-plot">
+            <span class="sparkline-scale-max">${escapeHtml(
+              formatScaleMaximum(scaleMaximum),
+            )}</span>
+            <svg class="sparkline-graph" viewBox="0 0 240 24" preserveAspectRatio="none" aria-hidden="true">
+              <line class="sparkline-time-marker" x1="120" y1="2" x2="120" y2="22"></line>
+              <line class="sparkline-baseline" x1="0" y1="22" x2="240" y2="22"></line>
+              ${renderTrendSeries(history, field, className, xPosition, yPosition)}
+            </svg>
+          </span>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderImpactIndicators(connection) {
+  const eventWindows = connection?.window_metrics?.events || {};
+  const recentEvents = eventWindows["10s"] || {};
+  const heldEvents = eventWindows["60s"] || {};
+  if (!eventWindows["10s"] && !eventWindows["60s"]) return "";
+  const definitions = [
+    ["Retrans", "retrans_packets"],
+    ["Drop", "drop_packets"],
+    ["Belated", "belated_packets"],
+  ];
+  return `
+    <span class="impact-indicators" aria-label="SRT-Auswirkungen der letzten 60 Sekunden">
+      ${definitions.map(([label, field]) => {
+        const currentValue = optionalNumber(recentEvents[field]);
+        const heldValue = optionalNumber(heldEvents[field]);
+        const state = currentValue > 0
+          ? "current"
+          : heldValue > 0 ? "recent" : currentValue === 0 && heldValue === 0
+            ? "clear"
+            : "unavailable";
+        const shownValue = state === "current" ? currentValue
+          : state === "recent" ? heldValue : null;
+        const titleValue = shownValue == null
+          ? state === "clear" ? "0" : "nicht verfügbar"
+          : formatCount(shownValue);
+        return `<span class="impact impact-${field.replace("_packets", "")} impact-${state}"
+                     title="${label}: ${escapeHtml(titleValue)}"><span class="impact-label">${label}</span><span class="impact-dot"></span>${shownValue != null ? `<span class="impact-value">${escapeHtml(formatCount(shownValue))}</span>` : ""}</span>`;
+      }).join("")}
+    </span>
+  `;
+}
+
+function renderLinkTelemetry(connection, historyKey, assessment = null) {
+  const trend = renderRttTrend(connection, historyKey);
+  const budget = connection?.type === "srtConn"
+    ? renderSrtRttAssessment(assessment)
+    : "";
+  const impacts = connection?.type === "srtConn"
+    ? renderImpactIndicators(connection)
+    : "";
+  if (!trend && !budget && !impacts) return null;
+  return `<div class="link-telemetry">${trend}${budget}${impacts}</div>`;
+}
+
+function renderSrtMetrics(connection, direction, totalBytes, historyKey = null) {
   const details = connection?.details || {};
   const health = connection?.srt_health || {};
   const rateLabel = direction === "in" ? "RX" : "TX";
@@ -185,42 +514,53 @@ function renderSrtMetrics(connection, direction, totalBytes) {
     health.rtt_ms,
     details.msRTT,
   );
+  const assessment = getSrtRttAssessment(rtt, connection?.srt_latency_ms);
+  const linkTelemetry = renderLinkTelemetry(connection, historyKey, assessment);
 
   return renderMetrics([
     metric(rateLabel, rate == null ? "—" : formatNumber(rate, 2), "Mbit/s"),
     metric("Total", formatBytes(totalBytes)),
     metric(
       "RTT",
-      formatNumber(rtt, 2),
+      rtt == null && linkTelemetry ? "—" : formatNumber(rtt, 2),
       "ms",
-      renderSrtRttAssessment(rtt, connection?.srt_latency_ms),
     ),
-    metric("Latency", formatCount(connection?.srt_latency_ms), "ms"),
+    metric(
+      direction === "in" ? "Rcv Latency" : "Snd Latency",
+      formatCount(connection?.srt_latency_ms),
+      "ms",
+      null,
+      assessment ? `srt-rtt-${assessment.status}` : null,
+    ),
+    metricFullRow(linkTelemetry),
     loss,
-    metric("Retrans", formatCount(health.retrans_packets), "pkt"),
-    metric("Drop", formatCount(health.drop_packets), "pkt"),
-    metric("Link", formatNumber(
+    metric("SRT est. Link", formatNumber(
       firstAvailable(health.link_capacity_mbps, details.mbpsLinkCapacity),
       1,
     ), "Mbit/s"),
-    metric("Reserve", formatNumber(health.reserve_ratio, 1), "×"),
-    metric("Belated", formatCount(health.belated_packets), "pkt"),
-    metric("Undecrypt", formatCount(health.undecrypt_packets), "pkt"),
-    metric("Age", formatConnectionAge(details.created)),
+    metric("Undecrypt", formatCount(health.undecrypt_packets) ?? "—", "pkt"),
+    metric("Age", formatConnectionAge(details.created) ?? "—"),
   ]);
 }
 
-function renderNonSrtMetrics(connection, direction, totalBytes) {
+function renderNonSrtMetrics(connection, direction, totalBytes, historyKey = null) {
   const details = connection?.details || {};
   const type = connection?.type;
   const rateLabel = direction === "in" ? "RX" : "TX";
   const rate = connectionRate(connection, direction);
+  const ping = pingValue(connection);
+  const linkTelemetry = renderLinkTelemetry(connection, historyKey);
   const metrics = [
     metric(rateLabel, rate == null
       ? "—"
       : formatNumber(rate, 2), "Mbit/s"),
     metric("Total", formatBytes(totalBytes)),
-    metric("Ping", formatNumber(pingValue(connection), 2), "ms"),
+    metric(
+      "Ping",
+      ping == null && linkTelemetry ? "—" : formatNumber(ping, 2),
+      "ms",
+    ),
+    metricFullRow(linkTelemetry),
   ];
 
   if (type === "rtspSession" || type === "rtspsSession") {
@@ -249,9 +589,14 @@ function renderNonSrtMetrics(connection, direction, totalBytes) {
 
 function renderConnectionMetrics(connection, direction, stream = null) {
   const totalBytes = connectionTotal(connection, direction, stream);
+  const historyKey = connectionTelemetryKey(
+    stream?.name,
+    direction === "in" ? "publisher" : "reader",
+    connection,
+  );
   return connection?.type === "srtConn"
-    ? renderSrtMetrics(connection, direction, totalBytes)
-    : renderNonSrtMetrics(connection, direction, totalBytes);
+    ? renderSrtMetrics(connection, direction, totalBytes, historyKey)
+    : renderNonSrtMetrics(connection, direction, totalBytes, historyKey);
 }
 
 function formatSampleRate(sampleRate) {
@@ -321,12 +666,12 @@ function readerDetails(reader) {
 }
 
 /** Render one permanent OUT connection block. */
-export function renderReader(reader, index = 0) {
+export function renderReader(reader, index = 0, streamName = "") {
   return `
     <section class="reader-block">
       <h3>Reader ${index + 1}</h3>
       ${renderConnectionHeading(reader?.type, reader?.details || {})}
-      ${renderConnectionMetrics(reader, "out")}
+      ${renderConnectionMetrics(reader, "out", {name: streamName})}
       ${readerDetails(reader)}
     </section>
   `;
@@ -400,7 +745,7 @@ function renderRightContent(stream) {
   return `
     <h2 class="panel-title">OUT</h2>
     ${readers.length
-      ? readers.map((reader, index) => renderReader(reader, index)).join("")
+      ? readers.map((reader, index) => renderReader(reader, index, stream?.name)).join("")
       : '<div class="no-readers">Keine OUT-Verbindung</div>'}
   `;
 }
