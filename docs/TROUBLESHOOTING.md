@@ -16,8 +16,9 @@ systemctl is-active mediamtx-system
 MediaMTX und Monitor laufen auf derselben Maschine als getrennte systemd-Dienste:
 `mediamtx.service` ist der Streamingserver, die drei Monitor-Dienste laufen als
 `mediamtxmon`. Ein MediaMTX-Ausfall darf den Collector nicht beenden; dessen Daten
-bleiben währenddessen leer oder veraltet. Ein Monitor-Ausfall unterbricht
-vorhandene MediaMTX-Streams auf dieser Maschine nicht.
+werden bei fehlgeschlagenen Abfragen nicht durch einen künstlich leeren Snapshot
+ersetzt. Ein Monitor-Ausfall unterbricht vorhandene MediaMTX-Streams auf dieser
+Maschine nicht.
 
 ## Journal-Logs
 
@@ -68,8 +69,22 @@ ihrer erforderlichen Redis-Abhängigkeit ausfallen; MediaMTX bleibt unabhängig.
 curl -fsS http://127.0.0.1:8080/api/streams | python3 -m json.tool
 ```
 
-Eine leere Streamliste bei erreichbarer API kann bedeuten, dass MediaMTX nicht
-läuft, die Control API nicht erreichbar ist oder aktuell kein Stream publiziert.
+Für die Diagnose sind drei Fälle zu unterscheiden:
+
+1. **Kein Snapshot vorhanden:** Vor dem ersten erfolgreichen Collector-Lauf
+   liefert die API eine leere Streamliste und `collected_at` ist `null`.
+2. **Erfolgreicher leerer Snapshot:** MediaMTX wurde erfolgreich abgefragt,
+   meldet aber keine sichtbaren Streams. Die Streamliste ist leer und
+   `collected_at` enthält den Zeitpunkt dieses erfolgreichen Collector-Laufs.
+3. **Früher erfolgreicher Snapshot, aktuelle Abfrage fehlgeschlagen:** Der
+   Collector überschreibt den letzten erfolgreichen Snapshot und dessen
+   `collected_at` nicht. Dashboard und API können deshalb weiterhin Streams
+   zeigen, deren Datenalter zunimmt. Diese Anzeige ist veraltet beziehungsweise
+   stale, nicht automatisch leer.
+
+Bei einer leeren oder unerwartet unveränderten Anzeige deshalb immer
+`collected_at` beziehungsweise das im Dashboard angezeigte Datenalter gemeinsam
+mit den Collector-Logs und der Erreichbarkeit der Control API prüfen.
 
 Die Antwort von `GET /api/streams` enthält folgende Top-Level-Felder:
 

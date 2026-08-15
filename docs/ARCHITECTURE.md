@@ -21,6 +21,21 @@ getrennte Komponenten. Das Git-Repository ist die Source of Truth; die
 Installation unter `/opt/mediamtx-monitoring-backend` ist nur der ausgerollte
 Laufzeitstand.
 
+Für Stream-, Verbindungs- und Transportmonitoring stammen Metriken
+ausschließlich aus Daten, die MediaMTX selbst über seine APIs beziehungsweise
+seine protokollspezifischen Statistiken bereitstellt, oder aus klar definierten
+Ableitungen dieser MediaMTX-Daten. Der Monitor führt keine unabhängigen
+Messungen gegen Publisher, Reader oder Feldgeräte aus und ergänzt fehlende
+MediaMTX-Metriken nicht durch externe Ersatzmessungen. Protokollspezifische
+Unterschiede sind beabsichtigt; fehlende protokollspezifische Metriken bleiben
+fehlend. SRT-`msRTT`, normalisiert als `transport_rtt_ms`, ist eine von
+MediaMTX bereitgestellte protokollnative Transportmetrik und kein generischer
+Netzwerk-Ping.
+
+Das lokale System- und Hostmonitoring ist davon getrennt. Es erfasst den Host,
+auf dem der Monitor läuft, und fällt nicht unter diese Grenze für Stream-,
+Verbindungs- und Transportmetriken.
+
 ## Architekturprinzip
 
 Dieses Projekt verwendet eine pragmatische modulare Architektur. Eine
@@ -150,11 +165,27 @@ Die folgenden Ebenen sind fachlich und im Code nachvollziehbar zu trennen:
 4. **Health Evaluation:** Nachvollziehbare Bewertung normalisierter Metriken mit
    Status, Regeln und Gründen. Sie bleibt von Erfassung und Berechnung getrennt.
 5. **Presentation:** Formatierung, Sortierung und sichere Darstellung für API
-   und UI, ohne MediaMTX-Rohdaten erneut zu normalisieren.
+   und UI. Wiederverwendbare Metriksemantik soll schrittweise aus der
+   Präsentationsschicht herausgehalten werden.
 
-Die Web-UI darf keine Backend-Normalisierung rekonstruieren. Muss die UI native
-MediaMTX-Felder interpretieren oder fachliche Fallbacks nachbauen, fehlt die
-Normalisierung im Backend oder der API-Vertrag ist unvollständig.
+### Aktueller Frontend-Zustand
+
+Der Browser ist read-only, verarbeitet für die Darstellung aber neben bereits
+normalisierten Feldern teilweise noch native Werte aus `details`. Der aktuelle
+Renderer stellt protokollspezifische RTSP-/RTSPS- und weitere Verbindungswerte
+dar, berechnet die Beziehung zwischen SRT-Transport-RTT und TSBPD-Latenz und
+klassifiziert SRT-Ereignisfenster als `OK`, `WARN`, `CRIT` oder `RECENT`.
+Dieser Bestandszustand ist durch Renderer-Tests abgesichert und löst keinen
+sofortigen Refactoring-Auftrag aus.
+
+### Architekturziel für das Frontend
+
+Fachliche Normalisierung und wiederverwendbare Metriksemantik sollen möglichst
+im Backend liegen. Das Frontend bleibt primär eine read-only
+Präsentationsschicht und soll keine zweite vollständige Normalisierung von
+MediaMTX-Rohdaten aufbauen. Dieses Zielbild wird nur in kleinen, fachlich
+begründeten Schritten verfolgt; eine neue Backend- oder Frontend-Struktur wird
+nicht allein zu seiner sofortigen Erreichung eingeführt.
 
 ## Komponenten und Verantwortungen
 
@@ -192,9 +223,10 @@ getrennt.
 
 ### Metric Enrichment
 
-Diese Komponente ergänzt normalisierte Daten um berechnete Bitraten, RTT und
-protokollspezifische Metriken. Zeit und benötigter Messzustand sollen injizierbar
-und testbar sein. Metrikerfassung entscheidet nicht über Health-Status.
+Diese Komponente ergänzt normalisierte Daten um berechnete Bitraten, native
+Transportwerte wie SRT-RTT und weitere protokollspezifische Metriken. Zeit und
+benötigter Messzustand sollen injizierbar und testbar sein. Metrikerfassung
+entscheidet nicht über Health-Status.
 
 ### Redis Store
 
@@ -228,9 +260,9 @@ API sichtbar.
 Langsamer wechselnde bzw. diagnostische Daten bleiben im seriellen Collector,
 werden aber seltener aktualisiert: die MediaMTX-Version alle 60 Sekunden,
 Path-Forward-Ziele und die optionale JSON-Diagnosedatei alle 5 Sekunden.
-Der Monitor verwendet ausschließlich Metriken, die MediaMTX beziehungsweise das
-jeweilige Transportprotokoll bereitstellt. Externe ICMP-Pings werden nicht
-ausgeführt. Protokolle ohne native RTT besitzen daher keine RTT-Anzeige.
+Für die oben definierte MediaMTX-Datenquellengrenze gilt insbesondere: Externe
+ICMP-Pings werden nicht ausgeführt, und Protokolle ohne von MediaMTX
+bereitgestellte native RTT besitzen keine RTT-Anzeige.
 
 MediaMTX-Connection-IDs werden als eigenständige aktuelle Connections
 behandelt. Der Monitor führt keine IP-, Port- oder zeitbasierte Deduplizierung
@@ -262,9 +294,11 @@ App-Erzeugung soll mit injizierbaren Abhängigkeiten testbar sein.
 
 ### Web UI
 
-Die Vanilla-JavaScript-Oberfläche ruft die Monitor-API ab, formatiert Werte und
-rendert sie sicher. Sie greift nicht auf die Control API zu und interpretiert
-keine MediaMTX-Rohfelder als Ersatz für Backend-Normalisierung.
+Die Vanilla-JavaScript-Oberfläche ruft ausschließlich die Monitor-API ab und
+rendert die Daten sicher. Sie greift nicht direkt auf die MediaMTX Control API
+zu. Die noch vorhandene begrenzte Interpretation nativer `details`-Felder und
+die UI-seitigen SRT-Klassifikationen sind der oben dokumentierte
+Übergangszustand; langfristig bleibt die UI primär Präsentationsschicht.
 
 ### Preview
 
@@ -370,8 +404,9 @@ Verhalten erhalten, passende Tests besitzen und separat deploybar sein.
 9. Protokollspezifische Interpretation bleibt von allgemeinen Streamdaten
    getrennt.
 10. Health-Bewertung bleibt von Messwerterfassung und Metrikberechnung getrennt.
-11. Die UI rendert und formatiert; sie rekonstruiert keine Backend-
-    Normalisierung.
+11. Die UI bleibt read-only und wird schrittweise auf Darstellung des stabilen
+    Backend-Vertrags begrenzt; der dokumentierte aktuelle Übergangszustand löst
+    keinen pauschalen Umbau aus.
 12. Mit Einführung des Multi-Node-Modells werden Preview-Endpunkte
     konfigurierbar und einem Node zugeordnet.
 13. Konfiguration soll schrittweise zentral geladen, validiert und explizit

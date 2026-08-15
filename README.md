@@ -5,6 +5,14 @@ SRT-Metriken und Systemdaten in einem kleinen Web-Dashboard. Das Frontend bleibt
 Vanilla JavaScript. Redis puffert die vom Collector gelesenen Daten, FastAPI
 liefert API und Dashboard aus.
 
+Der Monitoringumfang ist bewusst protokollspezifisch: SRT besitzt derzeit die
+tiefste Transport- und Ereignisauswertung; für RTMP/RTMPS und RTSP/RTSPS stellt
+der Monitor jeweils andere passende MediaMTX-Metriken dar, weitere Protokolle
+werden überwiegend generisch dargestellt. Fehlende MediaMTX-Metriken werden
+nicht durch externe Messungen gegen Publisher oder Reader ersetzt. Details
+stehen im [MediaMTX-v1.20-Datenmodell](docs/MEDIAMTX_V1_20_DATA.md) und in der
+[Architekturdokumentation](docs/ARCHITECTURE.md).
+
 Der grundlegende Datenfluss ist:
 
 ```text
@@ -35,8 +43,10 @@ Streamingdienst nicht beenden.
 | MediaMTX-Monitor | drei Dienste unter `mediamtxmon:mediamtxmon` |
 
 Ein Ausfall von MediaMTX beendet den Collector nicht. Der Collector meldet dann
-API-Fehler und fragt weiter. Umgekehrt beeinflusst ein Monitor-Ausfall den
-MediaMTX-Streamingdienst auf derselben Maschine nicht.
+API-Fehler und fragt weiter; ein früherer erfolgreicher Snapshot kann
+währenddessen als veraltet angezeigt werden. Details zur Diagnose stehen unter
+[Troubleshooting](docs/TROUBLESHOOTING.md). Umgekehrt beeinflusst ein
+Monitor-Ausfall den MediaMTX-Streamingdienst auf derselben Maschine nicht.
 
 ## Unterstützte Neuinstallationen
 
@@ -62,7 +72,9 @@ linux_armv6 beziehungsweise linux_armv7 installiert werden. Diese Systeme
 wurden jedoch nicht getestet. Der Installer gibt deshalb eine Warnung aus und
 setzt die Installation anschließend fort.
 
-Andere Linux-Distributionen sowie 32-Bit-x86-Systeme werden ebenfalls nicht getestet.
+Nicht Debian-basierte Linux-Distributionen werden vom Installer abgelehnt.
+32-Bit-x86-Systeme mit i386-/i686-Architektur werden ebenfalls abgelehnt, da
+dafür kein vorgesehenes MediaMTX-Archiv existiert.
 
 **Der Installer ist nur für frische Installationen vorgesehen. Existierende oder 
 angepasste MediaMTX- oder Monitor-Installationen werden nicht überschrieben oder
