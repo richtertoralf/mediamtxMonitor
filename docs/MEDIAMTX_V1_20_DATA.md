@@ -2,9 +2,13 @@
 
 Der Monitor unterstützt MediaMTX ab v1.20.0. Grundlage ist die offizielle
 [Control-API-Definition für v1.20.0](https://github.com/bluenviron/mediamtx/blob/v1.20.0/api/openapi.yaml).
-Der Collector prüft vor jeder Erfassung `/v3/info`. Bei einer älteren oder
-unlesbaren Version werden keine weiteren v1.20-Abfragen ausgeführt und die
-bisherige Redis-Messung wird nicht überschrieben.
+Der Collector fragt `/v3/info` beim ersten Erfassungszyklus und danach
+periodisch erneut ab. Das Intervall wird mit
+`collector.version_refresh_seconds` konfiguriert und beträgt standardmäßig
+60 Sekunden. Zwischen diesen Abfragen verwendet er die zuletzt erfolgreich
+erkannte Version. Bei einer älteren oder unlesbaren Version werden keine
+weiteren v1.20-Abfragen ausgeführt und die bisherige Redis-Messung wird nicht
+überschrieben.
 
 ## Paths und Zuordnung
 
@@ -54,6 +58,16 @@ Nur SRT liefert derzeit mit `msRTT` eine echte Transport-RTT für die
 Hauptanzeige. Die bestehende ICMP-Messung für andere Publisher bleibt erhalten,
 wird im internen Source-Modell jedoch separat als `icmp_rtt_ms` gespeichert.
 SRT wird zusätzlich als `transport_rtt_ms` normalisiert.
+
+Die Weboberfläche stellt für SRT das Verhältnis von aktueller Transport-RTT zur
+konfigurierten SRT-/TSBPD-Latenz dar. Der angezeigte Prozentwert ist
+`RTT / SRT-Latenz × 100`; Tooltip und barrierefreies Label nennen zusätzlich
+den inversen RTT-Multiplikator `SRT-Latenz / RTT`. Die Farbgebung bewertet nur
+die Dimensionierung dieser Latenzreserve: ab `4 × RTT` grün, ab `3 × RTT` bis
+unter `4 × RTT` gelb und unter `3 × RTT` rot. Sie ist keine Aussage über die
+allgemeine Verbindungs- oder Stream-Gesundheit; Loss, Drop, Belated,
+Retransmissionen sowie RTT-Trend und -Volatilität bleiben davon getrennte
+Messwerte für eine spätere umfassende Bewertung.
 
 Für jeden Path fragt der Collector `/v3/paths/forward/list?path=<name>` ab und
 stellt die nativen Ziele unverändert als `forwardDestinations` bereit. Dazu

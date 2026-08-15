@@ -7,7 +7,7 @@ Requires=redis-server.service
 User=mediamtxmon
 Group=mediamtxmon
 WorkingDirectory=/opt/mediamtx-monitoring-backend
-ExecStart=/opt/mediamtx-monitoring-backend/venv/bin/uvicorn bin.mediamtx_api:app --host 0.0.0.0 --port 8080
+ExecStart=/opt/mediamtx-monitoring-backend/venv/bin/python3 bin/mediamtx_api.py
 Restart=on-failure
 RestartSec=5
 

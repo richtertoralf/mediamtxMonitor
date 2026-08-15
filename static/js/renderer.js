@@ -351,21 +351,28 @@ function getSrtRttAssessment(rttValue, latencyValue) {
   if (rtt == null || rtt < 0 || latency == null || latency <= 0) return null;
 
   const ratio = rtt / latency;
-  const status = ratio < 0.25 ? "good" : ratio <= 0.33 ? "warning" : "critical";
+  const status = ratio <= 0.25
+    ? "good"
+    : ratio <= 1 / 3 ? "warning" : "critical";
   const percentage = ratio * 100;
   const percentageLabel = percentage === 0
     ? "0%"
     : percentage < 1 ? "<1%" : `${Math.round(percentage)}%`;
   const fillPercentage = Number((Math.min(ratio / 0.40, 1) * 100).toFixed(2));
+  const multiplier = rtt === 0 ? null : latency / rtt;
+  const multiplierLabel = multiplier == null ? "∞×" : `${multiplier.toFixed(1)}×`;
 
-  return {status, percentageLabel, fillPercentage};
+  return {status, percentageLabel, fillPercentage, multiplierLabel};
 }
 
 function renderSrtRttAssessment(assessment) {
   if (!assessment) return "";
+  const description = `RTT / SRT-Latency: ${assessment.percentageLabel}; `
+    + `SRT-Latency entspricht ${assessment.multiplierLabel} RTT`;
   return `
     <div class="srt-rtt-assessment srt-rtt-${assessment.status}"
-         aria-label="RTT-Latency-Nutzung: ${escapeHtml(assessment.percentageLabel)}">
+         aria-label="${escapeHtml(description)}"
+         title="${escapeHtml(description)}">
       <span class="srt-rtt-track" aria-hidden="true">
         <span class="srt-rtt-fill" style="width: ${assessment.fillPercentage}%"></span>
       </span>
@@ -488,14 +495,14 @@ function renderImpactIndicators(connection) {
 
 function renderLinkTelemetry(connection, historyKey, assessment = null) {
   const trend = renderRttTrend(connection, historyKey);
-  const budget = connection?.type === "srtConn"
+  const latencyRelation = connection?.type === "srtConn"
     ? renderSrtRttAssessment(assessment)
     : "";
   const impacts = connection?.type === "srtConn"
     ? renderImpactIndicators(connection)
     : "";
-  if (!trend && !budget && !impacts) return null;
-  return `<div class="link-telemetry">${trend}${budget}${impacts}</div>`;
+  if (!trend && !latencyRelation && !impacts) return null;
+  return `<div class="link-telemetry">${trend}${latencyRelation}${impacts}</div>`;
 }
 
 function renderSrtMetrics(connection, direction, totalBytes, historyKey = null) {

@@ -3,7 +3,6 @@ api_server:
   index_file: "index.html"
   listen_host: "0.0.0.0"
   listen_port: 8080
-  redis_key: "mediamtx:streams:latest"
 
 api_base_url: "http://localhost:9997"
 

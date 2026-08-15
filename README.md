@@ -5,6 +5,17 @@ SRT-Metriken und Systemdaten in einem kleinen Web-Dashboard. Das Frontend bleibt
 Vanilla JavaScript. Redis puffert die vom Collector gelesenen Daten, FastAPI
 liefert API und Dashboard aus.
 
+Der grundlegende Datenfluss ist:
+
+```text
+MediaMTX Control API → Collector → Redis → FastAPI → Browser
+```
+
+Der Collector aktualisiert den Stream-Snapshot standardmäßig ungefähr einmal
+pro Sekunde. Der Browser ruft `GET /api/streams` regelmäßig per HTTP-Polling
+ab; WebSockets werden nicht verwendet. Redis hält neben aktuellen Snapshots
+kurzlebigen Messzustand und eine Kurzzeithistorie für Verbindungsmetriken.
+
 ![MediaMTX Monitor Dashboard](MediamtxMonitor.png)
 
 Voraussetzung ist **MediaMTX v1.20.0 oder neuer**. Der Collector prüft die
@@ -112,7 +123,8 @@ sudo mediamtx-monitor --upgrade
 
 Das Upgrade aktualisiert Programmcode und Python-Abhängigkeiten im bestehenden
 venv. Die lokale `config/collector.yaml` bleibt erhalten. Für eine
-Erstinstallation ist weiterhin `install.sh` zu verwenden.
+Erstinstallation ist weiterhin `install.sh` zu verwenden. MediaMTX-
+Konfiguration und systemd-Units werden vom Upgrade nicht aktualisiert.
 
 ## Dienste und Benutzer
 
@@ -153,5 +165,32 @@ curl -fsS http://127.0.0.1:8080/api/streams | python3 -m json.tool
 
 Dashboard: `http://<server-ip>:8080/`
 
-Weitere Prüfungen und Fehlerbilder stehen in
-[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+## Entwicklung und Tests
+
+Die wichtigsten Bereiche des Repositories sind:
+
+| Pfad | Inhalt |
+|---|---|
+| `bin/` | Collector, API, Systemerfassung und Backend-Hilfsmodule |
+| `static/` | Vanilla-JavaScript-Dashboard und CSS |
+| `config/` | Laufzeitkonfiguration und Installationsausschnitt für Preview |
+| `systemd/` | Units für MediaMTX und die Monitoring-Dienste |
+| `tests/` | Python-Unit-Tests und JavaScript-Renderer-Test |
+| `devtools/` | kontrolliertes Deployment in die Entwicklungsinstallation |
+
+Grundlegende lokale Prüfungen:
+
+```bash
+python3 -m unittest discover -s tests -p 'test_*.py' -v
+python3 -m compileall -q bin tests
+node --test tests/test_renderer.mjs
+bash -n install.sh uninstall.sh devtools/deploy-dev.sh
+```
+
+## Dokumentation
+
+- [Architektur und schrittweises Zielbild](docs/ARCHITECTURE.md)
+- [Coding- und Dokumentationsstandard](docs/CODING_STYLE.md)
+- [MediaMTX-v1.20-Datenmodell](docs/MEDIAMTX_V1_20_DATA.md)
+- [Betrieb und Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Entwicklungs-Deployment](devtools/README.md)

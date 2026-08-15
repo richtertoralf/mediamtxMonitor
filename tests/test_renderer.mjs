@@ -36,11 +36,20 @@ function assertMetric(html, label, value, unit = null) {
   assert.match(html, expression);
 }
 
-function assertRttAssessment(html, status, percentageLabel, fillPercentage) {
+function assertRttLatencyRelation(
+  html,
+  status,
+  percentageLabel,
+  fillPercentage,
+  multiplierLabel,
+) {
   const escapedLabel = percentageLabel.replace("<", "&lt;");
+  const description = `RTT / SRT-Latency: ${escapedLabel}; `
+    + `SRT-Latency entspricht ${multiplierLabel} RTT`;
   assert.match(html, new RegExp(
     `class="srt-rtt-assessment srt-rtt-${status}"[\\s\\S]*`
-      + `aria-label="RTT-Latency-Nutzung: ${escapedLabel}"[\\s\\S]*`
+      + `aria-label="${description}"[\\s\\S]*`
+      + `title="${description}"[\\s\\S]*`
       + `style="width: ${fillPercentage}%"[\\s\\S]*`
       + `<span class="srt-rtt-percentage">${escapedLabel}<\\/span>`,
   ));
@@ -119,7 +128,7 @@ assertMetric(srtPublisher, "RX", "3.75", "Mbit/s");
 assertMetric(srtPublisher, "Total", "4.00 KB");
 assertMetric(srtPublisher, "RTT", "24.00", "ms");
 assertMetric(srtPublisher, "Rcv Latency", "2000", "ms");
-assertRttAssessment(srtPublisher, "good", "1%", 3);
+assertRttLatencyRelation(srtPublisher, "good", "1%", 3, "83.3×");
 assert.doesNotMatch(srtPublisher, /9999/);
 assertMetric(srtPublisher, "Loss", "0.00", "%");
 assertMetric(srtPublisher, "SRT est. Link", "12.5", "Mbit/s");
@@ -201,7 +210,7 @@ assert.match(srtReader, /Reader 1/);
 assertMetric(srtReader, "TX", "4.25", "Mbit/s");
 assertMetric(srtReader, "RTT", "31.00", "ms");
 assertMetric(srtReader, "Snd Latency", "1500", "ms");
-assertRttAssessment(srtReader, "good", "2%", 5.17);
+assertRttLatencyRelation(srtReader, "good", "2%", 5.17, "48.4×");
 assert.doesNotMatch(srtReader, /8888/);
 assertMetric(srtReader, "Loss", "0.00", "%");
 assertMetric(srtReader, "SRT est. Link", "11.4", "Mbit/s");
@@ -530,7 +539,7 @@ assert.equal(formatDataAge(1001, 1000000), "Datenalter: 0.0 s");
 assert.equal(formatDataAge(null, 1000000), null);
 assert.equal(formatDataAge("invalid", 1000000), null);
 
-const healthySrtIn = renderStreamLeft({
+const lowRttSrtIn = renderStreamLeft({
   source: {
     type: "srtConn",
     transport_rtt_ms: 70,
@@ -538,61 +547,66 @@ const healthySrtIn = renderStreamLeft({
     details: {},
   },
 });
-assertMetric(healthySrtIn, "RTT", "70.00", "ms");
-assertMetric(healthySrtIn, "Rcv Latency", "2000", "ms");
-assertRttAssessment(healthySrtIn, "good", "4%", 8.75);
-assert.match(healthySrtIn, /<dd class="srt-rtt-good">2000<\/dd>/);
+assertMetric(lowRttSrtIn, "RTT", "70.00", "ms");
+assertMetric(lowRttSrtIn, "Rcv Latency", "2000", "ms");
+assertRttLatencyRelation(lowRttSrtIn, "good", "4%", 8.75, "28.6×");
+assert.match(lowRttSrtIn, /<dd class="srt-rtt-good">2000<\/dd>/);
 
-const warningSrtOut = renderReader({
+const mediumRttSrtOut = renderReader({
   type: "srtConn",
   srt_latency_ms: 2000,
   details: {msRTT: 600},
 });
-assertMetric(warningSrtOut, "RTT", "600.00", "ms");
-assertMetric(warningSrtOut, "Snd Latency", "2000", "ms");
-assertRttAssessment(warningSrtOut, "warning", "30%", 75);
-assert.match(warningSrtOut, /<dd class="srt-rtt-warning">2000<\/dd>/);
+assertMetric(mediumRttSrtOut, "RTT", "600.00", "ms");
+assertMetric(mediumRttSrtOut, "Snd Latency", "2000", "ms");
+assertRttLatencyRelation(mediumRttSrtOut, "warning", "30%", 75, "3.3×");
+assert.match(mediumRttSrtOut, /<dd class="srt-rtt-warning">2000<\/dd>/);
 
-const criticalSrtOut = renderReader({
+const highRttSrtOut = renderReader({
   type: "srtConn",
   srt_latency_ms: 2000,
   details: {msRTT: 900},
 });
-assertRttAssessment(criticalSrtOut, "critical", "45%", 100);
-assert.match(criticalSrtOut, /<dd class="srt-rtt-critical">2000<\/dd>/);
+assertMetric(highRttSrtOut, "RTT", "900.00", "ms");
+assertMetric(highRttSrtOut, "Snd Latency", "2000", "ms");
+assertRttLatencyRelation(highRttSrtOut, "critical", "45%", 100, "2.2×");
+assert.match(highRttSrtOut, /<dd class="srt-rtt-critical">2000<\/dd>/);
 
-const percentageCases = [
-  {ratio: 0, label: "0%", fill: 0},
-  {ratio: 0.0033, label: "<1%", fill: 0.82},
-  {ratio: 0.0349, label: "3%", fill: 8.72},
-  {ratio: 0.30, label: "30%", fill: 75},
-  {ratio: 1.24, label: "124%", fill: 100},
+const multiplierBoundaries = [
+  {multiplier: 4, status: "good", percentage: "25%", fill: 62.5},
+  {multiplier: 3, status: "warning", percentage: "33%", fill: 83.33},
+  {multiplier: 2.99, status: "critical", percentage: "33%", fill: 83.61},
 ];
-for (const {ratio, label, fill} of percentageCases) {
+for (const {multiplier, status, percentage, fill} of multiplierBoundaries) {
   const html = renderReader({
     type: "srtConn",
-    srt_latency_ms: 100,
-    details: {msRTT: ratio * 100},
+    srt_latency_ms: multiplier * 100,
+    details: {msRTT: 100},
   });
-  const status = ratio < 0.25 ? "good" : ratio <= 0.33 ? "warning" : "critical";
-  assertRttAssessment(html, status, label, fill);
+  assertRttLatencyRelation(
+    html,
+    status,
+    percentage,
+    fill,
+    `${multiplier.toFixed(1)}×`,
+  );
 }
 
 for (const latency of [undefined, null, 0]) {
-  const unavailableAssessment = renderReader({
+  const unavailableLatency = renderReader({
     type: "srtConn",
     srt_latency_ms: latency,
     details: {msRTT: 100},
   });
-  assert.doesNotMatch(unavailableAssessment, /srt-rtt-assessment/);
+  assert.doesNotMatch(unavailableLatency, /srt-rtt-assessment/);
 }
 
-const missingRttAssessment = renderReader({
+const missingRtt = renderReader({
   type: "srtConn",
   srt_latency_ms: 2000,
   details: {msRTT: null},
 });
-assert.doesNotMatch(missingRttAssessment, /srt-rtt-assessment/);
+assert.doesNotMatch(missingRtt, /srt-rtt-assessment/);
 assert.doesNotMatch(rtmpReader, /srt-rtt-assessment/);
 
 const healthOnly = renderSrtHealth({

@@ -71,6 +71,16 @@ curl -fsS http://127.0.0.1:8080/api/streams | python3 -m json.tool
 Eine leere Streamliste bei erreichbarer API kann bedeuten, dass MediaMTX nicht
 läuft, die Control API nicht erreichbar ist oder aktuell kein Stream publiziert.
 
+Die Antwort von `GET /api/streams` enthält folgende Top-Level-Felder:
+
+| Feld | Bedeutung |
+|---|---|
+| `streams` | Liste des aktuellen normalisierten Stream-Snapshots; leer, wenn kein lesbarer Snapshot vorliegt |
+| `collected_at` | Unix-Zeitpunkt des letzten erfolgreichen Collector-Snapshots oder `null` |
+| `snapshot_refresh_ms` | konfiguriertes Aktualisierungsintervall für Snapshot-Daten in Millisekunden |
+| `streamlist_refresh_ms` | konfiguriertes HTTP-Pollingintervall der Streamliste in Millisekunden |
+| `systeminfo` | aktueller System-Snapshot; leeres Objekt, wenn keiner lesbar ist |
+
 ## RTSP-Teststream
 
 Dieser Test erzeugt lokal ein synthetisches Bild. Mit `Ctrl-C` beenden:
@@ -110,6 +120,14 @@ sudo journalctl -u mediamtx -n 100 --no-pager
 
 Der Originalstream muss per lokalem RTSP erreichbar sein. Firewall-, NAT- oder
 ICE-Probleme können die Browser-Vorschau verhindern, obwohl die Control API läuft.
+
+Die aktuelle Weboberfläche bildet die Preview-URL fest als
+`http://<Browser-Host>:8889/__preview__/<Stream>` und setzt damit voraus, dass
+Dashboard und MediaMTX unter demselben Hostnamen erreichbar sind. HTTPS am
+Dashboard, ein Reverse Proxy, ein abweichender MediaMTX-Host oder ein anderer
+WebRTC-Port werden von dieser URL-Bildung derzeit nicht automatisch
+berücksichtigt. Eine konfigurierbare, Node-bezogene Preview-Adresse gehört zum
+späteren Multi-Node-Zielbild.
 
 ## `auto.crt: permission denied`
 

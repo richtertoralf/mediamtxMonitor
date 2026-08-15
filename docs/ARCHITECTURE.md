@@ -32,7 +32,33 @@ eingeführte Frameworks sind zu vermeiden.
 Bestehende funktionierende Komponenten werden bevorzugt weiterentwickelt. Ein
 pauschaler Umbau nach `src/` ist nicht vorgesehen.
 
-## Fachliche Hauptobjekte
+## Aktueller Implementierungsstand
+
+Die Laufzeit überwacht genau eine MediaMTX-Instanz, standardmäßig auf demselben
+Host. Der Collector in
+`bin/mediamtx_collector.py` steuert den seriellen Polling-Loop und verwendet die
+bereits extrahierten Module für Control-API-Zugriff, Normalisierung, Metriken,
+Redis-Keys und Snapshot-I/O. FastAPI wird als Modul-App betrieben; die drei
+Monitoring-Prozesse halten ihre Laufzeitabhängigkeiten teilweise noch in
+Modulzustand. Systemerfassung und ihr Loop liegen gemeinsam in
+`bin/mediamtx_systeminfo.py`.
+
+Das aktuelle Modell kennt Streams, Publisher und Reader, aber noch keine
+stabile `node_id` und kein Multi-Node-Routing. Preview verwendet im Browser den
+aktuellen Host mit festem HTTP-Schema und WebRTC-Port 8889. Eine
+Node-spezifische Preview-Konfiguration ist noch nicht implementiert.
+
+Die vorhandenen Modulgrenzen sind bewusst schrittweise entstanden. Ein dünner
+Collector-Entry-Point, eine FastAPI-App-Factory, vollständig injizierbare Stores
+und eine getrennte `SystemMetricsSource` sind Zielbild und kein aktueller
+Implementierungsstand.
+
+## Zielarchitektur und fachliche Hauptobjekte
+
+Die folgenden Abschnitte beschreiben die verbindlichen Grenzen, auf die bei
+künftigen, fachlich begründeten Änderungen schrittweise hingearbeitet wird.
+Formulierungen wie „soll“ oder „langfristig“ bezeichnen keine bereits
+implementierte Funktion.
 
 ### Node
 
@@ -90,7 +116,7 @@ FastAPI
 Web UI
 ```
 
-### Systemmetriken
+### Systemmetriken (Zielbild)
 
 ```text
 Host / System
@@ -254,7 +280,7 @@ Bewertung.
 Entwicklungsinstallation. Installation, Deployment, MediaMTX-Konfiguration und
 systemd-Steuerung bleiben von der fachlichen Monitoring-Logik getrennt.
 
-## Abhängigkeitsrichtung
+## Zielbild der Abhängigkeitsrichtung
 
 ```text
 Entry Points
@@ -347,8 +373,10 @@ Verhalten erhalten, passende Tests besitzen und separat deploybar sein.
 10. Health-Bewertung bleibt von Messwerterfassung und Metrikberechnung getrennt.
 11. Die UI rendert und formatiert; sie rekonstruiert keine Backend-
     Normalisierung.
-12. Preview-Endpunkte sind konfigurierbar und einem Node zugeordnet.
-13. Konfiguration wird zentral geladen, validiert und explizit übergeben.
+12. Mit Einführung des Multi-Node-Modells werden Preview-Endpunkte
+    konfigurierbar und einem Node zugeordnet.
+13. Konfiguration soll schrittweise zentral geladen, validiert und explizit
+    übergeben werden.
 14. Modulimporte erzeugen keine Netzwerkverbindungen, Scheduler oder Loops.
 15. Installation und Deployment bleiben außerhalb der fachlichen Monitoring-
     Logik.
