@@ -10,6 +10,7 @@ Läuft als eigenständiger Dienst analog zu mediamtx_collector.py.
 Die Konfiguration erfolgt über collector.yaml.
 """
 
+import ipaddress
 import json
 import socket
 import time
@@ -44,6 +45,20 @@ INTERVAL_SECONDS = system_monitor_cfg["interval_seconds"]
 r = None
 snapshot_store = None
 psutil = None
+
+
+def _is_traffic_interface(name: str) -> bool:
+    return not (
+        name.startswith("lo")
+        or name.startswith("docker")
+        or name.startswith("br")
+        or name.startswith("veth")
+        or name.startswith("tun")
+    )
+
+
+def _is_identity_interface(name: str) -> bool:
+    return not (name.startswith("docker") or name.startswith("veth"))
 
 
 def configure_runtime(raw_config: Dict[str, Any]) -> None:
@@ -99,19 +114,34 @@ def get_filtered_net_io():
     interfaces = psutil.net_io_counters(pernic=True)
     filtered = {
         name: stats for name, stats in interfaces.items()
-        if not (
-            name.startswith("lo")
-            or name.startswith("docker")
-            or name.startswith("br")
-            or name.startswith("veth")
-            # or name.startswith("wg") # wireguard Interface
-            or name.startswith("tun")
-        )
+        if _is_traffic_interface(name)
     }
     return {
         "bytes_recv": sum(stats.bytes_recv for stats in filtered.values()),
         "bytes_sent": sum(stats.bytes_sent for stats in filtered.values()),
     }
+
+
+def get_server_ips() -> list[str]:
+    """Return up to three relevant IPv4 addresses in system interface order."""
+    addresses = []
+    seen = set()
+    for name, interface_addresses in psutil.net_if_addrs().items():
+        if not _is_identity_interface(name):
+            continue
+        for address in interface_addresses:
+            if address.family != socket.AF_INET:
+                continue
+            parsed_address = ipaddress.ip_address(address.address)
+            if parsed_address.is_loopback or parsed_address.is_link_local:
+                continue
+            if address.address in seen:
+                continue
+            addresses.append(address.address)
+            seen.add(address.address)
+            if len(addresses) == 3:
+                return addresses
+    return addresses
 
 # ⏱️ Zwischenspeicher für Netzwerk-Bitrate
 _last_net_io = {
@@ -171,6 +201,7 @@ def collect_and_store():
 
         data = {
             "host": socket.gethostname(),
+            "server_ips": get_server_ips(),
             "timestamp": now,
             "cpu_percent": psutil.cpu_percent(interval=1),
             "memory": psutil.virtual_memory()._asdict(),
@@ -224,6 +255,8 @@ def get_system_info():
             return {}
 
         return {
+            "host": data.get("host"),
+            "server_ips": data.get("server_ips", []),
             "cpu_percent": data["cpu_percent"],
             "memory_total_bytes": data["memory"]["total"],
             "memory_used_bytes": data["memory"]["used"],

@@ -9,28 +9,47 @@
  * Lizenz: MIT
  */
 
-export function renderSystemInfo(systeminfo = {}) {
+export function renderSystemInfo(
+  systeminfo = {},
+  dataAgeText = "Datenalter: —",
+  dataAgeClass = "data-age-unknown",
+) {
   const container = document.getElementById("systeminfo");
   container.innerHTML = ""; // vorherigen Inhalt löschen
-
-  // Leere Daten? → nichts anzeigen
-  if (!systeminfo || Object.keys(systeminfo).length === 0) {
-    return;
-  }
+  const info = systeminfo || {};
 
   // 🧱 Haupt-Wrapper
   const section = document.createElement("section");
   section.className = "systeminfo";
+
+  const identity = document.createElement("div");
+  identity.className = "system-identity";
+  const identityLabel = document.createElement("span");
+  identityLabel.className = "system-identity-label";
+  identityLabel.textContent = "MediaMTX Server";
+  const identityValue = document.createElement("span");
+  identityValue.className = "system-identity-value";
+  const serverIps = Array.isArray(info.server_ips)
+    ? info.server_ips.filter(value => typeof value === "string" && value).slice(0, 3)
+    : [];
+  identityValue.textContent = `${info.host || "–"} · ${serverIps.join(" · ") || "–"}`;
+  const dataAge = document.createElement("span");
+  dataAge.className = `data-age ${dataAgeClass}`;
+  dataAge.setAttribute("aria-live", "polite");
+  dataAge.textContent = dataAgeText;
+  identity.appendChild(identityLabel);
+  identity.appendChild(identityValue);
+  identity.appendChild(dataAge);
 
   // 🔹 Linke Spalte – CPU, Load, RAM, Swap
   const leftColumn = document.createElement("div");
   leftColumn.className = "info-column left";
 
   const leftEntries = [
-    ["CPU-Auslastung", formatPercent(systeminfo.cpu_percent)],
-    ["Load Average", systeminfo.loadavg?.map(n => n.toFixed(2)).join(" / ") ?? "–"],
-    ["RAM (genutzt)", formatBytes(systeminfo.memory?.used) + " / " + formatBytes(systeminfo.memory?.total)],
-    ["Swap", formatBytes(systeminfo.swap?.used) + " / " + formatBytes(systeminfo.swap?.total)],
+    ["CPU-Auslastung", formatPercent(info.cpu_percent)],
+    ["Load Average", info.loadavg?.map(n => n.toFixed(2)).join(" / ") ?? "–"],
+    ["RAM (genutzt)", formatBytes(info.memory?.used) + " / " + formatBytes(info.memory?.total)],
+    ["Swap", formatBytes(info.swap?.used) + " / " + formatBytes(info.swap?.total)],
   ];
 
   for (const [label, value] of leftEntries) {
@@ -47,10 +66,10 @@ export function renderSystemInfo(systeminfo = {}) {
   rightColumn.className = "info-column right";
 
   const rightEntries = [
-    ["Festplatte", formatBytes(systeminfo.disk?.used) + " / " + formatBytes(systeminfo.disk?.total)],
-    ["Netzwerk RX", formatMbit(systeminfo.net_mbit_rx)],
-    ["Netzwerk TX", formatMbit(systeminfo.net_mbit_tx)],
-    ["Temperatur", (systeminfo.temperature_celsius ?? "–") + " °C"]
+    ["Festplatte", formatBytes(info.disk?.used) + " / " + formatBytes(info.disk?.total)],
+    ["Netzwerk RX", formatMbit(info.net_mbit_rx)],
+    ["Netzwerk TX", formatMbit(info.net_mbit_tx)],
+    ["Temperatur", (info.temperature_celsius ?? "–") + " °C"]
   ];
 
   for (const [label, value] of rightEntries) {
@@ -63,6 +82,7 @@ export function renderSystemInfo(systeminfo = {}) {
   }
 
   // 📦 Spalten zusammenführen
+  section.appendChild(identity);
   section.appendChild(leftColumn);
   section.appendChild(rightColumn);
   container.appendChild(section);

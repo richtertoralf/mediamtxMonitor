@@ -22,6 +22,12 @@ class SystemSnapshotStoreTests(unittest.TestCase):
 
     def test_get_system_info_reads_through_snapshot_store(self):
         snapshot = {
+            "host": "mediamtx-02",
+            "server_ips": [
+                "159.69.199.209",
+                "192.168.97.3",
+                "172.16.90.17",
+            ],
             "cpu_percent": 20.5,
             "memory": {"total": 1000, "used": 400},
             "swap": {"total": 500, "used": 50},
@@ -39,6 +45,8 @@ class SystemSnapshotStoreTests(unittest.TestCase):
         result = mediamtx_systeminfo.get_system_info()
 
         self.assertEqual(result["cpu_percent"], 20.5)
+        self.assertEqual(result["host"], "mediamtx-02")
+        self.assertEqual(result["server_ips"], snapshot["server_ips"])
         self.assertEqual(result["memory_total_bytes"], 1000)
         self.assertEqual(result["net_mbit_tx"], 2.5)
 

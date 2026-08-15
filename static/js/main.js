@@ -20,6 +20,7 @@
 
 import { fetchStreamsFromApi } from "./api.js";
 import {
+  dataAgeStatusClass,
   formatDataAge,
   recordSnapshotTelemetry,
   renderStreamCard,
@@ -29,8 +30,6 @@ import { renderSystemInfo } from "./systeminfo.js";
 
 const container = document.getElementById("streams");
 const noStreams = document.getElementById("no-streams");
-const dataAge = document.getElementById("data-age");
-
 const streamCards = new Map(); // Name → DOM-Element
 
 let refreshIntervalMs = 1000; // Defaultwert, wird gleich überschrieben
@@ -39,9 +38,12 @@ let refreshTimer = null;
 async function updateUI() {
   const result = await fetchStreamsFromApi();
 
-  renderSystemInfo(result.systeminfo || {});
   const ageText = formatDataAge(result.collected_at);
-  dataAge.textContent = ageText || "Datenalter: —";
+  renderSystemInfo(
+    result.systeminfo || {},
+    ageText || "Datenalter: —",
+    dataAgeStatusClass(result.collected_at),
+  );
 
   const newInterval = result.streamlist_refresh_ms ?? 1000;
 

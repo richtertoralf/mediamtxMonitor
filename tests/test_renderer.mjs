@@ -11,6 +11,7 @@ const rendererStyles = await readFile(
   "utf8",
 );
 const {
+  dataAgeStatusClass,
   formatDataAge,
   recordSnapshotTelemetry,
   renderReader,
@@ -23,6 +24,9 @@ const {
   telemetryTrendY,
   telemetryVariationY,
 } = await import(`data:text/javascript;base64,${Buffer.from(rendererSource).toString("base64")}`);
+
+assert.doesNotMatch(rendererSource, /protocol-marker|marker-srt|marker-rtmp/);
+assert.doesNotMatch(rendererStyles, /protocol-marker|marker-srt|marker-rtmp/);
 
 function assertMetric(html, label, value, unit = null) {
   const escaped = text => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -538,6 +542,11 @@ assert.equal(formatDataAge(1000, 1000400), "Datenalter: 0.4 s");
 assert.equal(formatDataAge(1001, 1000000), "Datenalter: 0.0 s");
 assert.equal(formatDataAge(null, 1000000), null);
 assert.equal(formatDataAge("invalid", 1000000), null);
+assert.equal(dataAgeStatusClass(997.1, 1000000), "data-age-fresh");
+assert.equal(dataAgeStatusClass(997, 1000000), "data-age-warning");
+assert.equal(dataAgeStatusClass(990, 1000000), "data-age-warning");
+assert.equal(dataAgeStatusClass(989.9, 1000000), "data-age-stale");
+assert.equal(dataAgeStatusClass(null, 1000000), "data-age-unknown");
 
 const lowRttSrtIn = renderStreamLeft({
   source: {
@@ -547,6 +556,7 @@ const lowRttSrtIn = renderStreamLeft({
     details: {},
   },
 });
+assert.doesNotMatch(lowRttSrtIn, /protocol-marker|marker-srt/);
 assertMetric(lowRttSrtIn, "RTT", "70.00", "ms");
 assertMetric(lowRttSrtIn, "Rcv Latency", "2000", "ms");
 assertRttLatencyRelation(lowRttSrtIn, "good", "4%", 8.75, "28.6×");

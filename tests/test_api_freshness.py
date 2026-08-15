@@ -70,6 +70,22 @@ class ApiFreshnessTests(unittest.TestCase):
         self.assertEqual(payload["streams"], streams)
         self.assertEqual(payload["collected_at"], 1234.5)
 
+    def test_api_preserves_system_hostname_and_ipv4_addresses(self):
+        systeminfo = {
+            "host": "mediamtx18",
+            "server_ips": ["192.168.95.18", "172.16.90.18"],
+        }
+        values = {
+            self.api.REDIS_KEY: json.dumps([]),
+            self.api.SYSTEM_REDIS_KEY: json.dumps(systeminfo),
+        }
+        self.api.snapshot_store = RedisStore(FakeRedis(values))
+
+        response = self.api.get_streams()
+        payload = json.loads(response.body)
+
+        self.assertEqual(payload["systeminfo"], systeminfo)
+
 
 if __name__ == "__main__":
     unittest.main()

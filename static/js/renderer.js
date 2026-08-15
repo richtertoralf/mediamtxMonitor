@@ -44,6 +44,17 @@ export function formatDataAge(collectedAt, nowMs = Date.now()) {
   return `Datenalter: ${ageSeconds.toFixed(1)} s`;
 }
 
+/** Classify snapshot freshness without assessing server or stream health. */
+export function dataAgeStatusClass(collectedAt, nowMs = Date.now()) {
+  const timestamp = optionalNumber(collectedAt);
+  const currentTime = optionalNumber(nowMs);
+  if (timestamp == null || currentTime == null) return "data-age-unknown";
+  const ageSeconds = Math.max(0, currentTime / 1000 - timestamp);
+  if (ageSeconds < 3) return "data-age-fresh";
+  if (ageSeconds <= 10) return "data-age-warning";
+  return "data-age-stale";
+}
+
 function formatBytes(bytes) {
   let value = optionalNumber(bytes);
   if (value == null) return null;
@@ -80,14 +91,6 @@ function protocolLabel(type) {
     webRTCSession: "WebRTC",
     moqSession: "MoQ",
   }[type] || type || "—";
-}
-
-function protocolMarkerClass(type) {
-  if (type === "srtConn") return "marker-srt";
-  if (type === "rtmpConn" || type === "rtmpsConn") return "marker-rtmp";
-  if (type === "hlsSession") return "marker-hls";
-  if (type === "webRTCSession") return "marker-webrtc";
-  return "marker-generic";
 }
 
 function metric(label, value, unit = null, assessment = null, valueClass = null) {
@@ -127,7 +130,6 @@ function renderConnectionHeading(type, details) {
   const remote = details?.remoteAddr || "—";
   return `
     <div class="connection-heading">
-      <span class="protocol-marker ${protocolMarkerClass(type)}"></span>
       <span>${escapeHtml(protocolLabel(type))}</span>
       <span class="remote-address">· ${escapeHtml(remote)}</span>
     </div>
