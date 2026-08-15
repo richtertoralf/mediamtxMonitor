@@ -71,6 +71,15 @@ function assertSparklineValue(html, rowClass, label, value, hasUnit = true) {
   ));
 }
 
+function assertSrtImpact(html, status, label, detail) {
+  assert.match(html, new RegExp(
+    `class="srt-impact srt-impact-${status}"[\\s\\S]*?`
+      + `aria-label="SRT Impact ${label}: ${detail}"[\\s\\S]*?`
+      + `<span class="srt-impact-status">${label}<\\/span>[\\s\\S]*?`
+      + `<div class="srt-impact-detail">${detail}<\\/div>`,
+  ));
+}
+
 
 const srtPublisherStream = {
   name: "camera/srt",
@@ -134,7 +143,7 @@ assertMetric(srtPublisher, "RTT", "24.00", "ms");
 assertMetric(srtPublisher, "Rcv Latency", "2000", "ms");
 assertRttLatencyRelation(srtPublisher, "good", "1%", 3, "83.3×");
 assert.doesNotMatch(srtPublisher, /9999/);
-assertMetric(srtPublisher, "Loss", "0.00", "%");
+assertMetric(srtPublisher, "Rcv Loss Rate", "0.00", "%");
 assertMetric(srtPublisher, "SRT est. Link", "12.5", "Mbit/s");
 assert.doesNotMatch(srtPublisher, /Reserve/);
 assert.doesNotMatch(srtPublisher, /Ping/);
@@ -154,12 +163,12 @@ assertSparklineValue(srtPublisher, "current", "RTT", "24.0");
 assertSparklineValue(srtPublisher, "variation10", "Var 10s", "6.0");
 assertSparklineValue(srtPublisher, "variation60", "Var 60s", "10.0");
 assert.match(srtPublisher, /class="metric-full-row"/);
-assert.match(srtPublisher, /impact-retrans impact-clear/);
-assert.match(srtPublisher, /impact-drop impact-recent/);
-assert.match(srtPublisher, /impact-belated impact-current/);
-assert.match(srtPublisher, /title="Retrans: 0"><span class="impact-label">Retrans<\/span><span class="impact-dot"><\/span><\/span>/);
-assert.match(srtPublisher, /impact-drop impact-recent[\s\S]*?<span class="impact-value">1<\/span>/);
-assert.match(srtPublisher, /impact-belated impact-current[\s\S]*?<span class="impact-value">3<\/span>/);
+assertSrtImpact(
+  srtPublisher,
+  "crit",
+  "CRIT",
+  "Rcv Loss 10s 1 · 60s 4 · Drop 60s 1 · Belated 10s 3 · 60s 7 · Undecrypt 60s 2",
+);
 assert.doesNotMatch(srtPublisher, /window-metrics|RTT 10 s|RTT 60 s|Events 10 s|p50 Δ|>Variation</);
 
 const srtReaderData = {
@@ -170,6 +179,7 @@ const srtReaderData = {
     bytesSent: 999999,
     msReceiveTsbPdDelay: 8888,
     packetsSendLossRate: 0,
+    outboundFramesDiscarded: 6,
     created: "2020-01-01T00:00:00Z",
   },
   srt_latency_ms: 1500,
@@ -191,7 +201,6 @@ const srtReaderData = {
     events: {
       "10s": {
         retrans_packets: 2, loss_packets: 0, drop_packets: 4,
-        belated_packets: 5,
       },
       "60s": {retrans_packets: 6, loss_packets: 1, drop_packets: 4},
     },
@@ -216,8 +225,9 @@ assertMetric(srtReader, "RTT", "31.00", "ms");
 assertMetric(srtReader, "Snd Latency", "1500", "ms");
 assertRttLatencyRelation(srtReader, "good", "2%", 5.17, "48.4×");
 assert.doesNotMatch(srtReader, /8888/);
-assertMetric(srtReader, "Loss", "0.00", "%");
+assertMetric(srtReader, "Send Loss Rate", "0.00", "%");
 assertMetric(srtReader, "SRT est. Link", "11.4", "Mbit/s");
+assertMetric(srtReader, "Frame Discard", "6");
 assert.doesNotMatch(srtReader, /Reserve/);
 assert.doesNotMatch(srtReader, /Ping/);
 assert.doesNotMatch(srtReader, /9\.99/);
@@ -229,13 +239,13 @@ assert.equal((srtReader.match(/viewBox="0 0 240 24"/g) || []).length, 3);
 assertSparklineValue(srtReader, "current", "RTT", "31.0");
 assertSparklineValue(srtReader, "variation10", "Var 10s", "0.0");
 assertSparklineValue(srtReader, "variation60", "Var 60s", "3.0");
-assertMetric(srtReader, "Undecrypt", "—", "pkt");
-assert.match(srtReader, /impact-retrans impact-current/);
-assert.match(srtReader, /impact-drop impact-current/);
-assert.match(srtReader, /impact-belated impact-current/);
-assert.match(srtReader, /impact-retrans impact-current[\s\S]*?<span class="impact-value">2<\/span>/);
-assert.match(srtReader, /impact-drop impact-current[\s\S]*?<span class="impact-value">4<\/span>/);
-assert.match(srtReader, /impact-belated impact-current[\s\S]*?<span class="impact-value">5<\/span>/);
+assertSrtImpact(
+  srtReader,
+  "crit",
+  "CRIT",
+  "Send Loss 60s 1 · Retrans 10s 2 · 60s 6 · Send Drop 10s 4 · 60s 4",
+);
+assert.doesNotMatch(srtReader, /impact-belated|impact-undecrypt|>Belated<|>Undecrypt</);
 assert.doesNotMatch(srtReader, /window-metrics|RTT 10 s|RTT 60 s|Events 60 s|p50 Δ|>Variation</);
 assert.doesNotMatch(srtReader, /STABLE|VARIABLE|UNSTABLE|DEGRADED|CRITICAL/);
 
@@ -287,7 +297,7 @@ assertSparklineValue(rtspPublisher, "current", "Ping", "12.0");
 assertSparklineValue(rtspPublisher, "variation10", "Var 10s", "0.0");
 assertSparklineValue(rtspPublisher, "variation60", "Var 60s", "—", false);
 assert.match(rtspPublisher, /class="metric-full-row"/);
-assert.doesNotMatch(rtspPublisher, /trend-variation-60|impact-indicators|srt-rtt-assessment/);
+assert.doesNotMatch(rtspPublisher, /trend-variation-60|srt-impact|srt-rtt-assessment/);
 
 const rtspReader = renderReader({
   type: "rtspSession",
@@ -343,7 +353,7 @@ const missingSrtLatency = renderReader({
 });
 assert.doesNotMatch(missingSrtLatency, /Latency/);
 assert.doesNotMatch(missingSrtLatency, /srt-rtt-assessment/);
-assert.doesNotMatch(missingSrtLatency, /rtt-trend|impact-indicators/);
+assert.doesNotMatch(missingSrtLatency, /rtt-trend|srt-impact/);
 
 const partialReader = {
   id: "partial-reader",
@@ -366,44 +376,110 @@ assert.doesNotMatch(partialHistory, /trend-variation-60|trend-current/);
 assertSparklineValue(partialHistory, "current", "RTT", "—", false);
 assertSparklineValue(partialHistory, "variation10", "Var 10s", "5.0");
 assertSparklineValue(partialHistory, "variation60", "Var 60s", "—", false);
-assert.match(partialHistory, /impact-retrans impact-unavailable/);
-assert.match(partialHistory, /impact-drop impact-clear/);
-assert.match(partialHistory, /impact-belated impact-unavailable/);
-assert.match(partialHistory, /title="Retrans: nicht verfügbar"><span class="impact-label">Retrans<\/span>/);
-assert.match(partialHistory, /title="Belated: nicht verfügbar"><span class="impact-label">Belated<\/span>/);
+assertSrtImpact(partialHistory, "unavailable", "—", "10s — · 60s —");
+assert.doesNotMatch(partialHistory, /impact-belated|impact-undecrypt/);
 assert.doesNotMatch(partialHistory, /p50|p95|>Variation</);
 
-function renderEventStates(events) {
-  return renderReader({
+function renderEventStates(direction, events) {
+  const connection = {
     id: "event-reader",
     type: "srtConn",
     transport_rtt_ms: 10,
     details: {},
     window_metrics: {events},
-  }, 0, "events");
+  };
+  return direction === "in"
+    ? renderStreamLeft({name: "events", source: connection})
+    : renderReader(connection, 0, "events");
 }
 
-const allRecentEvents = renderEventStates({
-  "10s": {retrans_packets: 0, drop_packets: 0, belated_packets: 0},
-  "60s": {retrans_packets: 2, drop_packets: 3, belated_packets: 4},
+const clearInEvents = renderEventStates("in", {
+  "10s": {
+    loss_packets: 0, retrans_packets: 0, drop_packets: 0,
+    belated_packets: 0, undecrypt_packets: 0,
+  },
+  "60s": {
+    loss_packets: 0, retrans_packets: 0, drop_packets: 0,
+    belated_packets: 0, undecrypt_packets: 0,
+  },
 });
-for (const field of ["retrans", "drop", "belated"]) {
-  assert.match(allRecentEvents, new RegExp(`impact-${field} impact-recent`));
-}
-assert.doesNotMatch(allRecentEvents, /impact-pulse/);
+assertSrtImpact(clearInEvents, "ok", "OK", "10s OK · 60s OK");
 
-const allClearEvents = renderEventStates({
-  "10s": {retrans_packets: 0, drop_packets: 0, belated_packets: 0},
-  "60s": {retrans_packets: 0, drop_packets: 0, belated_packets: 0},
+const retransWarningIn = renderEventStates("in", {
+  "10s": {loss_packets: 0, retrans_packets: 8, drop_packets: 0,
+    belated_packets: 0, undecrypt_packets: 0},
+  "60s": {loss_packets: 0, retrans_packets: 31, drop_packets: 0,
+    belated_packets: 0, undecrypt_packets: 0},
 });
-for (const field of ["retrans", "drop", "belated"]) {
-  assert.match(allClearEvents, new RegExp(`impact-${field} impact-clear`));
-}
-assert.doesNotMatch(allClearEvents, /impact-value/);
+assertSrtImpact(retransWarningIn, "warn", "WARN", "Retrans 10s 8 · 60s 31");
+assert.doesNotMatch(retransWarningIn, /Rcv Loss 10s|Drop 10s|Belated 10s|Undecrypt 10s/);
 
-const allUnavailableEvents = renderEventStates({"10s": {}, "60s": {}});
-for (const field of ["retrans", "drop", "belated"]) {
-  assert.match(allUnavailableEvents, new RegExp(`impact-${field} impact-unavailable`));
+const lossWarningIn = renderEventStates("in", {
+  "10s": {loss_packets: 3, retrans_packets: 0, drop_packets: 0,
+    belated_packets: 0, undecrypt_packets: 0},
+  "60s": {loss_packets: 9, retrans_packets: 0, drop_packets: 0,
+    belated_packets: 0, undecrypt_packets: 0},
+});
+assertSrtImpact(lossWarningIn, "warn", "WARN", "Rcv Loss 10s 3 · 60s 9");
+
+for (const [field, label] of [
+  ["drop_packets", "Drop"],
+  ["belated_packets", "Belated"],
+  ["undecrypt_packets", "Undecrypt"],
+]) {
+  const criticalIn = renderEventStates("in", {
+    "10s": {loss_packets: 0, retrans_packets: 0, drop_packets: 0,
+      belated_packets: 0, undecrypt_packets: 0, [field]: 2},
+    "60s": {loss_packets: 0, retrans_packets: 0, drop_packets: 0,
+      belated_packets: 0, undecrypt_packets: 0, [field]: 5},
+  });
+  assertSrtImpact(criticalIn, "crit", "CRIT", `${label} 10s 2 · 60s 5`);
+}
+
+const recentCriticalIn = renderEventStates("in", {
+  "10s": {loss_packets: 0, retrans_packets: 0, drop_packets: 0,
+    belated_packets: 0, undecrypt_packets: 0},
+  "60s": {loss_packets: 0, retrans_packets: 0, drop_packets: 2,
+    belated_packets: 5, undecrypt_packets: 0},
+});
+assertSrtImpact(
+  recentCriticalIn,
+  "recent",
+  "RECENT",
+  "10s OK · Drop 60s 2 · Belated 60s 5",
+);
+assert.doesNotMatch(recentCriticalIn, /srt-impact-crit/);
+
+const clearOutEvents = renderEventStates("out", {
+  "10s": {loss_packets: 0, retrans_packets: 0, drop_packets: 0},
+  "60s": {loss_packets: 0, retrans_packets: 0, drop_packets: 0},
+});
+assertSrtImpact(clearOutEvents, "ok", "OK", "10s OK · 60s OK");
+
+const warningOutEvents = renderEventStates("out", {
+  "10s": {loss_packets: 2, retrans_packets: 4, drop_packets: 0},
+  "60s": {loss_packets: 7, retrans_packets: 12, drop_packets: 0},
+});
+assertSrtImpact(
+  warningOutEvents,
+  "warn",
+  "WARN",
+  "Send Loss 10s 2 · 60s 7 · Retrans 10s 4 · 60s 12",
+);
+
+const criticalOutEvents = renderEventStates("out", {
+  "10s": {loss_packets: 0, retrans_packets: 0, drop_packets: 2},
+  "60s": {loss_packets: 0, retrans_packets: 0, drop_packets: 5},
+});
+assertSrtImpact(criticalOutEvents, "crit", "CRIT", "Send Drop 10s 2 · 60s 5");
+
+const recentOutEvents = renderEventStates("out", {
+  "10s": {loss_packets: 0, retrans_packets: 0, drop_packets: 0},
+  "60s": {loss_packets: 0, retrans_packets: 0, drop_packets: 5},
+});
+assertSrtImpact(recentOutEvents, "recent", "RECENT", "10s OK · Send Drop 60s 5");
+for (const outImpact of [clearOutEvents, warningOutEvents, criticalOutEvents, recentOutEvents]) {
+  assert.doesNotMatch(outImpact, /Belated|Undecrypt/);
 }
 
 function telemetryStream(connectionId, current, variation10, variation60) {
@@ -645,7 +721,7 @@ assert.match(rendererStyles, /\.metric-full-row\s*\{[^}]*grid-column:\s*1 \/ -1;
 assert.doesNotMatch(rendererStyles, /\.metric\s*\{[^}]*flex-wrap:\s*wrap;/s);
 assert.match(rendererStyles, /\.metric-with-assessment\s*\{[^}]*flex-wrap:\s*wrap;/s);
 assert.match(rendererStyles, /\.srt-rtt-track\s*\{[^}]*flex:\s*1 1 auto;/s);
-assert.match(rendererStyles, /\.impact-current \.impact-dot\s*\{[^}]*animation:\s*impact-pulse/s);
+assert.match(rendererStyles, /\.srt-impact-crit \.srt-impact-dot\s*\{[^}]*animation:\s*impact-pulse/s);
 assert.match(rendererStyles, /\.sparkline-graph\s*\{[^}]*height:\s*24px;/s);
 assert.match(rendererStyles, /\.trend-line\s*\{[^}]*fill:\s*none;/s);
 assert.match(rendererStyles, /\.trend-end-marker\s*\{[^}]*stroke-width:\s*1;/s);
@@ -655,16 +731,16 @@ assert.doesNotMatch(
 );
 assert.match(
   rendererStyles,
-  /\.impact-indicators\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(68px, 1fr\)\);/s,
+  /\.srt-impact-warn \.srt-impact-dot,[\s\S]*?\.srt-impact-recent \.srt-impact-dot\s*\{[^}]*background:\s*var\(--status-warning\);/s,
 );
 
 const metricLabels = html => [...html.matchAll(/class="metric-label">([^<]+)</g)]
   .map(match => match[1]);
 assert.deepEqual(metricLabels(srtPublisher), [
-  "RX", "Total", "RTT", "Rcv Latency", "Loss", "SRT est. Link", "Undecrypt", "Age",
+  "RX", "Total", "RTT", "Rcv Latency", "Rcv Loss Rate", "SRT est. Link", "Age",
 ]);
 assert.deepEqual(metricLabels(srtReader), [
-  "TX", "Total", "RTT", "Snd Latency", "Loss", "SRT est. Link", "Undecrypt", "Age",
+  "TX", "Total", "RTT", "Snd Latency", "Send Loss Rate", "SRT est. Link", "Frame Discard", "Age",
 ]);
 
 

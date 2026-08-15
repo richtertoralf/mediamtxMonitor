@@ -102,34 +102,43 @@ class SrtHealthModelTests(unittest.TestCase):
         self.assertNotIn("reserve_ratio", publisher)
         self.assertNotIn("reserve_ratio", reader)
 
-    def test_retrans_drop_and_belated_are_interval_values(self):
+    def test_publisher_impacts_are_directional_interval_values(self):
         first = {
+            "packetsReceivedLoss": 12,
             "packetsReceivedRetrans": 100,
             "packetsReceivedDrop": 8,
             "packetsReceivedBelated": 2,
+            "packetsReceivedUndecrypt": 1,
         }
         second = {
+            "packetsReceivedLoss": 14,
             "packetsReceivedRetrans": 103,
             "packetsReceivedDrop": 8,
             "packetsReceivedBelated": 4,
+            "packetsReceivedUndecrypt": 2,
         }
         self.health(first)
         health = self.health(second)
+        self.assertEqual(health["loss_packets"], 2)
         self.assertEqual(health["retrans_packets"], 3)
         self.assertEqual(health["drop_packets"], 0)
         self.assertEqual(health["belated_packets"], 2)
+        self.assertEqual(health["undecrypt_packets"], 1)
 
-    def test_reader_retrans_and_drop_are_interval_values(self):
+    def test_reader_impacts_are_directional_interval_values(self):
         self.health(
-            {"packetsRetrans": 20, "packetsSendDrop": 5},
+            {"packetsSendLoss": 7, "packetsRetrans": 20, "packetsSendDrop": 5},
             direction="reader",
         )
         health = self.health(
-            {"packetsRetrans": 22, "packetsSendDrop": 5},
+            {"packetsSendLoss": 8, "packetsRetrans": 22, "packetsSendDrop": 5},
             direction="reader",
         )
+        self.assertEqual(health["loss_packets"], 1)
         self.assertEqual(health["retrans_packets"], 2)
         self.assertEqual(health["drop_packets"], 0)
+        self.assertNotIn("belated_packets", health)
+        self.assertNotIn("undecrypt_packets", health)
 
     def test_missing_values_do_not_create_zero_placeholders(self):
         self.assertEqual(self.health({}), {})
@@ -172,6 +181,7 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
                 "msReceiveTsbPdDelay": 8888,
                 "msSendTsbPdDelay": 1500,
                 "packetsRetrans": 4,
+                "outboundFramesDiscarded": 6,
             },
             {
                 "id": "srt-reader-2",
@@ -288,6 +298,10 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(srt_path["source"]["srt_latency_ms"], 2000)
         self.assertEqual(srt_path["readers"][0]["srt_latency_ms"], 1500)
+        self.assertEqual(
+            srt_path["readers"][0]["details"]["outboundFramesDiscarded"],
+            6,
+        )
         self.assertEqual(srt_path["readers"][1]["srt_latency_ms"], 750)
         self.assertNotEqual(srt_path["source"]["srt_latency_ms"], 9999)
         self.assertNotEqual(srt_path["readers"][0]["srt_latency_ms"], 8888)

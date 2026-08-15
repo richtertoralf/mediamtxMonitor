@@ -463,45 +463,76 @@ function renderRttTrend(connection, historyKey) {
   `;
 }
 
-function renderImpactIndicators(connection) {
+function renderImpactIndicators(connection, direction) {
   const eventWindows = connection?.window_metrics?.events || {};
   const recentEvents = eventWindows["10s"] || {};
   const heldEvents = eventWindows["60s"] || {};
   if (!eventWindows["10s"] && !eventWindows["60s"]) return "";
-  const definitions = [
-    ["Retrans", "retrans_packets"],
-    ["Drop", "drop_packets"],
-    ["Belated", "belated_packets"],
-  ];
+  const definitions = direction === "in"
+    ? [
+      ["Rcv Loss", "loss_packets", false],
+      ["Retrans", "retrans_packets", false],
+      ["Drop", "drop_packets", true],
+      ["Belated", "belated_packets", true],
+      ["Undecrypt", "undecrypt_packets", true],
+    ]
+    : [
+      ["Send Loss", "loss_packets", false],
+      ["Retrans", "retrans_packets", false],
+      ["Send Drop", "drop_packets", true],
+    ];
+  const impacts = definitions.map(([label, field, critical]) => ({
+    label,
+    field,
+    critical,
+    value10: optionalNumber(recentEvents[field]),
+    value60: optionalNumber(heldEvents[field]),
+  }));
+  const currentCritical = impacts.some(item => item.critical && item.value10 > 0);
+  const currentWarning = impacts.some(item => !item.critical && item.value10 > 0);
+  const recentImpact = impacts.some(item => item.value60 > 0);
+  const allClear = impacts.every(item => item.value10 === 0 && item.value60 === 0);
+  const status = currentCritical
+    ? "crit"
+    : currentWarning ? "warn" : recentImpact ? "recent" : allClear ? "ok" : "unavailable";
+  const statusLabel = {
+    crit: "CRIT",
+    warn: "WARN",
+    recent: "RECENT",
+    ok: "OK",
+    unavailable: "—",
+  }[status];
+  const causes = impacts.flatMap(item => {
+    const values = [];
+    if (item.value10 > 0) values.push(`10s ${formatCount(item.value10)}`);
+    if (item.value60 > 0) values.push(`60s ${formatCount(item.value60)}`);
+    return values.length ? [`${item.label} ${values.join(" · ")}`] : [];
+  });
+  const detail = status === "ok"
+    ? "10s OK · 60s OK"
+    : status === "recent"
+      ? `10s OK · ${causes.join(" · ")}`
+      : causes.join(" · ") || "10s — · 60s —";
   return `
-    <span class="impact-indicators" aria-label="SRT-Auswirkungen der letzten 60 Sekunden">
-      ${definitions.map(([label, field]) => {
-        const currentValue = optionalNumber(recentEvents[field]);
-        const heldValue = optionalNumber(heldEvents[field]);
-        const state = currentValue > 0
-          ? "current"
-          : heldValue > 0 ? "recent" : currentValue === 0 && heldValue === 0
-            ? "clear"
-            : "unavailable";
-        const shownValue = state === "current" ? currentValue
-          : state === "recent" ? heldValue : null;
-        const titleValue = shownValue == null
-          ? state === "clear" ? "0" : "nicht verfügbar"
-          : formatCount(shownValue);
-        return `<span class="impact impact-${field.replace("_packets", "")} impact-${state}"
-                     title="${label}: ${escapeHtml(titleValue)}"><span class="impact-label">${label}</span><span class="impact-dot"></span>${shownValue != null ? `<span class="impact-value">${escapeHtml(formatCount(shownValue))}</span>` : ""}</span>`;
-      }).join("")}
-    </span>
+    <div class="srt-impact srt-impact-${status}"
+         aria-label="SRT Impact ${escapeHtml(statusLabel)}: ${escapeHtml(detail)}">
+      <div class="srt-impact-summary">
+        <span class="srt-impact-title">SRT Impact</span>
+        <span class="srt-impact-dot" aria-hidden="true"></span>
+        <span class="srt-impact-status">${escapeHtml(statusLabel)}</span>
+      </div>
+      <div class="srt-impact-detail">${escapeHtml(detail)}</div>
+    </div>
   `;
 }
 
-function renderLinkTelemetry(connection, historyKey, assessment = null) {
+function renderLinkTelemetry(connection, historyKey, assessment = null, direction = null) {
   const trend = renderRttTrend(connection, historyKey);
   const latencyRelation = connection?.type === "srtConn"
     ? renderSrtRttAssessment(assessment)
     : "";
   const impacts = connection?.type === "srtConn"
-    ? renderImpactIndicators(connection)
+    ? renderImpactIndicators(connection, direction)
     : "";
   if (!trend && !latencyRelation && !impacts) return null;
   return `<div class="link-telemetry">${trend}${latencyRelation}${impacts}</div>`;
@@ -515,16 +546,22 @@ function renderSrtMetrics(connection, direction, totalBytes, historyKey = null) 
   const lossRate = direction === "in"
     ? details.packetsReceivedLossRate
     : details.packetsSendLossRate;
-  const loss = lossRate != null
-    ? metric("Loss", formatNumber(lossRate, 2), "%")
-    : metric("Loss", formatCount(health.loss_packets), "pkt");
+  const lossLabel = direction === "in" ? "Rcv Loss Rate" : "Send Loss Rate";
+  const loss = lossRate == null
+    ? null
+    : metric(lossLabel, formatNumber(lossRate, 2), "%");
   const rtt = firstAvailable(
     connection?.transport_rtt_ms,
     health.rtt_ms,
     details.msRTT,
   );
   const assessment = getSrtRttAssessment(rtt, connection?.srt_latency_ms);
-  const linkTelemetry = renderLinkTelemetry(connection, historyKey, assessment);
+  const linkTelemetry = renderLinkTelemetry(
+    connection,
+    historyKey,
+    assessment,
+    direction,
+  );
 
   return renderMetrics([
     metric(rateLabel, rate == null ? "—" : formatNumber(rate, 2), "Mbit/s"),
@@ -547,7 +584,9 @@ function renderSrtMetrics(connection, direction, totalBytes, historyKey = null) 
       firstAvailable(health.link_capacity_mbps, details.mbpsLinkCapacity),
       1,
     ), "Mbit/s"),
-    metric("Undecrypt", formatCount(health.undecrypt_packets) ?? "—", "pkt"),
+    direction === "out"
+      ? metric("Frame Discard", formatCount(details.outboundFramesDiscarded))
+      : null,
     metric("Age", formatConnectionAge(details.created) ?? "—"),
   ]);
 }

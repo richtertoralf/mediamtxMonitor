@@ -395,61 +395,63 @@ body > h1 {
 .metric dd.srt-rtt-warning { color: var(--status-warning); }
 .metric dd.srt-rtt-critical { color: var(--status-critical); }
 
-.impact-indicators {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(68px, 1fr));
+.srt-impact {
+  display: flex;
+  flex-direction: column;
   flex: 1 1 230px;
   min-width: min(230px, 100%);
+  gap: 3px;
+  font-size: 0.78rem;
+}
+
+.srt-impact-summary {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.78rem;
   font-weight: 750;
 }
 
-.impact {
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
-  gap: 3px;
-  color: var(--text-muted);
-}
-
-.impact-label {
-  white-space: nowrap;
-}
-
-.impact-dot {
+.srt-impact-dot {
   width: 9px;
   height: 9px;
   background: #4a5359;
   border-radius: 50%;
 }
 
-.impact-value {
-  color: var(--text-main);
+.srt-impact-detail {
+  color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
 
-.impact-clear .impact-dot {
+.srt-impact-ok .srt-impact-dot {
   background: var(--status-good);
   box-shadow: 0 0 0 1px rgba(101, 185, 122, 0.2);
 }
 
-.impact-current .impact-dot,
-.impact-recent .impact-dot {
+.srt-impact-warn .srt-impact-dot,
+.srt-impact-recent .srt-impact-dot {
+  background: var(--status-warning);
+}
+
+.srt-impact-crit .srt-impact-dot {
   background: var(--status-critical);
   box-shadow: 0 0 0 1px rgba(208, 100, 95, 0.3);
 }
 
-.impact-current .impact-dot {
+.srt-impact-crit .srt-impact-dot {
   animation: impact-pulse 1.6s ease-in-out infinite;
 }
 
-.impact-recent {
-  color: #bc7773;
+.srt-impact-warn .srt-impact-status,
+.srt-impact-recent .srt-impact-status {
+  color: var(--status-warning);
 }
 
-.impact-unavailable {
+.srt-impact-crit .srt-impact-status {
+  color: var(--status-critical);
+}
+
+.srt-impact-unavailable {
   opacity: 0.38;
 }
 
@@ -459,7 +461,7 @@ body > h1 {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .impact-current .impact-dot { animation: none; }
+  .srt-impact-crit .srt-impact-dot { animation: none; }
 }
 
 .srt-rtt-track {
@@ -684,7 +686,7 @@ body > h1 {
     min-width: 140px;
   }
 
-  .impact-indicators {
+  .srt-impact {
     justify-content: flex-start;
   }
 }

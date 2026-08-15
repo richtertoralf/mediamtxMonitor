@@ -146,6 +146,43 @@ class HistorySummaryTests(unittest.TestCase):
         self.assertEqual(summary["events"]["60s"]["retrans_packets"], 14.0)
         self.assertEqual(summary["events"]["60s"]["loss_packets"], 2.0)
 
+    def test_all_srt_impacts_keep_distinct_10_and_60_second_sums(self):
+        samples = [
+            {
+                "timestamp": 45.0,
+                "loss_packets": 10,
+                "retrans_packets": 20,
+                "drop_packets": 30,
+                "belated_packets": 40,
+                "undecrypt_packets": 50,
+            },
+            {
+                "timestamp": 55.0,
+                "loss_packets": 1,
+                "retrans_packets": 2,
+                "drop_packets": 3,
+                "belated_packets": 4,
+                "undecrypt_packets": 5,
+            },
+        ]
+
+        summary = summarize_history(samples, 60.0)
+
+        self.assertEqual(summary["events"]["10s"], {
+            "retrans_packets": 2.0,
+            "loss_packets": 1.0,
+            "drop_packets": 3.0,
+            "belated_packets": 4.0,
+            "undecrypt_packets": 5.0,
+        })
+        self.assertEqual(summary["events"]["60s"], {
+            "retrans_packets": 22.0,
+            "loss_packets": 11.0,
+            "drop_packets": 33.0,
+            "belated_packets": 44.0,
+            "undecrypt_packets": 55.0,
+        })
+
     def test_missing_timing_and_events_do_not_create_placeholders(self):
         self.assertEqual(
             summarize_history([{"timestamp": 100.0, "rx_mbps": 4.2}], 100.0),
