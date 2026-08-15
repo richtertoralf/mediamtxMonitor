@@ -1,5 +1,9 @@
 venv/
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
 # Schützt mögliche Legacy-Laufzeitdateien; nach kontrollierter Migration entfernbar.
 static/snapshots/

@@ -2,6 +2,17 @@
 
 Dieses Verzeichnis enthält Hilfsskripte für die Entwicklung des MediaMTX Monitor.
 
+## verify.sh
+
+Der gemeinsame mechanische Prüfpfad für lokale Änderungen ist:
+
+```bash
+./devtools/verify.sh
+```
+
+Die Verifikation führt kein Deployment aus. Der Deployment-Vergleich und das
+echte Deployment bleiben davon getrennte Schritte.
+
 ## Prinzip
 
 Entwicklung und Versionskontrolle erfolgen im Git-Repository:
@@ -107,5 +118,6 @@ Keine deploybaren Änderungen gefunden.
 ```text
 devtools/
 ├── README.md
-└── deploy-dev.sh
+├── deploy-dev.sh
+└── verify.sh
 ```

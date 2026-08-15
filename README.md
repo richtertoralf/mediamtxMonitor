@@ -178,13 +178,10 @@ Die wichtigsten Bereiche des Repositories sind:
 | `tests/` | Python-Unit-Tests und JavaScript-Renderer-Test |
 | `devtools/` | kontrolliertes Deployment in die Entwicklungsinstallation |
 
-Grundlegende lokale Prüfungen:
+Gemeinsamer lokaler Prüfpfad:
 
 ```bash
-python3 -m unittest discover -s tests -p 'test_*.py' -v
-python3 -m compileall -q bin tests
-node --test tests/test_renderer.mjs
-bash -n install.sh uninstall.sh devtools/deploy-dev.sh
+./devtools/verify.sh
 ```
 
 ## Dokumentation
