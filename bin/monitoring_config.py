@@ -190,17 +190,26 @@ def measure_configured_rtt(
     remote_addr: str,
     rtt_config: Mapping[str, Any],
     measure_func: Callable[..., Optional[float]],
+    *,
+    key_prefix: Optional[str] = None,
+    measurement_kwargs: Optional[Mapping[str, Any]] = None,
 ) -> Optional[float]:
     """Führt eine RTT-Messung nur aus, wenn sie konfiguriert aktiviert ist."""
     if not rtt_config["enabled"]:
         return None
 
+    kwargs = dict(measurement_kwargs or {})
+    kwargs.update(
+        {
+            "remote_addr": remote_addr,
+            "ewma_alpha": float(rtt_config["ewma_alpha"]),
+            "min_period_s": int(rtt_config["min_period_s"]),
+            "ttl_s": int(rtt_config["ttl_s"]),
+            "key_prefix": str(key_prefix or rtt_config["key_prefix"]),
+            "timeout_s": float(rtt_config["timeout_s"]),
+        }
+    )
     return measure_func(
         redis_client,
-        remote_addr=remote_addr,
-        ewma_alpha=float(rtt_config["ewma_alpha"]),
-        min_period_s=int(rtt_config["min_period_s"]),
-        ttl_s=int(rtt_config["ttl_s"]),
-        key_prefix=str(rtt_config["key_prefix"]),
-        timeout_s=float(rtt_config["timeout_s"]),
+        **kwargs,
     )

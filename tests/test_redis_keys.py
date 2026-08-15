@@ -2,15 +2,19 @@ import unittest
 
 from bin.redis_keys import (
     DEFAULT_RTT_PUBLISHER_PREFIX,
+    DEFAULT_RTT_READER_PREFIX,
     DEFAULT_STREAM_SNAPSHOT_KEY,
     DEFAULT_SYSTEM_SNAPSHOT_KEY,
     bitrate_state_keys,
+    connection_lifecycle_key,
     connection_history_key,
     publisher_connection_key,
     publisher_rtt_keys,
     publisher_srt_health_key,
     reader_connection_key,
+    reader_rtt_keys,
     reader_srt_health_key,
+    rtmp_frame_discard_key,
     srt_counter_key,
     stream_snapshot_freshness_key,
 )
@@ -66,6 +70,17 @@ class ConnectionStateKeyTests(unittest.TestCase):
             "pub:camera/main room:srtConn:id:part:1",
         )
 
+    def test_rtmp_discard_and_lifecycle_keys_use_central_roles(self):
+        reader = reader_connection_key("camera/main", "rtmpConn", "reader:1")
+        self.assertEqual(
+            rtmp_frame_discard_key(reader),
+            "rd:camera/main:rtmpConn:reader:1:rtmp_frame_discard",
+        )
+        self.assertEqual(
+            connection_lifecycle_key("camera/main", "reader", "rtmpConn"),
+            "lifecycle:reader:camera/main:rtmpConn",
+        )
+
 
 class RttKeyTests(unittest.TestCase):
     def test_all_publisher_rtt_keys_match_existing_schema(self):
@@ -85,6 +100,24 @@ class RttKeyTests(unittest.TestCase):
                 "custom:rtt:2001:db8::1:last_ts",
             ),
         )
+
+    def test_reader_rtt_is_isolated_from_publisher_and_other_connections(self):
+        publisher = publisher_rtt_keys("192.0.2.10")
+        reader_a = reader_rtt_keys(
+            "stream", "rtmpConn", "reader-a", "192.0.2.10"
+        )
+        reader_b = reader_rtt_keys(
+            "stream", "rtmpConn", "reader-b", "192.0.2.10"
+        )
+
+        self.assertEqual(DEFAULT_RTT_READER_PREFIX, "rtt:rd")
+        self.assertNotEqual(publisher, reader_a)
+        self.assertNotEqual(reader_a, reader_b)
+        self.assertEqual(reader_a, (
+            "rtt:rd:stream:rtmpConn:reader-a:192.0.2.10:ewma_ms",
+            "rtt:rd:stream:rtmpConn:reader-a:192.0.2.10:last_ms",
+            "rtt:rd:stream:rtmpConn:reader-a:192.0.2.10:last_ts",
+        ))
 
 
 class SrtHealthKeyTests(unittest.TestCase):

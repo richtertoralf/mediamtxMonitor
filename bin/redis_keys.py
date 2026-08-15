@@ -6,6 +6,7 @@ from __future__ import annotations
 DEFAULT_STREAM_SNAPSHOT_KEY = "mediamtx:streams:latest"
 DEFAULT_SYSTEM_SNAPSHOT_KEY = "mediamtx:system:latest"
 DEFAULT_RTT_PUBLISHER_PREFIX = "rtt:pub"
+DEFAULT_RTT_READER_PREFIX = "rtt:rd"
 
 _PUBLISHER_PREFIX = "pub"
 _READER_PREFIX = "rd"
@@ -17,6 +18,8 @@ _BITRATE_EWMA_MBPS = "ewma_mbps"
 _RTT_EWMA_MS = "ewma_ms"
 _RTT_LAST_MS = "last_ms"
 _RTT_LAST_TS = "last_ts"
+_RTMP_FRAME_DISCARD = "rtmp_frame_discard"
+_CONNECTION_LIFECYCLE_PREFIX = "lifecycle"
 
 
 def publisher_connection_key(
@@ -64,6 +67,22 @@ def publisher_rtt_keys(
     )
 
 
+def reader_rtt_keys(
+    path: str,
+    connection_type: str,
+    connection_id: str,
+    host: str,
+    key_prefix: str = DEFAULT_RTT_READER_PREFIX,
+) -> tuple[str, str, str]:
+    """Return RTT state keys isolated to one reader connection and host."""
+    base_key = f"{key_prefix}:{path}:{connection_type}:{connection_id}:{host}"
+    return (
+        f"{base_key}:{_RTT_EWMA_MS}",
+        f"{base_key}:{_RTT_LAST_MS}",
+        f"{base_key}:{_RTT_LAST_TS}",
+    )
+
+
 def publisher_srt_health_key(
     path: str, connection_type: str, connection_id: str
 ) -> str:
@@ -83,3 +102,13 @@ def reader_srt_health_key(
 def srt_counter_key(srt_health_key: str, counter: str) -> str:
     """Append a native MediaMTX SRT counter name to a health-state key."""
     return f"{srt_health_key}:{counter}"
+
+
+def rtmp_frame_discard_key(reader_key: str) -> str:
+    """Build the cumulative RTMP reader frame-discard state key."""
+    return f"{reader_key}:{_RTMP_FRAME_DISCARD}"
+
+
+def connection_lifecycle_key(path: str, role: str, connection_type: str) -> str:
+    """Build short-lived lifecycle state shared across connection IDs."""
+    return f"{_CONNECTION_LIFECYCLE_PREFIX}:{role}:{path}:{connection_type}"

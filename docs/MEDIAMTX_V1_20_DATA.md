@@ -55,9 +55,46 @@ Kurzzeithistorie speichert diese normalisierten Intervallwerte und summiert sie
 für 10-s- und 60-s-Fenster; sie bildet nicht erneut Counter-Deltas.
 
 Nur SRT liefert derzeit mit `msRTT` eine echte Transport-RTT für die
-Hauptanzeige. Die bestehende ICMP-Messung für andere Publisher bleibt erhalten,
-wird im internen Source-Modell jedoch separat als `icmp_rtt_ms` gespeichert.
-SRT wird zusätzlich als `transport_rtt_ms` normalisiert.
+Hauptanzeige. Die externe ICMP-Messung steht für Nicht-SRT-Publisher sowie für
+RTMP-/RTMPS-, RTSP-/RTSPS-, WebRTC- und MoQ-Reader mit konkreter
+`remoteAddr` zur Verfügung und wird im normalisierten Verbindungsmodell separat
+als `icmp_rtt_ms` gespeichert. Reader verwenden einen nach Path, Objekttyp,
+MediaMTX-Connection-ID und Host getrennten Redis-Zustandsraum. SRT wird
+stattdessen ausschließlich als `transport_rtt_ms` normalisiert; HLS erhält
+keine ICMP-Messung.
+
+Publisher und Reader verwenden dieselbe konfigurierte ICMP-Kadenz, EWMA und
+TTL. Die Kurzzeithistorie übernimmt ICMP-Werte nur in dieser langsameren
+Kadenz, nicht bei jedem Collector-Poll. In der Oberfläche heißt der externe
+Wert `Ping`; `RTT` bezeichnet weiterhin ausschließlich die native
+SRT-Transport-RTT.
+
+## RTMP-/RTMPS-Zeitdimension
+
+Für RTMP- und RTMPS-Verbindungen übernimmt der Snapshot zusätzlich die bereits
+in der allgemeinen Connection-History gespeicherten `rx_mbps`- beziehungsweise
+`tx_mbps`-Samples als `rate_history`. Die Punkte bleiben nach
+MediaMTX-Connection-ID getrennt; fehlende Raten werden als Lücken und nicht als
+Nullwerte transportiert. Andere Protokolle erhalten durch diese Darstellung
+keinen zusätzlichen Bitratenverlauf.
+
+Der native RTMP-Reader-Counter `outboundFramesDiscarded` zählt Media-Einheiten,
+die MediaMTX nicht in die volle Ausgangsqueue des konkreten Readers einreihen
+konnte. Der Collector bildet ausschließlich innerhalb derselben Connection-ID
+reset-sichere `frame_discard_delta`-Intervallwerte. Die bestehende
+Kurzzeithistorie summiert diese getrennt unter
+`window_metrics.frame_discard.10s` und `.60s`. Der kumulative native Wert bleibt
+unverändert unter `details.outboundFramesDiscarded`; die Deltas sind weder
+Packet Loss noch TCP-Retransmissionen oder ein Beweis für sichtbare Bildfehler.
+
+Für RTMP/RTMPS wird außerdem ein kurzlebiger Lifecycle-State mit 120 Sekunden
+TTL pro Path, Rolle und Protokoll geführt. Er meldet ausschließlich beobachtete
+Connection-ID-Wechsel. Publisher sind pro Path eindeutig. Reader werden nur
+dann einer Karte zugeordnet, wenn für denselben Remote-Host ohne ephemeren Port
+genau eine Connection aktiv ist. Parallele, fehlende oder anderweitig
+mehrdeutige Readergruppen erhalten keine individuelle Stability-Aussage. Ein
+Collector-Neustart setzt eine neue Baseline und erzeugt keinen künstlichen
+Wechsel.
 
 Die Weboberfläche stellt für SRT das Verhältnis von aktueller Transport-RTT zur
 konfigurierten SRT-/TSBPD-Latenz dar. Der angezeigte Prozentwert ist

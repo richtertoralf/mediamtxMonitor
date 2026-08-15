@@ -161,7 +161,7 @@ function connectionTotal(connection, direction, stream) {
 }
 
 function pingValue(connection) {
-  return firstAvailable(connection?.ping_rtt_ms, connection?.icmp_rtt_ms);
+  return firstAvailable(connection?.icmp_rtt_ms, connection?.ping_rtt_ms);
 }
 
 const TELEMETRY_WINDOW_SECONDS = 60;
@@ -463,6 +463,70 @@ function renderRttTrend(connection, historyKey) {
   `;
 }
 
+function renderRateTrend(connection, direction) {
+  const history = Array.isArray(connection?.rate_history)
+    ? connection.rate_history
+    : [];
+  const values = history.map(point => optionalNumber(point?.mbps))
+    .filter(value => value != null && value >= 0);
+  const timestamps = history.map(point => optionalNumber(point?.timestamp))
+    .filter(value => value != null);
+  if (!values.length || !timestamps.length) return "";
+
+  const latestTimestamp = Math.max(...timestamps);
+  const minimumTimestamp = latestTimestamp - TELEMETRY_WINDOW_SECONDS;
+  const maximum = Math.max(...values, 0.1);
+  const xPosition = timestamp => Math.max(0, Math.min(240,
+    ((timestamp - minimumTimestamp) / TELEMETRY_WINDOW_SECONDS) * 240));
+  const yPosition = value => SPARKLINE_BASELINE_Y
+    - (Math.max(0, Math.min(maximum, value)) / maximum) * SPARKLINE_VERTICAL_RANGE;
+  const points = history.map(point => ({
+    timestamp: optionalNumber(point?.timestamp),
+    rate: optionalNumber(point?.mbps),
+  })).filter(point => point.timestamp != null);
+  const label = direction === "in" ? "RX-Verlauf" : "TX-Verlauf";
+
+  return `
+    <div class="rate-trend" role="img" aria-label="${label} der letzten 60 Sekunden">
+      <span class="rate-trend-label">${label}</span>
+      <span class="sparkline-plot">
+        <span class="rate-scale-max">${escapeHtml(formatNumber(maximum, 2))} Mbit/s</span>
+        <svg class="sparkline-graph" viewBox="0 0 240 24" preserveAspectRatio="none" aria-hidden="true">
+          <line class="sparkline-time-marker" x1="120" y1="2" x2="120" y2="22"></line>
+          <line class="sparkline-baseline" x1="0" y1="22" x2="240" y2="22"></line>
+          ${renderTrendSeries(points, "rate", "trend-rate", xPosition, yPosition)}
+        </svg>
+      </span>
+    </div>
+  `;
+}
+
+function renderConnectionStability(connection) {
+  const stability = connection?.connection_stability;
+  if (!stability) return "";
+  const changes = optionalNumber(stability.changes_60s);
+  const seconds = optionalNumber(stability.seconds_since_last_change);
+  const value = changes == null || changes === 0
+    ? "stable"
+    : changes === 1 && seconds != null
+      ? `changed ${Math.max(0, Math.floor(seconds))} s ago`
+      : `${formatCount(changes)} changes / 60s`;
+  return metric("Connection", value);
+}
+
+function renderFrameDiscardWindows(connection) {
+  const windows = connection?.window_metrics?.frame_discard || {};
+  const recent = windows["10s"];
+  const minute = windows["60s"];
+  if (recent == null && minute == null) {
+    return metric("Frame Discard", "10s — · 60s —");
+  }
+  return metric(
+    "Frame Discard",
+    `10s ${formatCount(recent) ?? "—"} · 60s ${formatCount(minute) ?? "—"}`,
+  );
+}
+
 function renderImpactIndicators(connection, direction) {
   const eventWindows = connection?.window_metrics?.events || {};
   const recentEvents = eventWindows["10s"] || {};
@@ -611,6 +675,10 @@ function renderNonSrtMetrics(connection, direction, totalBytes, historyKey = nul
     metricFullRow(linkTelemetry),
   ];
 
+  if (type === "rtmpConn" || type === "rtmpsConn") {
+    metrics.push(metricFullRow(renderRateTrend(connection, direction)));
+  }
+
   if (type === "rtspSession" || type === "rtspsSession") {
     if (direction === "in") {
       metrics.push(
@@ -628,9 +696,12 @@ function renderNonSrtMetrics(connection, direction, totalBytes, historyKey = nul
   }
 
   if ((type === "rtmpConn" || type === "rtmpsConn") && direction === "out") {
-    metrics.push(metric("Discard", formatCount(details.outboundFramesDiscarded)));
+    metrics.push(renderFrameDiscardWindows(connection));
   }
 
+  if (type === "rtmpConn" || type === "rtmpsConn") {
+    metrics.push(renderConnectionStability(connection));
+  }
   metrics.push(metric("Age", formatConnectionAge(details.created)));
   return renderMetrics(metrics);
 }

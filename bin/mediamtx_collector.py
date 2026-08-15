@@ -64,7 +64,12 @@ try:
         HISTORY_RETENTION_SECONDS,
         HISTORY_TTL_SECONDS,
         build_history_sample,
+        rate_history,
         summarize_history,
+    )
+    from .connection_lifecycle import (
+        observe_connection_groups,
+        remote_host,
     )
     from .mediamtx_client import MediaMTXClient, MediaMTXError, MediaMTXHTTPError
     from .mediamtx_model import (
@@ -80,16 +85,20 @@ try:
         measure_configured_rtt,
         resolve_monitoring_config,
     )
-    from .rtt import measure_publisher_rtt_ms
+    from .rtt import measure_publisher_rtt_ms, measure_reader_rtt_ms
     from .redis_keys import (
+        DEFAULT_RTT_READER_PREFIX,
+        connection_lifecycle_key,
         connection_history_key,
         publisher_connection_key,
         publisher_srt_health_key,
         reader_connection_key,
         reader_srt_health_key,
+        rtmp_frame_discard_key,
         stream_snapshot_freshness_key,
     )
     from .redis_store import RedisStore
+    from .rtmp_metrics import frame_discard_delta
     from .srt_health import build_srt_health
     from .stream_normalizer import connection_identity, normalize_stream
 except ImportError:
@@ -98,8 +107,10 @@ except ImportError:
         HISTORY_RETENTION_SECONDS,
         HISTORY_TTL_SECONDS,
         build_history_sample,
+        rate_history,
         summarize_history,
     )
+    from connection_lifecycle import observe_connection_groups, remote_host
     from mediamtx_client import MediaMTXClient, MediaMTXError, MediaMTXHTTPError
     from mediamtx_model import (
         DETAIL_ENDPOINTS,
@@ -114,16 +125,20 @@ except ImportError:
         measure_configured_rtt,
         resolve_monitoring_config,
     )
-    from rtt import measure_publisher_rtt_ms
+    from rtt import measure_publisher_rtt_ms, measure_reader_rtt_ms
     from redis_keys import (
+        DEFAULT_RTT_READER_PREFIX,
+        connection_lifecycle_key,
         connection_history_key,
         publisher_connection_key,
         publisher_srt_health_key,
         reader_connection_key,
         reader_srt_health_key,
+        rtmp_frame_discard_key,
         stream_snapshot_freshness_key,
     )
     from redis_store import RedisStore
+    from rtmp_metrics import frame_discard_delta
     from srt_health import build_srt_health
     from stream_normalizer import connection_identity, normalize_stream
 
@@ -164,9 +179,26 @@ class PollCache:
     next_output_write: float = 0.0
     next_icmp_history_sample: float = 0.0
     forward_destinations: Dict[str, Any] = field(default_factory=dict)
+    lifecycle_roles_by_path: Dict[str, set[tuple[str, str]]] = field(
+        default_factory=dict
+    )
+    lifecycle_keys_seen: set[str] = field(default_factory=set)
 
 
 poll_cache = PollCache()
+
+ICMP_READER_TYPES = frozenset({
+    "rtmpConn",
+    "rtmpsConn",
+    "rtspConn",
+    "rtspSession",
+    "rtspsConn",
+    "rtspsSession",
+    "webRTCSession",
+    "moqSession",
+})
+
+RTMP_CONNECTION_TYPES = frozenset({"rtmpConn", "rtmpsConn"})
 
 
 def reset_poll_cache() -> None:
@@ -291,6 +323,7 @@ def _update_connection_history(
     direction: str,
     timestamp: float,
     include_icmp: bool,
+    include_rate_history: bool = False,
 ) -> None:
     """Persist optional live history without breaking the current snapshot."""
     sample = build_history_sample(
@@ -315,8 +348,91 @@ def _update_connection_history(
         summary = summarize_history(samples, timestamp)
         if summary:
             connection["window_metrics"] = summary
+        if include_rate_history:
+            connection["rate_history"] = rate_history(samples, direction)
     except (RedisError, ConnectionError, TimeoutError, TypeError, ValueError) as exc:
         logging.warning("Kurzzeithistorie konnte nicht geschrieben werden: %s", exc)
+
+
+def _observe_lifecycle(
+    *,
+    path: str,
+    role: str,
+    connection_type: str,
+    groups: Dict[str, list[str]],
+    timestamp: float,
+) -> Dict[str, Dict[str, Any]]:
+    """Observe lifecycle state without carrying IDs across collector restarts."""
+    key = connection_lifecycle_key(path, role, connection_type)
+    reset_baseline = key not in poll_cache.lifecycle_keys_seen
+    poll_cache.lifecycle_keys_seen.add(key)
+    try:
+        return observe_connection_groups(
+            r,
+            key=key,
+            current_groups=groups,
+            timestamp=timestamp,
+            reset_baseline=reset_baseline,
+        )
+    except (RedisError, ConnectionError, TimeoutError, TypeError, ValueError) as exc:
+        logging.warning("Connection-Lifecycle konnte nicht geschrieben werden: %s", exc)
+        return {}
+
+
+def _enrich_rtmp_lifecycle(
+    entry: Dict[str, Any], path: str, timestamp: float
+) -> None:
+    """Attach observed changes only to unambiguous RTMP connections."""
+    source = entry["source"]
+    current_roles: set[tuple[str, str]] = set()
+    if source.get("type") in RTMP_CONNECTION_TYPES:
+        current_roles.add(("publisher", source["type"]))
+
+    readers_by_type: Dict[str, list[Dict[str, Any]]] = {}
+    for reader in entry["readers"]:
+        if reader.get("type") in RTMP_CONNECTION_TYPES:
+            current_roles.add(("reader", reader["type"]))
+            readers_by_type.setdefault(reader["type"], []).append(reader)
+
+    known_roles = poll_cache.lifecycle_roles_by_path.setdefault(path, set())
+    for role, connection_type in known_roles | current_roles:
+        if role == "publisher":
+            groups = {}
+            if source.get("type") == connection_type and source.get("id"):
+                groups["publisher"] = [str(source["id"])]
+            results = _observe_lifecycle(
+                path=path,
+                role=role,
+                connection_type=connection_type,
+                groups=groups,
+                timestamp=timestamp,
+            )
+            if groups and "publisher" in results:
+                source["connection_stability"] = results["publisher"]
+            continue
+
+        readers = readers_by_type.get(connection_type, [])
+        groups: Dict[str, list[str]] = {}
+        entries_by_group: Dict[str, list[Dict[str, Any]]] = {}
+        for reader in readers:
+            host = remote_host(reader.get("details", {}).get("remoteAddr"))
+            if host is None or not reader.get("id"):
+                continue
+            groups.setdefault(host, []).append(str(reader["id"]))
+            entries_by_group.setdefault(host, []).append(reader)
+
+        results = _observe_lifecycle(
+            path=path,
+            role=role,
+            connection_type=connection_type,
+            groups=groups,
+            timestamp=timestamp,
+        )
+        for group_name, grouped_entries in entries_by_group.items():
+            if len(grouped_entries) == 1 and group_name in results:
+                grouped_entries[0]["connection_stability"] = results[group_name]
+
+    known_roles.update(current_roles)
 
 
 # ---------------------------------------------------------------------------
@@ -548,6 +664,7 @@ def collect_and_store() -> Dict[str, float]:
                 direction="publisher",
                 timestamp=now,
                 include_icmp=include_icmp_history,
+                include_rate_history=src_type in RTMP_CONNECTION_TYPES,
             )
             metrics["history_duration_ms"] += (
                 time.perf_counter() - history_started
@@ -600,6 +717,35 @@ def collect_and_store() -> Dict[str, float]:
                 "bitrate_mbps": bitrate_final,
                 "details": rd_details,
             }
+            remote = rd_details.get("remoteAddr", "")
+            if rtype in ICMP_READER_TYPES and remote:
+                icmp_started = time.perf_counter()
+                try:
+                    rtt_ms = measure_configured_rtt(
+                        r,
+                        remote_addr=remote,
+                        rtt_config=RTT_CFG,
+                        measure_func=measure_reader_rtt_ms,
+                        key_prefix=DEFAULT_RTT_READER_PREFIX,
+                        measurement_kwargs={
+                            "path": name,
+                            "connection_type": rtype,
+                            "connection_id": str(reader_identity),
+                        },
+                    )
+                    if rtt_ms is not None:
+                        reader_entry["icmp_rtt_ms"] = round(rtt_ms, 2)
+                except Exception as e:
+                    logging.debug(
+                        "Ping-Messung fehlgeschlagen für Reader %s/%s: %s",
+                        name,
+                        reader_identity,
+                        e,
+                    )
+                finally:
+                    metrics["icmp_duration_ms"] += (
+                        time.perf_counter() - icmp_started
+                    ) * 1000
             if rtype == "srtConn":
                 if rd_details.get("msRTT") is not None:
                     reader_entry["transport_rtt_ms"] = round(
@@ -621,6 +767,15 @@ def collect_and_store() -> Dict[str, float]:
                     ttl=BITRATE_TTL,
                     transport_rtt_ms=reader_entry.get("transport_rtt_ms"),
                 )
+            elif rtype in RTMP_CONNECTION_TYPES:
+                discard_delta = frame_discard_delta(
+                    r,
+                    key=rtmp_frame_discard_key(rd_key),
+                    value=rd_details.get("outboundFramesDiscarded"),
+                    ttl=BITRATE_TTL,
+                )
+                if discard_delta is not None:
+                    reader_entry["frame_discard_delta"] = discard_delta
             history_started = time.perf_counter()
             _update_connection_history(
                 reader_entry,
@@ -628,12 +783,14 @@ def collect_and_store() -> Dict[str, float]:
                 direction="reader",
                 timestamp=now,
                 include_icmp=include_icmp_history,
+                include_rate_history=rtype in RTMP_CONNECTION_TYPES,
             )
             metrics["history_duration_ms"] += (
                 time.perf_counter() - history_started
             ) * 1000
             entry["readers"].append(reader_entry)
 
+        _enrich_rtmp_lifecycle(entry, name, now)
         aggregated.append(entry)
 
     # -----------------------------------------------------------------------

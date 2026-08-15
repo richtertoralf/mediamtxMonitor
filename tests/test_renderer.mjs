@@ -300,8 +300,10 @@ assert.match(rtspPublisher, /class="metric-full-row"/);
 assert.doesNotMatch(rtspPublisher, /trend-variation-60|srt-impact|srt-rtt-assessment/);
 
 const rtspReader = renderReader({
+  id: "rtsp-reader-a",
   type: "rtspSession",
   bitrate_mbps: 4.8,
+  icmp_rtt_ms: 14,
   details: {
     remoteAddr: "192.0.2.11:8554",
     outboundBytes: 4096,
@@ -312,22 +314,93 @@ const rtspReader = renderReader({
 assert.match(rtspReader, /Reader 2/);
 assertMetric(rtspReader, "Loss", "2", "pkt");
 assertMetric(rtspReader, "Discard", "0");
-assert.doesNotMatch(rtspReader, /RTT|Ping|Jitter|Retrans/);
+assertMetric(rtspReader, "Ping", "14.00", "ms");
+assert.doesNotMatch(rtspReader, /metric-label">RTT|Jitter|Retrans/);
+
+const rtspReaderTrendData = {
+  id: "rtsp-reader-trend",
+  type: "rtspSession",
+  icmp_rtt_ms: 16,
+  details: {remoteAddr: "192.0.2.12:8554"},
+  window_metrics: {
+    timing_source: "icmp_rtt_ms",
+    timing: {
+      "10s": {sample_count: 2, p50_ms: 15, p95_ms: 16, variation_ms: 1},
+      "60s": {sample_count: 2, p50_ms: 15, p95_ms: 16, variation_ms: 1},
+    },
+  },
+};
+resetTelemetryHistories();
+recordSnapshotTelemetry([{name: "camera/reader", readers: [rtspReaderTrendData]}], 3100);
+recordSnapshotTelemetry([{name: "camera/reader", readers: [rtspReaderTrendData]}], 3101);
+const rtspReaderTrend = renderReader(rtspReaderTrendData, 0, "camera/reader");
+assert.match(rtspReaderTrend, /aria-label="Ping-Trend der letzten 60 Sekunden"/);
+assertSparklineValue(rtspReaderTrend, "current", "Ping", "16.0");
+assertSparklineValue(rtspReaderTrend, "variation10", "Var 10s", "1.0");
+assertSparklineValue(rtspReaderTrend, "variation60", "Var 60s", "1.0");
+assert.doesNotMatch(rtspReaderTrend, /SRT Impact|srt-rtt-assessment/);
 
 const rtmpReader = renderReader({
+  id: "rtmp-reader-a",
   type: "rtmpConn",
   bitrate_mbps: 2.5,
-  ping_rtt_ms: 0,
+  icmp_rtt_ms: 8,
   details: {
     remoteAddr: "192.0.2.4:1935",
     outboundBytes: 1024,
     outboundFramesDiscarded: 0,
   },
+  rate_history: [
+    {timestamp: 100, mbps: 2.5},
+    {timestamp: 110, mbps: 0},
+    {timestamp: 120, mbps: null},
+    {timestamp: 130, mbps: 3.0},
+  ],
+  window_metrics: {frame_discard: {"10s": 18, "60s": 21}},
+  connection_stability: {
+    changes_60s: 1,
+    seconds_since_last_change: 18,
+  },
 }, 0);
 assertMetric(rtmpReader, "TX", "2.50", "Mbit/s");
-assertMetric(rtmpReader, "Ping", "0.00", "ms");
-assertMetric(rtmpReader, "Discard", "0");
+assertMetric(rtmpReader, "Ping", "8.00", "ms");
+assertMetric(rtmpReader, "Frame Discard", "10s 18 · 60s 21");
+assertMetric(rtmpReader, "Connection", "changed 18 s ago");
+assert.match(rtmpReader, /aria-label="TX-Verlauf der letzten 60 Sekunden"/);
+assert.match(rtmpReader, /class="trend-line trend-rate"/);
+assert.equal((rtmpReader.match(/class="trend-end-marker trend-rate"/g) || []).length, 1);
 assert.doesNotMatch(rtmpReader, /RTT|Loss|Retrans|Link|Reserve/);
+
+const rtmpsPublisherTrend = renderStreamLeft({
+  name: "secure",
+  source: {
+    id: "rtmps-publisher",
+    type: "rtmpsConn",
+    bitrate_mbps: 4.5,
+    details: {remoteAddr: "192.0.2.8:1936", inboundBytes: 2048},
+    rate_history: [
+      {timestamp: 100, mbps: null},
+      {timestamp: 101, mbps: 4.5},
+      {timestamp: 102, mbps: 4.2},
+    ],
+    connection_stability: {changes_60s: 0, seconds_since_last_change: null},
+  },
+});
+assert.match(rtmpsPublisherTrend, /aria-label="RX-Verlauf der letzten 60 Sekunden"/);
+assertMetric(rtmpsPublisherTrend, "Connection", "stable");
+
+for (const connection of [
+  {type: "srtConn", rate_history: [{timestamp: 1, mbps: 3}], details: {}},
+  {type: "rtspSession", rate_history: [{timestamp: 1, mbps: 3}], details: {}},
+]) {
+  assert.doesNotMatch(renderReader(connection), /TX-Verlauf|trend-rate/);
+}
+
+const unavailableRtmpReader = renderReader({
+  type: "rtmpConn",
+  details: {remoteAddr: "192.0.2.5:1935"},
+}, 0);
+assert.doesNotMatch(unavailableRtmpReader, /Ping|0\.00 ms|RTT/);
 
 const hlsReader = renderReader({
   type: "hlsSession",
@@ -725,6 +798,8 @@ assert.match(rendererStyles, /\.srt-impact-crit \.srt-impact-dot\s*\{[^}]*animat
 assert.match(rendererStyles, /\.sparkline-graph\s*\{[^}]*height:\s*24px;/s);
 assert.match(rendererStyles, /\.trend-line\s*\{[^}]*fill:\s*none;/s);
 assert.match(rendererStyles, /\.trend-end-marker\s*\{[^}]*stroke-width:\s*1;/s);
+assert.match(rendererStyles, /\.rate-trend\s*\{[^}]*display:\s*grid;/s);
+assert.match(rendererStyles, /\.trend-rate\s*\{[^}]*stroke:\s*var\(--accent\);/s);
 assert.doesNotMatch(
   rendererStyles,
   /(?:^|\n)\.trend-(?:current|variation-10|variation-60)\s*\{[^}]*fill:/s,

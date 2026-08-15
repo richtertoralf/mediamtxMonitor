@@ -22,6 +22,8 @@ _SRT_EVENT_FIELDS = (
     "undecrypt_packets",
 )
 
+_FRAME_DISCARD_FIELD = "frame_discard_delta"
+
 _WINDOW_SECONDS = (10, 60)
 
 
@@ -53,6 +55,9 @@ def build_history_sample(
     for field in _SRT_EVENT_FIELDS:
         if srt_metrics.get(field) is not None:
             sample[field] = srt_metrics[field]
+
+    if connection.get(_FRAME_DISCARD_FIELD) is not None:
+        sample[_FRAME_DISCARD_FIELD] = connection[_FRAME_DISCARD_FIELD]
 
     return sample
 
@@ -135,4 +140,39 @@ def summarize_history(
             )
     if events:
         summary["events"] = events
+
+    frame_discard = {}
+    for seconds in _WINDOW_SECONDS:
+        values = _numeric_values(
+            [
+                sample
+                for sample in samples
+                if isinstance(sample.get("timestamp"), (int, float))
+                and sample["timestamp"] > timestamp - seconds
+                and sample["timestamp"] <= timestamp
+            ],
+            _FRAME_DISCARD_FIELD,
+        )
+        if values:
+            frame_discard[f"{seconds}s"] = int(sum(values))
+    if frame_discard:
+        summary["frame_discard"] = frame_discard
     return summary
+
+
+def rate_history(
+    samples: list[Mapping[str, Any]], direction: str
+) -> list[dict[str, Any]]:
+    """Return compact rate points, retaining missing samples as graph gaps."""
+    field = "rx_mbps" if direction == "publisher" else "tx_mbps"
+    points = []
+    for sample in samples:
+        timestamp = sample.get("timestamp")
+        if not isinstance(timestamp, (int, float)) or isinstance(timestamp, bool):
+            continue
+        values = _numeric_values([sample], field)
+        points.append({
+            "timestamp": float(timestamp),
+            "mbps": round(values[0], 2) if values else None,
+        })
+    return points

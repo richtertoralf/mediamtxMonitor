@@ -1,7 +1,7 @@
 # /opt/mediamtx-monitoring-backend/bin/rtt.py
 # -*- coding: utf-8 -*-
 """
-rtt.py – RTT-Schätzung ausschließlich für Publisher (Ingest) via ICMP-Ping.
+rtt.py – Externe ICMP-Ping-Messung für geeignete MediaMTX-Verbindungen.
 
 Warum nur ICMP?
 - Beim Publisher ist die remoteAddr meist ein Encoder-Client mit *ephemeral* Port.
@@ -9,7 +9,7 @@ Warum nur ICMP?
   robusteste Näherung. Fällt ICMP weg (Firewall), lassen wir RTT einfach leer.
 
 Caching/Glättung:
-- EWMA-Glättung per Redis (rtt:pub:<host>:ewma_ms).
+- EWMA-Glättung per Redis in rollenbezogenen Zustands-Keys.
 - Rate-Limit (min_period_s): z. B. nur alle 30 s neu messen.
 """
 
@@ -20,9 +20,19 @@ import re
 from typing import Optional, Tuple
 
 try:
-    from .redis_keys import DEFAULT_RTT_PUBLISHER_PREFIX, publisher_rtt_keys
+    from .redis_keys import (
+        DEFAULT_RTT_PUBLISHER_PREFIX,
+        DEFAULT_RTT_READER_PREFIX,
+        publisher_rtt_keys,
+        reader_rtt_keys,
+    )
 except ImportError:
-    from redis_keys import DEFAULT_RTT_PUBLISHER_PREFIX, publisher_rtt_keys
+    from redis_keys import (
+        DEFAULT_RTT_PUBLISHER_PREFIX,
+        DEFAULT_RTT_READER_PREFIX,
+        publisher_rtt_keys,
+        reader_rtt_keys,
+    )
 
 _IPV6_BRACKET_RE = re.compile(r'^\[(.+)\]:(\d+)$')  # "[2001:db8::1]:443"
 _IPV4_PORT_RE = re.compile(r'^([^:]+):(\d+)$')      # "192.168.0.10:5555"
@@ -72,18 +82,18 @@ def _rset(r, key: str, value, ttl: int) -> None:
     except Exception:
         pass
 
-def measure_publisher_rtt_ms(
+def _measure_icmp_rtt_ms(
     r,
     remote_addr: str,
+    keys: Tuple[str, str, str],
     *,
     ewma_alpha: float = 0.5,
     min_period_s: int = 30,
     ttl_s: int = 300,
-    key_prefix: str = DEFAULT_RTT_PUBLISHER_PREFIX,
     timeout_s: float = 0.9,
 ) -> Optional[float]:
-    """
-    Misst/Schätzt RTT in ms für Publisher (nur ICMP). Gibt geglätteten Wert zurück.
+    """Measure ICMP RTT using the supplied isolated Redis state keys.
+
     - Rate-Limit: höchstens alle `min_period_s` neu messen.
     - Fällt ICMP weg, liefern wir den Cache (ewma/last), sonst None.
     """
@@ -91,7 +101,7 @@ def measure_publisher_rtt_ms(
     if not host:
         return None
 
-    k_ewma, k_last, k_ts = publisher_rtt_keys(host, key_prefix)
+    k_ewma, k_last, k_ts = keys
 
     now = time.time()
     last_ts = _rgetf(r, k_ts)
@@ -123,3 +133,62 @@ def measure_publisher_rtt_ms(
     _rset(r, k_last, rtt, ttl_s)
     _rset(r, k_ts, now, ttl_s)
     return rtt
+
+
+def measure_publisher_rtt_ms(
+    r,
+    remote_addr: str,
+    *,
+    ewma_alpha: float = 0.5,
+    min_period_s: int = 30,
+    ttl_s: int = 300,
+    key_prefix: str = DEFAULT_RTT_PUBLISHER_PREFIX,
+    timeout_s: float = 0.9,
+) -> Optional[float]:
+    """Measure external ICMP ping for a non-SRT publisher."""
+    host = _parse_host(remote_addr)
+    if not host:
+        return None
+    return _measure_icmp_rtt_ms(
+        r,
+        remote_addr,
+        publisher_rtt_keys(host, key_prefix),
+        ewma_alpha=ewma_alpha,
+        min_period_s=min_period_s,
+        ttl_s=ttl_s,
+        timeout_s=timeout_s,
+    )
+
+
+def measure_reader_rtt_ms(
+    r,
+    remote_addr: str,
+    *,
+    path: str,
+    connection_type: str,
+    connection_id: str,
+    ewma_alpha: float = 0.5,
+    min_period_s: int = 30,
+    ttl_s: int = 300,
+    key_prefix: str = DEFAULT_RTT_READER_PREFIX,
+    timeout_s: float = 0.9,
+) -> Optional[float]:
+    """Measure external ICMP ping with reader-connection-local cache state."""
+    host = _parse_host(remote_addr)
+    if not host:
+        return None
+    return _measure_icmp_rtt_ms(
+        r,
+        remote_addr,
+        reader_rtt_keys(
+            path,
+            connection_type,
+            connection_id,
+            host,
+            key_prefix,
+        ),
+        ewma_alpha=ewma_alpha,
+        min_period_s=min_period_s,
+        ttl_s=ttl_s,
+        timeout_s=timeout_s,
+    )

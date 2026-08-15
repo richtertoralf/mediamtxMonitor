@@ -1,6 +1,6 @@
 import unittest
 
-from bin.connection_history import build_history_sample, summarize_history
+from bin.connection_history import build_history_sample, rate_history, summarize_history
 
 
 class HistorySampleTests(unittest.TestCase):
@@ -53,6 +53,18 @@ class HistorySampleTests(unittest.TestCase):
         )
 
         self.assertEqual(sample, {"timestamp": 201.0})
+
+    def test_rtmp_discard_delta_is_stored_without_changing_srt_events(self):
+        sample = build_history_sample(
+            {"bitrate_mbps": 4.5, "frame_discard_delta": 3},
+            "reader",
+            202.0,
+        )
+        self.assertEqual(sample, {
+            "timestamp": 202.0,
+            "tx_mbps": 4.5,
+            "frame_discard_delta": 3,
+        })
 
 
 class HistorySummaryTests(unittest.TestCase):
@@ -200,6 +212,31 @@ class HistorySummaryTests(unittest.TestCase):
 
         self.assertEqual(summary["timing"]["10s"]["sample_count"], 4)
         self.assertEqual(summary["timing"]["60s"]["sample_count"], 10)
+
+    def test_frame_discard_windows_sum_interval_deltas_separately(self):
+        samples = [
+            {"timestamp": 1.0, "frame_discard_delta": 10},
+            {"timestamp": 51.0, "frame_discard_delta": 3},
+            {"timestamp": 59.0, "frame_discard_delta": 5},
+            {"timestamp": 60.0, "frame_discard_delta": 0},
+        ]
+        summary = summarize_history(samples, 60.0)
+        self.assertEqual(summary["frame_discard"], {"10s": 8, "60s": 18})
+        self.assertNotIn("events", summary)
+
+
+class RateHistoryTests(unittest.TestCase):
+    def test_directional_rates_keep_missing_samples_as_gaps(self):
+        samples = [
+            {"timestamp": 1.0},
+            {"timestamp": 2.0, "rx_mbps": 4.25, "tx_mbps": 9.0},
+            {"timestamp": 3.0, "rx_mbps": 0},
+        ]
+        self.assertEqual(rate_history(samples, "publisher"), [
+            {"timestamp": 1.0, "mbps": None},
+            {"timestamp": 2.0, "mbps": 4.25},
+            {"timestamp": 3.0, "mbps": 0.0},
+        ])
 
 
 if __name__ == "__main__":
