@@ -55,19 +55,15 @@ Kurzzeithistorie speichert diese normalisierten Intervallwerte und summiert sie
 für 10-s- und 60-s-Fenster; sie bildet nicht erneut Counter-Deltas.
 
 Nur SRT liefert derzeit mit `msRTT` eine echte Transport-RTT für die
-Hauptanzeige. Die externe ICMP-Messung steht für Nicht-SRT-Publisher sowie für
-RTMP-/RTMPS-, RTSP-/RTSPS-, WebRTC- und MoQ-Reader mit konkreter
-`remoteAddr` zur Verfügung und wird im normalisierten Verbindungsmodell separat
-als `icmp_rtt_ms` gespeichert. Reader verwenden einen nach Path, Objekttyp,
-MediaMTX-Connection-ID und Host getrennten Redis-Zustandsraum. SRT wird
-stattdessen ausschließlich als `transport_rtt_ms` normalisiert; HLS erhält
-keine ICMP-Messung.
+Hauptanzeige und wird als `transport_rtt_ms` normalisiert. Andere Protokolle
+erhalten keine künstliche RTT-Ersatzmetrik.
 
-Publisher und Reader verwenden dieselbe konfigurierte ICMP-Kadenz, EWMA und
-TTL. Die Kurzzeithistorie übernimmt ICMP-Werte nur in dieser langsameren
-Kadenz, nicht bei jedem Collector-Poll. In der Oberfläche heißt der externe
-Wert `Ping`; `RTT` bezeichnet weiterhin ausschließlich die native
-SRT-Transport-RTT.
+Der Monitor verwendet ausschließlich Metriken, die MediaMTX beziehungsweise
+das jeweilige Transportprotokoll bereitstellt. Externe ICMP-Pings zu Publishern
+oder Readern werden nicht verwendet, da die sichtbare Remote-IP durch NAT,
+CGNAT, VPN, Masquerading, Bonding oder andere Netzkomponenten nicht
+zwangsläufig dem tatsächlichen Endgerät entspricht. Unterschiedliche Protokolle
+besitzen daher bewusst unterschiedliche Monitoring-Metriken.
 
 ## RTMP-/RTMPS-Zeitdimension
 

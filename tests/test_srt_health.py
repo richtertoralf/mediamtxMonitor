@@ -222,12 +222,7 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
         return {"items": []}
 
     def collect(self):
-        with (
-            mock.patch.object(Path, "write_text"),
-            mock.patch.object(
-                self.collector, "measure_configured_rtt", return_value=None
-            ),
-        ):
+        with mock.patch.object(Path, "write_text"):
             self.collector.collect_and_store()
         return json.loads(self.redis.values[self.collector.REDIS_KEY])
 
@@ -321,6 +316,9 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
         self.assertNotIn("srt_health", rtmp_path["readers"][0])
         self.assertNotIn("srt_latency_ms", rtmp_path["source"])
         self.assertNotIn("srt_latency_ms", rtmp_path["readers"][0])
+        serialized_snapshot = json.dumps(first)
+        self.assertNotIn("icmp_rtt_ms", serialized_snapshot)
+        self.assertNotIn("ping_rtt_ms", serialized_snapshot)
 
         history_keys = set(self.redis.sorted_sets)
         self.assertIn(
@@ -338,6 +336,9 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
             ],
             120,
         )
+        all_redis_keys = set(self.redis.values) | set(self.redis.sorted_sets)
+        self.assertFalse(any(key.startswith("rtt:pub:") for key in all_redis_keys))
+        self.assertFalse(any(key.startswith("rtt:rd:") for key in all_redis_keys))
 
         health_keys = {
             key for key in self.redis.values if key.startswith("srt-health:")
@@ -364,6 +365,10 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
             health_keys,
             {key for key in self.redis.values if key.startswith("srt-health:")},
         )
+
+    def test_external_rtt_process_module_is_absent(self):
+        repository_root = Path(__file__).resolve().parents[1]
+        self.assertFalse((repository_root / "bin" / "rtt.py").exists())
 
     def test_reconnect_with_new_mediamtx_id_gets_separate_history(self):
         self.collect()

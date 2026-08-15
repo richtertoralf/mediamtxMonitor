@@ -5,8 +5,6 @@ from __future__ import annotations
 
 DEFAULT_STREAM_SNAPSHOT_KEY = "mediamtx:streams:latest"
 DEFAULT_SYSTEM_SNAPSHOT_KEY = "mediamtx:system:latest"
-DEFAULT_RTT_PUBLISHER_PREFIX = "rtt:pub"
-DEFAULT_RTT_READER_PREFIX = "rtt:rd"
 
 _PUBLISHER_PREFIX = "pub"
 _READER_PREFIX = "rd"
@@ -15,9 +13,6 @@ _CONNECTION_HISTORY_PREFIX = "history"
 _BITRATE_PREV_BYTES = "prev_bytes"
 _BITRATE_PREV_TS = "prev_ts"
 _BITRATE_EWMA_MBPS = "ewma_mbps"
-_RTT_EWMA_MS = "ewma_ms"
-_RTT_LAST_MS = "last_ms"
-_RTT_LAST_TS = "last_ts"
 _RTMP_FRAME_DISCARD = "rtmp_frame_discard"
 _CONNECTION_LIFECYCLE_PREFIX = "lifecycle"
 
@@ -52,34 +47,6 @@ def bitrate_state_keys(base_key: str) -> tuple[str, str, str]:
         f"{base_key}:{_BITRATE_PREV_BYTES}",
         f"{base_key}:{_BITRATE_PREV_TS}",
         f"{base_key}:{_BITRATE_EWMA_MBPS}",
-    )
-
-
-def publisher_rtt_keys(
-    host: str, key_prefix: str = DEFAULT_RTT_PUBLISHER_PREFIX
-) -> tuple[str, str, str]:
-    """Return EWMA, last-value, and timestamp keys for publisher RTT."""
-    base_key = f"{key_prefix}:{host}"
-    return (
-        f"{base_key}:{_RTT_EWMA_MS}",
-        f"{base_key}:{_RTT_LAST_MS}",
-        f"{base_key}:{_RTT_LAST_TS}",
-    )
-
-
-def reader_rtt_keys(
-    path: str,
-    connection_type: str,
-    connection_id: str,
-    host: str,
-    key_prefix: str = DEFAULT_RTT_READER_PREFIX,
-) -> tuple[str, str, str]:
-    """Return RTT state keys isolated to one reader connection and host."""
-    base_key = f"{key_prefix}:{path}:{connection_type}:{connection_id}:{host}"
-    return (
-        f"{base_key}:{_RTT_EWMA_MS}",
-        f"{base_key}:{_RTT_LAST_MS}",
-        f"{base_key}:{_RTT_LAST_TS}",
     )
 
 

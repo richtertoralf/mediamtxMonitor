@@ -31,8 +31,6 @@ def build_history_sample(
     connection: Mapping[str, Any],
     direction: str,
     timestamp: float,
-    *,
-    include_icmp: bool = True,
 ) -> dict[str, Any]:
     """Return a compact sample containing only available normalized metrics."""
     sample: dict[str, Any] = {"timestamp": timestamp}
@@ -43,8 +41,6 @@ def build_history_sample(
 
     if connection.get("transport_rtt_ms") is not None:
         sample["transport_rtt_ms"] = connection["transport_rtt_ms"]
-    elif include_icmp and connection.get("icmp_rtt_ms") is not None:
-        sample["icmp_rtt_ms"] = connection["icmp_rtt_ms"]
 
     if connection.get("srt_latency_ms") is not None:
         sample["srt_latency_ms"] = connection["srt_latency_ms"]
@@ -95,8 +91,6 @@ def summarize_history(
     timing_field = None
     if any(sample.get("transport_rtt_ms") is not None for sample in samples):
         timing_field = "transport_rtt_ms"
-    elif any(sample.get("icmp_rtt_ms") is not None for sample in samples):
-        timing_field = "icmp_rtt_ms"
 
     timing = {}
     events = {}

@@ -23,14 +23,6 @@ collector:
   ignore_path_prefixes:
     - "__preview__/"
 
-rtt:
-  enabled: true
-  ewma_alpha: 0.5
-  min_period_s: 30
-  ttl_s: 300
-  timeout_s: 0.9
-  key_prefix: "rtt:pub"
-
 bitrate:
   smooth_alpha: 0.5
   smooth_reference_seconds: 5

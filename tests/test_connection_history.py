@@ -33,26 +33,16 @@ class HistorySampleTests(unittest.TestCase):
             },
         )
 
-    def test_icmp_sample_does_not_invent_srt_or_missing_values(self):
+    def test_non_srt_sample_does_not_invent_timing_or_srt_values(self):
         sample = build_history_sample(
-            {"bitrate_mbps": None, "icmp_rtt_ms": 12},
+            {"bitrate_mbps": None},
             "publisher",
             200.0,
         )
 
-        self.assertEqual(sample, {"timestamp": 200.0, "icmp_rtt_ms": 12})
+        self.assertEqual(sample, {"timestamp": 200.0})
         self.assertNotIn("transport_rtt_ms", sample)
         self.assertNotIn("retrans_packets", sample)
-
-    def test_cached_icmp_can_be_excluded_from_fast_history_samples(self):
-        sample = build_history_sample(
-            {"icmp_rtt_ms": 12},
-            "publisher",
-            201.0,
-            include_icmp=False,
-        )
-
-        self.assertEqual(sample, {"timestamp": 201.0})
 
     def test_rtmp_discard_delta_is_stored_without_changing_srt_events(self):
         sample = build_history_sample(
@@ -109,15 +99,15 @@ class HistorySummaryTests(unittest.TestCase):
         self.assertEqual(summary["timing"]["60s"]["p95_ms"], 57.05)
         self.assertEqual(summary["p50_delta_ms"], 25.0)
 
-    def test_outlier_changes_p95_and_variation_without_classification(self):
+    def test_srt_rtt_outlier_changes_p95_and_variation_without_classification(self):
         samples = [
-            {"timestamp": timestamp, "icmp_rtt_ms": value}
+            {"timestamp": timestamp, "transport_rtt_ms": value}
             for timestamp, value in enumerate([10] * 19 + [110], start=81)
         ]
 
         summary = summarize_history(samples, 100.0)
 
-        self.assertEqual(summary["timing_source"], "icmp_rtt_ms")
+        self.assertEqual(summary["timing_source"], "transport_rtt_ms")
         self.assertEqual(summary["timing"]["60s"]["p50_ms"], 10.0)
         self.assertEqual(summary["timing"]["60s"]["p95_ms"], 15.0)
         self.assertEqual(summary["timing"]["60s"]["variation_ms"], 5.0)

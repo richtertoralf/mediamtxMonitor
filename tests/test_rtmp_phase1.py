@@ -89,9 +89,6 @@ class CollectorRTMPPhaseTests(unittest.TestCase):
         with (
             mock.patch.object(Path, "write_text"),
             mock.patch.object(mediamtx_collector.time, "time", return_value=timestamp),
-            mock.patch.object(
-                mediamtx_collector, "measure_configured_rtt", return_value=None
-            ),
         ):
             mediamtx_collector.collect_and_store()
         return json.loads(self.redis.values[mediamtx_collector.REDIS_KEY])

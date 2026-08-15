@@ -266,7 +266,6 @@ const rtspPublisherStream = {
     id: "rtsp-publisher-a",
     type: "rtspSession",
     bitrate_mbps: 5.2,
-    icmp_rtt_ms: 12,
     details: {
       remoteAddr: "192.0.2.10:8554",
       inboundBytes: 2048,
@@ -274,36 +273,21 @@ const rtspPublisherStream = {
       inboundRTPPacketsJitter: 3.4,
       inboundRTPPacketsInError: 0,
     },
-    window_metrics: {
-      timing_source: "icmp_rtt_ms",
-      timing: {
-        "10s": {sample_count: 1, p50_ms: 12, p95_ms: 12, variation_ms: 0},
-      },
-    },
   },
 };
 resetTelemetryHistories();
 recordSnapshotTelemetry([rtspPublisherStream], 3000);
 recordSnapshotTelemetry([rtspPublisherStream], 3001);
 const rtspPublisher = renderStreamLeft(rtspPublisherStream);
-assertMetric(rtspPublisher, "Ping", "12.00", "ms");
 assertMetric(rtspPublisher, "Jitter", "3.40", "ms");
 assertMetric(rtspPublisher, "Loss", "0", "pkt");
-assert.doesNotMatch(rtspPublisher, /metric-label">RTT/);
-assert.match(rtspPublisher, /aria-label="Ping-Trend der letzten 60 Sekunden"/);
-assert.match(rtspPublisher, /class="trend-line trend-current"/);
-assert.match(rtspPublisher, /class="trend-line trend-variation-10"/);
-assertSparklineValue(rtspPublisher, "current", "Ping", "12.0");
-assertSparklineValue(rtspPublisher, "variation10", "Var 10s", "0.0");
-assertSparklineValue(rtspPublisher, "variation60", "Var 60s", "—", false);
-assert.match(rtspPublisher, /class="metric-full-row"/);
+assert.doesNotMatch(rtspPublisher, /metric-label">RTT|Ping|rtt-trend/);
 assert.doesNotMatch(rtspPublisher, /trend-variation-60|srt-impact|srt-rtt-assessment/);
 
 const rtspReader = renderReader({
   id: "rtsp-reader-a",
   type: "rtspSession",
   bitrate_mbps: 4.8,
-  icmp_rtt_ms: 14,
   details: {
     remoteAddr: "192.0.2.11:8554",
     outboundBytes: 4096,
@@ -314,37 +298,12 @@ const rtspReader = renderReader({
 assert.match(rtspReader, /Reader 2/);
 assertMetric(rtspReader, "Loss", "2", "pkt");
 assertMetric(rtspReader, "Discard", "0");
-assertMetric(rtspReader, "Ping", "14.00", "ms");
-assert.doesNotMatch(rtspReader, /metric-label">RTT|Jitter|Retrans/);
-
-const rtspReaderTrendData = {
-  id: "rtsp-reader-trend",
-  type: "rtspSession",
-  icmp_rtt_ms: 16,
-  details: {remoteAddr: "192.0.2.12:8554"},
-  window_metrics: {
-    timing_source: "icmp_rtt_ms",
-    timing: {
-      "10s": {sample_count: 2, p50_ms: 15, p95_ms: 16, variation_ms: 1},
-      "60s": {sample_count: 2, p50_ms: 15, p95_ms: 16, variation_ms: 1},
-    },
-  },
-};
-resetTelemetryHistories();
-recordSnapshotTelemetry([{name: "camera/reader", readers: [rtspReaderTrendData]}], 3100);
-recordSnapshotTelemetry([{name: "camera/reader", readers: [rtspReaderTrendData]}], 3101);
-const rtspReaderTrend = renderReader(rtspReaderTrendData, 0, "camera/reader");
-assert.match(rtspReaderTrend, /aria-label="Ping-Trend der letzten 60 Sekunden"/);
-assertSparklineValue(rtspReaderTrend, "current", "Ping", "16.0");
-assertSparklineValue(rtspReaderTrend, "variation10", "Var 10s", "1.0");
-assertSparklineValue(rtspReaderTrend, "variation60", "Var 60s", "1.0");
-assert.doesNotMatch(rtspReaderTrend, /SRT Impact|srt-rtt-assessment/);
+assert.doesNotMatch(rtspReader, /metric-label">RTT|Ping|Jitter|Retrans|rtt-trend/);
 
 const rtmpReader = renderReader({
   id: "rtmp-reader-a",
   type: "rtmpConn",
   bitrate_mbps: 2.5,
-  icmp_rtt_ms: 8,
   details: {
     remoteAddr: "192.0.2.4:1935",
     outboundBytes: 1024,
@@ -363,13 +322,12 @@ const rtmpReader = renderReader({
   },
 }, 0);
 assertMetric(rtmpReader, "TX", "2.50", "Mbit/s");
-assertMetric(rtmpReader, "Ping", "8.00", "ms");
 assertMetric(rtmpReader, "Frame Discard", "10s 18 · 60s 21");
 assertMetric(rtmpReader, "Connection", "changed 18 s ago");
 assert.match(rtmpReader, /aria-label="TX-Verlauf der letzten 60 Sekunden"/);
 assert.match(rtmpReader, /class="trend-line trend-rate"/);
 assert.equal((rtmpReader.match(/class="trend-end-marker trend-rate"/g) || []).length, 1);
-assert.doesNotMatch(rtmpReader, /RTT|Loss|Retrans|Link|Reserve/);
+assert.doesNotMatch(rtmpReader, /RTT|Ping|Loss|Retrans|Link|Reserve/);
 
 const rtmpsPublisherTrend = renderStreamLeft({
   name: "secure",

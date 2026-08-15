@@ -37,7 +37,7 @@ Ablauf:
 4) Optional JSON-Datei für Debug/Inspektion.
 
 Voraussetzung:
-- Modul bitrate.py und rtt.py im selben bin/-Verzeichnis:
+- Modul bitrate.py im selben bin/-Verzeichnis:
   from bitrate import calc_bitrate
 """
 
@@ -82,12 +82,9 @@ try:
     from .monitoring_config import (
         DEFAULT_CONFIG_PATH,
         load_monitoring_config,
-        measure_configured_rtt,
         resolve_monitoring_config,
     )
-    from .rtt import measure_publisher_rtt_ms, measure_reader_rtt_ms
     from .redis_keys import (
-        DEFAULT_RTT_READER_PREFIX,
         connection_lifecycle_key,
         connection_history_key,
         publisher_connection_key,
@@ -122,12 +119,9 @@ except ImportError:
     from monitoring_config import (
         DEFAULT_CONFIG_PATH,
         load_monitoring_config,
-        measure_configured_rtt,
         resolve_monitoring_config,
     )
-    from rtt import measure_publisher_rtt_ms, measure_reader_rtt_ms
     from redis_keys import (
-        DEFAULT_RTT_READER_PREFIX,
         connection_lifecycle_key,
         connection_history_key,
         publisher_connection_key,
@@ -163,7 +157,6 @@ BITRATE_SMOOTH_ALPHA: Optional[float] = BITRATE_CFG["smooth_alpha"]
 BITRATE_SMOOTH_REFERENCE_SECONDS = BITRATE_CFG["smooth_reference_seconds"]
 BITRATE_TTL = BITRATE_CFG["ttl"]
 IGNORE_LOOPBACK = BITRATE_CFG["ignore_loopback"]
-RTT_CFG = config["rtt"]
 r = None
 snapshot_store = None
 mediamtx_client = None
@@ -177,7 +170,6 @@ class PollCache:
     next_version_refresh: float = 0.0
     next_forward_refresh: float = 0.0
     next_output_write: float = 0.0
-    next_icmp_history_sample: float = 0.0
     forward_destinations: Dict[str, Any] = field(default_factory=dict)
     lifecycle_roles_by_path: Dict[str, set[tuple[str, str]]] = field(
         default_factory=dict
@@ -186,17 +178,6 @@ class PollCache:
 
 
 poll_cache = PollCache()
-
-ICMP_READER_TYPES = frozenset({
-    "rtmpConn",
-    "rtmpsConn",
-    "rtspConn",
-    "rtspSession",
-    "rtspsConn",
-    "rtspsSession",
-    "webRTCSession",
-    "moqSession",
-})
 
 RTMP_CONNECTION_TYPES = frozenset({"rtmpConn", "rtmpsConn"})
 
@@ -212,7 +193,7 @@ def configure_runtime(raw_config: Dict[str, Any]) -> None:
     global COLLECTOR_CFG, JSON_OUTPUT_PATH, INTERVAL, IGNORE_PATH_PREFIXES
     global BITRATE_CFG, BITRATE_MIN_DT, BITRATE_SMOOTH_ALPHA
     global BITRATE_SMOOTH_REFERENCE_SECONDS, BITRATE_TTL
-    global IGNORE_LOOPBACK, RTT_CFG
+    global IGNORE_LOOPBACK
 
     config = resolve_monitoring_config(raw_config)
     API_BASE = config["api_base_url"]
@@ -232,7 +213,6 @@ def configure_runtime(raw_config: Dict[str, Any]) -> None:
     ]
     BITRATE_TTL = BITRATE_CFG["ttl"]
     IGNORE_LOOPBACK = BITRATE_CFG["ignore_loopback"]
-    RTT_CFG = config["rtt"]
     reset_poll_cache()
 
 
@@ -322,7 +302,6 @@ def _update_connection_history(
     history_key: str,
     direction: str,
     timestamp: float,
-    include_icmp: bool,
     include_rate_history: bool = False,
 ) -> None:
     """Persist optional live history without breaking the current snapshot."""
@@ -330,7 +309,6 @@ def _update_connection_history(
         connection,
         direction,
         timestamp,
-        include_icmp=include_icmp,
     )
     try:
         snapshot_store.append_history_sample(
@@ -452,7 +430,6 @@ def collect_and_store() -> Dict[str, float]:
         "api_request_count": 0.0,
         "history_duration_ms": 0.0,
         "redis_snapshot_duration_ms": 0.0,
-        "icmp_duration_ms": 0.0,
     }
 
     def cycle_fetch(
@@ -554,12 +531,6 @@ def collect_and_store() -> Dict[str, float]:
         )
 
     aggregated = []
-    include_icmp_history = now >= poll_cache.next_icmp_history_sample
-    if include_icmp_history:
-        poll_cache.next_icmp_history_sample = now + float(
-            RTT_CFG["min_period_s"]
-        )
-
     for path in visible_paths:
         name: str = path.get("name", "")
         forward_destinations = poll_cache.forward_destinations.get(name, [])
@@ -612,31 +583,11 @@ def collect_and_store() -> Dict[str, float]:
         else:
             entry["source"]["bitrate_mbps"] = pub_calc_mbps
 
-        # -----------------------------------------
-        # SRT liefert Transport-RTT; für andere Protokolle bleibt ICMP separat.
-        # -----------------------------------------
-        remote = src_details.get("remoteAddr", "")
+        # SRT transport RTT is provided natively by MediaMTX.
         if src_type == "srtConn" and src_details.get("msRTT") is not None:
             entry["source"]["transport_rtt_ms"] = round(
                 float(src_details["msRTT"]), 2
             )
-        elif remote:
-            try:
-                icmp_started = time.perf_counter()
-                rtt_ms = measure_configured_rtt(
-                    r,
-                    remote_addr=remote,
-                    rtt_config=RTT_CFG,
-                    measure_func=measure_publisher_rtt_ms,
-                )
-                if rtt_ms is not None:
-                    entry["source"]["icmp_rtt_ms"] = round(rtt_ms, 2)
-            except Exception as e:
-                logging.debug(f"RTT-Messung fehlgeschlagen für {name} ({remote}): {e}")
-            finally:
-                metrics["icmp_duration_ms"] += (
-                    time.perf_counter() - icmp_started
-                ) * 1000
 
         if src_type == "srtConn":
             if src_details.get("msReceiveTsbPdDelay") is not None:
@@ -663,7 +614,6 @@ def collect_and_store() -> Dict[str, float]:
                 history_key=connection_history_key(pub_key),
                 direction="publisher",
                 timestamp=now,
-                include_icmp=include_icmp_history,
                 include_rate_history=src_type in RTMP_CONNECTION_TYPES,
             )
             metrics["history_duration_ms"] += (
@@ -717,35 +667,6 @@ def collect_and_store() -> Dict[str, float]:
                 "bitrate_mbps": bitrate_final,
                 "details": rd_details,
             }
-            remote = rd_details.get("remoteAddr", "")
-            if rtype in ICMP_READER_TYPES and remote:
-                icmp_started = time.perf_counter()
-                try:
-                    rtt_ms = measure_configured_rtt(
-                        r,
-                        remote_addr=remote,
-                        rtt_config=RTT_CFG,
-                        measure_func=measure_reader_rtt_ms,
-                        key_prefix=DEFAULT_RTT_READER_PREFIX,
-                        measurement_kwargs={
-                            "path": name,
-                            "connection_type": rtype,
-                            "connection_id": str(reader_identity),
-                        },
-                    )
-                    if rtt_ms is not None:
-                        reader_entry["icmp_rtt_ms"] = round(rtt_ms, 2)
-                except Exception as e:
-                    logging.debug(
-                        "Ping-Messung fehlgeschlagen für Reader %s/%s: %s",
-                        name,
-                        reader_identity,
-                        e,
-                    )
-                finally:
-                    metrics["icmp_duration_ms"] += (
-                        time.perf_counter() - icmp_started
-                    ) * 1000
             if rtype == "srtConn":
                 if rd_details.get("msRTT") is not None:
                     reader_entry["transport_rtt_ms"] = round(
@@ -782,7 +703,6 @@ def collect_and_store() -> Dict[str, float]:
                 history_key=connection_history_key(rd_key),
                 direction="reader",
                 timestamp=now,
-                include_icmp=include_icmp_history,
                 include_rate_history=rtype in RTMP_CONNECTION_TYPES,
             )
             metrics["history_duration_ms"] += (
@@ -830,13 +750,12 @@ def collect_and_store() -> Dict[str, float]:
     ) * 1000
     logging.debug(
         "Collector cycle %.2f ms (MediaMTX %.2f ms/%d requests, "
-        "history %.2f ms, snapshot Redis %.2f ms, ICMP %.2f ms)",
+        "history %.2f ms, snapshot Redis %.2f ms)",
         metrics["cycle_duration_ms"],
         metrics["api_duration_ms"],
         int(metrics["api_request_count"]),
         metrics["history_duration_ms"],
         metrics["redis_snapshot_duration_ms"],
-        metrics["icmp_duration_ms"],
     )
     return metrics
 

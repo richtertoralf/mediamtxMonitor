@@ -160,10 +160,6 @@ function connectionTotal(connection, direction, stream) {
   );
 }
 
-function pingValue(connection) {
-  return firstAvailable(connection?.icmp_rtt_ms, connection?.ping_rtt_ms);
-}
-
 const TELEMETRY_WINDOW_SECONDS = 60;
 const TREND_SCALE_HEADROOM = 1.15;
 const TREND_SCALE_MINIMUM_MS = 100;
@@ -196,7 +192,7 @@ function connectionTimingValues(connection) {
       connection?.srt_health?.rtt_ms,
       connection?.details?.msRTT,
     )
-    : pingValue(connection);
+    : null;
   return {
     current: optionalNumber(current),
     variation10: optionalNumber(timing["10s"]?.variation_ms),
@@ -426,9 +422,7 @@ function renderRttTrend(connection, historyKey) {
   const minimumTimestamp = latestTimestamp - TELEMETRY_WINDOW_SECONDS;
   const xPosition = timestamp => Math.max(0, Math.min(240,
     ((timestamp - minimumTimestamp) / TELEMETRY_WINDOW_SECONDS) * 240));
-  const timingLabel = connection?.window_metrics?.timing_source === "icmp_rtt_ms"
-    ? "Ping"
-    : "RTT";
+  const timingLabel = "RTT";
   const currentValues = connectionTimingValues(connection);
   const rows = [
     [timingLabel, "current", "trend-current", trendYPosition, trendScaleState.scaleMaximum],
@@ -655,24 +649,16 @@ function renderSrtMetrics(connection, direction, totalBytes, historyKey = null) 
   ]);
 }
 
-function renderNonSrtMetrics(connection, direction, totalBytes, historyKey = null) {
+function renderNonSrtMetrics(connection, direction, totalBytes) {
   const details = connection?.details || {};
   const type = connection?.type;
   const rateLabel = direction === "in" ? "RX" : "TX";
   const rate = connectionRate(connection, direction);
-  const ping = pingValue(connection);
-  const linkTelemetry = renderLinkTelemetry(connection, historyKey);
   const metrics = [
     metric(rateLabel, rate == null
       ? "—"
       : formatNumber(rate, 2), "Mbit/s"),
     metric("Total", formatBytes(totalBytes)),
-    metric(
-      "Ping",
-      ping == null && linkTelemetry ? "—" : formatNumber(ping, 2),
-      "ms",
-    ),
-    metricFullRow(linkTelemetry),
   ];
 
   if (type === "rtmpConn" || type === "rtmpsConn") {
@@ -715,7 +701,7 @@ function renderConnectionMetrics(connection, direction, stream = null) {
   );
   return connection?.type === "srtConn"
     ? renderSrtMetrics(connection, direction, totalBytes, historyKey)
-    : renderNonSrtMetrics(connection, direction, totalBytes, historyKey);
+    : renderNonSrtMetrics(connection, direction, totalBytes);
 }
 
 function formatSampleRate(sampleRate) {

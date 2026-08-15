@@ -3,22 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable, Dict, Mapping, Optional
+from typing import Any, Dict, Mapping, Optional
 
 import yaml
 
 try:
-    from .redis_keys import (
-        DEFAULT_RTT_PUBLISHER_PREFIX,
-        DEFAULT_STREAM_SNAPSHOT_KEY,
-        DEFAULT_SYSTEM_SNAPSHOT_KEY,
-    )
+    from .redis_keys import DEFAULT_STREAM_SNAPSHOT_KEY, DEFAULT_SYSTEM_SNAPSHOT_KEY
 except ImportError:
-    from redis_keys import (
-        DEFAULT_RTT_PUBLISHER_PREFIX,
-        DEFAULT_STREAM_SNAPSHOT_KEY,
-        DEFAULT_SYSTEM_SNAPSHOT_KEY,
-    )
+    from redis_keys import DEFAULT_STREAM_SNAPSHOT_KEY, DEFAULT_SYSTEM_SNAPSHOT_KEY
 
 
 DEFAULT_CONFIG_PATH = Path(
@@ -56,15 +48,6 @@ SYSTEM_MONITOR_DEFAULTS: Dict[str, Any] = {
     "redis_key": DEFAULT_SYSTEM_SNAPSHOT_KEY,
     "output_json_path": "/tmp/mediamtx_system.json",
     "interval_seconds": 10,
-}
-
-RTT_DEFAULTS: Dict[str, Any] = {
-    "enabled": True,
-    "ewma_alpha": 0.5,
-    "min_period_s": 30,
-    "ttl_s": 300,
-    "timeout_s": 0.9,
-    "key_prefix": DEFAULT_RTT_PUBLISHER_PREFIX,
 }
 
 API_DEFAULTS: Dict[str, Any] = {
@@ -143,11 +126,6 @@ def resolve_system_monitor_config(config: Mapping[str, Any]) -> Dict[str, Any]:
     return resolved
 
 
-def resolve_rtt_config(config: Mapping[str, Any]) -> Dict[str, Any]:
-    """Löst den ``rtt``-Block mit den bisher wirksamen Defaults auf."""
-    return _component_config(config, "rtt", RTT_DEFAULTS)
-
-
 def resolve_api_config(config: Mapping[str, Any]) -> Dict[str, Any]:
     """Resolve direct API server settings and documented static-file values."""
     resolved = _component_config(config, "api_server", API_DEFAULTS)
@@ -177,39 +155,8 @@ def resolve_monitoring_config(config: Mapping[str, Any]) -> Dict[str, Any]:
         "redis": resolve_redis_config(config),
         "collector": resolve_collector_config(config),
         "bitrate": resolve_bitrate_config(config),
-        "rtt": resolve_rtt_config(config),
         "system_monitor": resolve_system_monitor_config(config),
         "api_server": resolve_api_config(config),
         "logging": resolve_logging_config(config),
         "frontend": resolve_frontend_config(config),
     }
-
-
-def measure_configured_rtt(
-    redis_client: Any,
-    remote_addr: str,
-    rtt_config: Mapping[str, Any],
-    measure_func: Callable[..., Optional[float]],
-    *,
-    key_prefix: Optional[str] = None,
-    measurement_kwargs: Optional[Mapping[str, Any]] = None,
-) -> Optional[float]:
-    """Führt eine RTT-Messung nur aus, wenn sie konfiguriert aktiviert ist."""
-    if not rtt_config["enabled"]:
-        return None
-
-    kwargs = dict(measurement_kwargs or {})
-    kwargs.update(
-        {
-            "remote_addr": remote_addr,
-            "ewma_alpha": float(rtt_config["ewma_alpha"]),
-            "min_period_s": int(rtt_config["min_period_s"]),
-            "ttl_s": int(rtt_config["ttl_s"]),
-            "key_prefix": str(key_prefix or rtt_config["key_prefix"]),
-            "timeout_s": float(rtt_config["timeout_s"]),
-        }
-    )
-    return measure_func(
-        redis_client,
-        **kwargs,
-    )

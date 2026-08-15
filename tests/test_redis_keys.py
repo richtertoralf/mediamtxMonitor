@@ -1,18 +1,14 @@
 import unittest
 
 from bin.redis_keys import (
-    DEFAULT_RTT_PUBLISHER_PREFIX,
-    DEFAULT_RTT_READER_PREFIX,
     DEFAULT_STREAM_SNAPSHOT_KEY,
     DEFAULT_SYSTEM_SNAPSHOT_KEY,
     bitrate_state_keys,
     connection_lifecycle_key,
     connection_history_key,
     publisher_connection_key,
-    publisher_rtt_keys,
     publisher_srt_health_key,
     reader_connection_key,
-    reader_rtt_keys,
     reader_srt_health_key,
     rtmp_frame_discard_key,
     srt_counter_key,
@@ -80,44 +76,6 @@ class ConnectionStateKeyTests(unittest.TestCase):
             connection_lifecycle_key("camera/main", "reader", "rtmpConn"),
             "lifecycle:reader:camera/main:rtmpConn",
         )
-
-
-class RttKeyTests(unittest.TestCase):
-    def test_all_publisher_rtt_keys_match_existing_schema(self):
-        self.assertEqual(DEFAULT_RTT_PUBLISHER_PREFIX, "rtt:pub")
-        self.assertEqual(publisher_rtt_keys("192.0.2.10"), (
-            "rtt:pub:192.0.2.10:ewma_ms",
-            "rtt:pub:192.0.2.10:last_ms",
-            "rtt:pub:192.0.2.10:last_ts",
-        ))
-
-    def test_ipv6_and_custom_prefix_remain_unescaped(self):
-        self.assertEqual(
-            publisher_rtt_keys("2001:db8::1", "custom:rtt"),
-            (
-                "custom:rtt:2001:db8::1:ewma_ms",
-                "custom:rtt:2001:db8::1:last_ms",
-                "custom:rtt:2001:db8::1:last_ts",
-            ),
-        )
-
-    def test_reader_rtt_is_isolated_from_publisher_and_other_connections(self):
-        publisher = publisher_rtt_keys("192.0.2.10")
-        reader_a = reader_rtt_keys(
-            "stream", "rtmpConn", "reader-a", "192.0.2.10"
-        )
-        reader_b = reader_rtt_keys(
-            "stream", "rtmpConn", "reader-b", "192.0.2.10"
-        )
-
-        self.assertEqual(DEFAULT_RTT_READER_PREFIX, "rtt:rd")
-        self.assertNotEqual(publisher, reader_a)
-        self.assertNotEqual(reader_a, reader_b)
-        self.assertEqual(reader_a, (
-            "rtt:rd:stream:rtmpConn:reader-a:192.0.2.10:ewma_ms",
-            "rtt:rd:stream:rtmpConn:reader-a:192.0.2.10:last_ms",
-            "rtt:rd:stream:rtmpConn:reader-a:192.0.2.10:last_ts",
-        ))
 
 
 class SrtHealthKeyTests(unittest.TestCase):

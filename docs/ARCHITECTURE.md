@@ -209,9 +209,9 @@ werden zeitbasiert entfernt und verwaiste Histories laufen per TTL aus. Diese
 History ist kein Langzeitarchiv. Die optionalen 10-s- und 60-s-Fenster werden
 aus derselben Rohhistorie berechnet.
 
-Die Laufzeitauswertung hält SRT-Transport-RTT und ICMP-Ping getrennt. Für beide
-werden p50 und p95 linear interpoliert; die jeweilige Variation ist
-`p95 - p50`. Bereits durch den Collector aus nativen SRT-Gesamtzählern gebildete
+Die Laufzeitauswertung bildet für native SRT-Transport-RTT p50 und p95 linear
+interpoliert; die Variation ist `p95 - p50`. Bereits durch den Collector aus
+nativen SRT-Gesamtzählern gebildete
 Intervallereignisse werden innerhalb der Fenster summiert. Daraus entsteht in
 dieser Stufe keine Health- oder Stability-Bewertung.
 
@@ -228,9 +228,9 @@ API sichtbar.
 Langsamer wechselnde bzw. diagnostische Daten bleiben im seriellen Collector,
 werden aber seltener aktualisiert: die MediaMTX-Version alle 60 Sekunden,
 Path-Forward-Ziele und die optionale JSON-Diagnosedatei alle 5 Sekunden.
-ICMP-Messungen behalten ihre eigene, langsamere Cache-Cadence; ein gecachter
-Ping-Wert wird nicht bei jedem schnellen Poll als neue unabhängige
-History-Messung gespeichert.
+Der Monitor verwendet ausschließlich Metriken, die MediaMTX beziehungsweise das
+jeweilige Transportprotokoll bereitstellt. Externe ICMP-Pings werden nicht
+ausgeführt. Protokolle ohne native RTT besitzen daher keine RTT-Anzeige.
 
 MediaMTX-Connection-IDs werden als eigenständige aktuelle Connections
 behandelt. Der Monitor führt keine IP-, Port- oder zeitbasierte Deduplizierung
@@ -334,7 +334,6 @@ bin/
 ├── redis_store.py               # Snapshot-I/O, bei Extraktion
 ├── redis_keys.py                # zentrales Key-Schema, falls separat sinnvoll
 ├── bitrate.py                   # Bitratenmetrik
-├── rtt.py                       # RTT-Metrik
 ├── connection_history.py        # 60-s-History und Fensterstatistiken
 ├── srt_health.py                # SRT-Metriken; Bewertung später getrennt
 ├── health.py                    # erst bei konkreter Health-Bewertung
