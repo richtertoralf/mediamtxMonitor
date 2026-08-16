@@ -78,6 +78,18 @@ function formatConnectionAge(created) {
   return `${Math.floor(seconds / 86400)} d`;
 }
 
+export function formatRelativeTime(value, nowMs = Date.now()) {
+  if (!value) return null;
+  const timestamp = Date.parse(value);
+  const currentTime = optionalNumber(nowMs);
+  if (!Number.isFinite(timestamp) || currentTime == null) return null;
+  const seconds = Math.max(0, Math.floor((currentTime - timestamp) / 1000));
+  if (seconds < 60) return `vor ${seconds} s`;
+  if (seconds < 3600) return `vor ${Math.floor(seconds / 60)} min`;
+  if (seconds < 86400) return `vor ${Math.floor(seconds / 3600)} h`;
+  return `vor ${Math.floor(seconds / 86400)} d`;
+}
+
 function protocolLabel(type) {
   return {
     srtConn: "SRT",
@@ -93,8 +105,17 @@ function protocolLabel(type) {
   }[type] || type || "—";
 }
 
-function metric(label, value, unit = null, assessment = null, valueClass = null) {
-  return value == null ? null : {label, value, unit, assessment, valueClass};
+function metric(
+  label,
+  value,
+  unit = null,
+  assessment = null,
+  valueClass = null,
+  title = null,
+) {
+  return value == null
+    ? null
+    : {label, value, unit, assessment, valueClass, title};
 }
 
 function metricFullRow(content) {
@@ -117,7 +138,9 @@ function renderMetrics(metrics) {
               ? ""
               : `<span class="metric-unit">${escapeHtml(item.unit)}</span>`}
           </dt>
-          <dd${item.valueClass ? ` class="${escapeHtml(item.valueClass)}"` : ""}>${escapeHtml(item.value)}</dd>
+          <dd${item.valueClass ? ` class="${escapeHtml(item.valueClass)}"` : ""}${
+            item.title ? ` title="${escapeHtml(item.title)}"` : ""
+          }>${escapeHtml(item.value)}</dd>
           ${item.assessment || ""}
         </div>
         `}
@@ -126,11 +149,16 @@ function renderMetrics(metrics) {
   `;
 }
 
-function renderConnectionHeading(type, details) {
-  const remote = details?.remoteAddr || "—";
+function renderConnectionHeading(type, details, connection = null) {
+  const remote = connection?.common?.remoteAddr || details?.remoteAddr || "—";
+  const transport = connection?.protocol_metrics?.metadata?.transport;
+  const protocol = protocolLabel(type);
+  const shownProtocol = (type === "rtspSession" || type === "rtspsSession") && transport
+    ? `${protocol}/${String(transport).toUpperCase()}`
+    : protocol;
   return `
     <div class="connection-heading">
-      <span>${escapeHtml(protocolLabel(type))}</span>
+      <span>${escapeHtml(shownProtocol)}</span>
       <span class="remote-address">· ${escapeHtml(remote)}</span>
     </div>
   `;
@@ -142,19 +170,25 @@ function connectionRate(connection, direction) {
   const nativeRate = direction === "in"
     ? firstAvailable(health.rx_mbps, details.mbpsReceiveRate)
     : firstAvailable(health.tx_mbps, details.mbpsSendRate);
-  return firstAvailable(nativeRate, connection?.bitrate_mbps);
+  return firstAvailable(
+    nativeRate,
+    direction === "in" ? connection?.common?.rx_mbit_s : connection?.common?.tx_mbit_s,
+    connection?.bitrate_mbps,
+  );
 }
 
 function connectionTotal(connection, direction, stream) {
   const details = connection?.details || {};
   if (direction === "in") {
     return firstAvailable(
+      connection?.common?.total_bytes,
       details.inboundBytes,
       connection?.type === "srtConn" ? details.bytesReceived : null,
       stream?.inboundBytes,
     );
   }
   return firstAvailable(
+    connection?.common?.total_bytes,
     details.outboundBytes,
     connection?.type === "srtConn" ? details.bytesSent : null,
   );
@@ -495,6 +529,52 @@ function renderRateTrend(connection, direction) {
   `;
 }
 
+function renderJitterTrend(connection) {
+  const history = Array.isArray(connection?.jitter_history)
+    ? connection.jitter_history
+    : [];
+  const values = history.map(point => optionalNumber(point?.ms))
+    .filter(value => value != null && value >= 0);
+  const timestamps = history.map(point => optionalNumber(point?.timestamp))
+    .filter(value => value != null);
+  if (!values.length || !timestamps.length) return "";
+  const latestTimestamp = Math.max(...timestamps);
+  const minimumTimestamp = latestTimestamp - TELEMETRY_WINDOW_SECONDS;
+  const maximum = Math.max(...values, 0.1);
+  const xPosition = timestamp => Math.max(0, Math.min(240,
+    ((timestamp - minimumTimestamp) / TELEMETRY_WINDOW_SECONDS) * 240));
+  const yPosition = value => SPARKLINE_BASELINE_Y
+    - (Math.max(0, Math.min(maximum, value)) / maximum) * SPARKLINE_VERTICAL_RANGE;
+  const points = history.map(point => ({
+    timestamp: optionalNumber(point?.timestamp),
+    jitter: optionalNumber(point?.ms),
+  })).filter(point => point.timestamp != null);
+  return `
+    <div class="rate-trend" role="img" aria-label="Jitter-Verlauf der letzten 60 Sekunden">
+      <span class="rate-trend-label">Jitter-Verlauf</span>
+      <span class="sparkline-plot">
+        <span class="rate-scale-max">${escapeHtml(formatNumber(maximum, 2))} ms</span>
+        <svg class="sparkline-graph" viewBox="0 0 240 24" preserveAspectRatio="none" aria-hidden="true">
+          <line class="sparkline-time-marker" x1="120" y1="2" x2="120" y2="22"></line>
+          <line class="sparkline-baseline" x1="0" y1="22" x2="240" y2="22"></line>
+          ${renderTrendSeries(points, "jitter", "trend-rate", xPosition, yPosition)}
+        </svg>
+      </span>
+    </div>
+  `;
+}
+
+function renderCounterWindows(label, windows, field, unit = null) {
+  const recent = windows?.["10s"]?.[field];
+  const minute = windows?.["60s"]?.[field];
+  if (recent == null && minute == null) return null;
+  return metric(
+    label,
+    `10s ${formatCount(recent) ?? "—"} · 60s ${formatCount(minute) ?? "—"}`,
+    unit,
+  );
+}
+
 function renderConnectionStability(connection) {
   const stability = connection?.connection_stability;
   if (!stability) return "";
@@ -513,12 +593,43 @@ function renderFrameDiscardWindows(connection) {
   const recent = windows["10s"];
   const minute = windows["60s"];
   if (recent == null && minute == null) {
-    return metric("Frame Discard", "10s — · 60s —");
+    return null;
   }
   return metric(
     "Frame Discard",
     `10s ${formatCount(recent) ?? "—"} · 60s ${formatCount(minute) ?? "—"}`,
   );
+}
+
+function formatIceCandidate(candidate) {
+  if (candidate == null) return null;
+  if (typeof candidate !== "object") {
+    const raw = String(candidate).trim();
+    if (!raw) return null;
+    const [type, protocol, address, port] = raw.split("/");
+    if (type && protocol && address && port) {
+      return `${type} · ${protocol.toUpperCase()} · ${address}:${port}`;
+    }
+    return raw;
+  }
+  const address = firstAvailable(candidate.address, candidate.ip);
+  const endpoint = address == null
+    ? null
+    : candidate.port == null ? String(address) : `${address}:${candidate.port}`;
+  const protocol = candidate.protocol == null
+    ? null
+    : String(candidate.protocol).toUpperCase();
+  const parts = [candidate.type, protocol, endpoint].filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+function iceMetric(metadata) {
+  const local = formatIceCandidate(metadata.local_candidate);
+  const remote = formatIceCandidate(metadata.remote_candidate);
+  if (local && remote) return metric("ICE", `${local} ↔ ${remote}`);
+  if (local) return metric("ICE Local", local);
+  if (remote) return metric("ICE Remote", remote);
+  return null;
 }
 
 function renderImpactIndicators(connection, direction) {
@@ -654,10 +765,25 @@ function renderNonSrtMetrics(connection, direction, totalBytes) {
   const type = connection?.type;
   const rateLabel = direction === "in" ? "RX" : "TX";
   const rate = connectionRate(connection, direction);
+  const protocol = connection?.protocol_metrics || {};
+  const metadata = protocol.metadata || {};
+  const gauges = protocol.gauges || {};
+  const counterWindows = connection?.window_metrics?.protocol_counters || {};
   const metrics = [
-    metric(rateLabel, rate == null
-      ? "—"
-      : formatNumber(rate, 2), "Mbit/s"),
+    type === "hlsSession" && connection?.rate_metrics?.["10s"]?.average_mbps != null
+      ? metric(
+        `${rateLabel} Ø10s`,
+        formatNumber(connection.rate_metrics["10s"].average_mbps, 2),
+        "Mbit/s",
+        null,
+        null,
+        rate == null ? null : `Aktuell: ${formatNumber(rate, 2)} Mbit/s`,
+      )
+      : metric(
+        type === "hlsSession" ? `${rateLabel} aktuell` : rateLabel,
+        rate == null ? "—" : formatNumber(rate, 2),
+        "Mbit/s",
+      ),
     metric("Total", formatBytes(totalBytes)),
   ];
 
@@ -668,17 +794,38 @@ function renderNonSrtMetrics(connection, direction, totalBytes) {
   if (type === "rtspSession" || type === "rtspsSession") {
     if (direction === "in") {
       metrics.push(
-        metric("Jitter", formatNumber(details.inboundRTPPacketsJitter, 2), "ms"),
-        metric("Loss", formatCount(details.inboundRTPPacketsLost), "pkt"),
-        metric("RTP Error", formatCount(details.inboundRTPPacketsInError)),
-        metric("RTCP Error", formatCount(details.inboundRTCPPacketsInError)),
+        metric("Jitter", formatNumber(gauges.jitter_ms, 2), "ms"),
+        metricFullRow(renderJitterTrend(connection)),
+        renderCounterWindows("Loss", counterWindows, "loss", "pkt"),
+        renderCounterWindows("RTP Error", counterWindows, "rtp_error"),
+        renderCounterWindows("RTCP Error", counterWindows, "rtcp_error"),
       );
     } else {
       metrics.push(
-        metric("Loss", formatCount(details.outboundRTPPacketsReportedLost), "pkt"),
-        metric("Discard", formatCount(details.outboundRTPPacketsDiscarded)),
+        renderCounterWindows("Reported Loss", counterWindows, "reported_loss", "pkt"),
+        renderCounterWindows("Discard", counterWindows, "discard"),
+        renderCounterWindows("RTCP Error", counterWindows, "rtcp_error"),
       );
     }
+  }
+
+  if (type === "webRTCSession") {
+    if (direction === "in") {
+      metrics.push(
+        metric("Jitter", formatNumber(gauges.jitter_ms, 2), "ms"),
+        metricFullRow(renderJitterTrend(connection)),
+        renderCounterWindows("RTP Loss", counterWindows, "rtp_loss", "pkt"),
+      );
+    } else {
+      metrics.push(renderCounterWindows(
+        "Frame Discard", counterWindows, "frame_discard",
+      ));
+    }
+    const peer = metadata.peer_connection_established;
+    metrics.push(
+      metric("Peer", peer == null ? metadata.state : peer ? "established" : "not established"),
+      iceMetric(metadata),
+    );
   }
 
   if ((type === "rtmpConn" || type === "rtmpsConn") && direction === "out") {
@@ -686,7 +833,14 @@ function renderNonSrtMetrics(connection, direction, totalBytes) {
   }
 
   if (type === "rtmpConn" || type === "rtmpsConn") {
-    metrics.push(renderConnectionStability(connection));
+    metrics.push(renderConnectionStability(connection) || metric("Connection", metadata.state));
+  }
+  if (type === "moqSession") {
+    metrics.push(
+      metric("Transport", metadata.transport),
+      metric("Version", metadata.version),
+      metric("State", metadata.state),
+    );
   }
   metrics.push(metric("Age", formatConnectionAge(details.created)));
   return renderMetrics(metrics);
@@ -701,7 +855,36 @@ function renderConnectionMetrics(connection, direction, stream = null) {
   );
   return connection?.type === "srtConn"
     ? renderSrtMetrics(connection, direction, totalBytes, historyKey)
-    : renderNonSrtMetrics(connection, direction, totalBytes);
+    : renderNonSrtMetrics(connection, direction, totalBytes)
+      + (direction === "in" ? renderPathMetrics(stream) : "");
+}
+
+function renderPathMetrics(stream) {
+  const windows = stream?.path_metrics?.window_metrics?.protocol_counters || {};
+  const item = renderCounterWindows("Path Frame Error", windows, "frame_error");
+  return item ? renderMetrics([item]) : "";
+}
+
+function renderHlsMuxer(stream) {
+  const muxer = stream?.hls_muxer;
+  if (!muxer) return "";
+  const windows = muxer?.window_metrics?.protocol_counters || {};
+  return `
+    <section class="reader-block hls-muxer-block">
+      <h3>HLS Muxer</h3>
+      ${renderMetrics([
+        renderCounterWindows("Mux Discard", windows, "mux_discard"),
+        metric(
+          "Last Request",
+          formatRelativeTime(muxer.lastRequest),
+          null,
+          null,
+          null,
+          muxer.lastRequest,
+        ),
+      ])}
+    </section>
+  `;
 }
 
 function formatSampleRate(sampleRate) {
@@ -771,12 +954,12 @@ function readerDetails(reader) {
 }
 
 /** Render one permanent OUT connection block. */
-export function renderReader(reader, index = 0, streamName = "") {
+export function renderReader(reader, index = 0, streamName = "", stream = null) {
   return `
     <section class="reader-block">
       <h3>Reader ${index + 1}</h3>
-      ${renderConnectionHeading(reader?.type, reader?.details || {})}
-      ${renderConnectionMetrics(reader, "out", {name: streamName})}
+      ${renderConnectionHeading(reader?.type, reader?.details || {}, reader)}
+      ${renderConnectionMetrics(reader, "out", stream || {name: streamName})}
       ${readerDetails(reader)}
     </section>
   `;
@@ -800,7 +983,7 @@ export function renderStreamLeft(stream) {
   return `
     <section class="stream-left flow-panel" aria-label="Eingangsverbindung">
       <h2 class="panel-title">IN</h2>
-      ${renderConnectionHeading(source.type, source.details || {})}
+      ${renderConnectionHeading(source.type, source.details || {}, source)}
       ${renderConnectionMetrics(source, "in", stream)}
     </section>
   `;
@@ -849,8 +1032,9 @@ function renderRightContent(stream) {
   const readers = sortedReaders(stream);
   return `
     <h2 class="panel-title">OUT</h2>
+    ${renderHlsMuxer(stream)}
     ${readers.length
-      ? readers.map((reader, index) => renderReader(reader, index, stream?.name)).join("")
+      ? readers.map((reader, index) => renderReader(reader, index, stream?.name, stream)).join("")
       : '<div class="no-readers">Keine OUT-Verbindung</div>'}
   `;
 }

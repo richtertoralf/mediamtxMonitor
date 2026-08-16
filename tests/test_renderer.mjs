@@ -13,6 +13,7 @@ const rendererStyles = await readFile(
 const {
   dataAgeStatusClass,
   formatDataAge,
+  formatRelativeTime,
   recordSnapshotTelemetry,
   renderReader,
   renderSrtHealth,
@@ -35,7 +36,7 @@ function assertMetric(html, label, value, unit = null) {
     : `\\s*<span class="metric-unit">${escaped(unit)}</span>`;
   const expression = new RegExp(
     `<dt>\\s*<span class="metric-label">${escaped(label)}</span>${unitMarkup}\\s*</dt>`
-      + `\\s*<dd(?: class="[^"]+")?>${escaped(value)}</dd>`,
+      + `\\s*<dd(?: [^>]*)?>${escaped(value)}</dd>`,
   );
   assert.match(html, expression);
 }
@@ -273,14 +274,20 @@ const rtspPublisherStream = {
       inboundRTPPacketsJitter: 3.4,
       inboundRTPPacketsInError: 0,
     },
+    protocol_metrics: {gauges: {jitter_ms: 3.4}, metadata: {transport: "udp"}},
+    window_metrics: {protocol_counters: {
+      "10s": {loss: 0, rtp_error: 0},
+      "60s": {loss: 0, rtp_error: 0},
+    }},
   },
 };
 resetTelemetryHistories();
 recordSnapshotTelemetry([rtspPublisherStream], 3000);
 recordSnapshotTelemetry([rtspPublisherStream], 3001);
 const rtspPublisher = renderStreamLeft(rtspPublisherStream);
+assert.match(rtspPublisher, /RTSP\/UDP/);
 assertMetric(rtspPublisher, "Jitter", "3.40", "ms");
-assertMetric(rtspPublisher, "Loss", "0", "pkt");
+assertMetric(rtspPublisher, "Loss", "10s 0 · 60s 0", "pkt");
 assert.doesNotMatch(rtspPublisher, /metric-label">RTT|Ping|rtt-trend/);
 assert.doesNotMatch(rtspPublisher, /trend-variation-60|srt-impact|srt-rtt-assessment/);
 
@@ -294,10 +301,14 @@ const rtspReader = renderReader({
     outboundRTPPacketsReportedLost: 2,
     outboundRTPPacketsDiscarded: 0,
   },
+  window_metrics: {protocol_counters: {
+    "10s": {reported_loss: 2, discard: 0},
+    "60s": {reported_loss: 2, discard: 0},
+  }},
 }, 1);
 assert.match(rtspReader, /Reader 2/);
-assertMetric(rtspReader, "Loss", "2", "pkt");
-assertMetric(rtspReader, "Discard", "0");
+assertMetric(rtspReader, "Reported Loss", "10s 2 · 60s 2", "pkt");
+assertMetric(rtspReader, "Discard", "10s 0 · 60s 0");
 assert.doesNotMatch(rtspReader, /metric-label">RTT|Ping|Jitter|Retrans|rtt-trend/);
 
 const rtmpReader = renderReader({
@@ -370,12 +381,125 @@ const hlsReader = renderReader({
     isCDN: false,
   },
 }, 0);
-assertMetric(hlsReader, "TX", "—", "Mbit/s");
+assertMetric(hlsReader, "TX aktuell", "—", "Mbit/s");
 assertMetric(hlsReader, "Total", "0 B");
 assert.match(hlsReader, /Agent: Field Player\/1\.0/);
 assert.match(hlsReader, /CDN: nein/);
 assert.doesNotMatch(hlsReader, /RTT|Ping|Loss|Jitter/);
 assert.doesNotMatch(hlsReader, /Latency/);
+
+const averagedHlsReader = renderReader({
+  type: "hlsSession",
+  bitrate_mbps: 4.69,
+  common: {direction: "OUT", remoteAddr: "192.0.2.21:49153", total_bytes: 2048},
+  details: {created: "2026-08-16T00:00:00Z"},
+  rate_metrics: {"10s": {average_mbps: 4.12, sample_count: 8}},
+});
+assertMetric(averagedHlsReader, "TX Ø10s", "4.12", "Mbit/s");
+assert.match(averagedHlsReader, /title="Aktuell: 4\.69 Mbit\/s"/);
+assert.doesNotMatch(averagedHlsReader, /Mux Discard|Last Request/);
+assert.equal(formatRelativeTime("2026-08-16T20:08:22Z", Date.parse("2026-08-16T20:08:23Z")), "vor 1 s");
+assert.equal(formatRelativeTime("2026-08-16T20:07:00Z", Date.parse("2026-08-16T20:08:23Z")), "vor 1 min");
+
+const webRtcPublisher = renderStreamLeft({
+  name: "whip",
+  source: {
+    type: "webRTCSession",
+    common: {remoteAddr: "192.0.2.30:5000", rx_mbit_s: 3.2, total_bytes: 4096},
+    details: {},
+    protocol_metrics: {
+      gauges: {jitter_ms: 2.25},
+      metadata: {
+        peer_connection_established: true,
+        local_candidate: {type: "host", protocol: "udp", address: "10.0.0.1", port: 5000},
+        remote_candidate: {type: "srflx", protocol: "udp", address: "192.0.2.30", port: 5001},
+      },
+    },
+    jitter_history: [{timestamp: 1, ms: 1.5}, {timestamp: 2, ms: 2.25}],
+    window_metrics: {protocol_counters: {
+      "10s": {rtp_loss: 1}, "60s": {rtp_loss: 3},
+    }},
+  },
+  path_metrics: {window_metrics: {protocol_counters: {
+    "10s": {frame_error: 2}, "60s": {frame_error: 4},
+  }}},
+});
+assertMetric(webRtcPublisher, "Jitter", "2.25", "ms");
+assertMetric(webRtcPublisher, "RTP Loss", "10s 1 · 60s 3", "pkt");
+assertMetric(webRtcPublisher, "Peer", "established");
+assertMetric(webRtcPublisher, "Path Frame Error", "10s 2 · 60s 4");
+assert.match(webRtcPublisher, /host · UDP · 10\.0\.0\.1:5000/);
+assert.match(webRtcPublisher, /aria-label="Jitter-Verlauf der letzten 60 Sekunden"/);
+assert.doesNotMatch(webRtcPublisher, /metric-label">RTT|SRT Impact/);
+
+const webRtcReader = renderReader({
+  type: "webRTCSession",
+  common: {remoteAddr: "192.0.2.31:5002", tx_mbit_s: 2.1, total_bytes: 2048},
+  details: {},
+  protocol_metrics: {metadata: {peer_connection_established: true}},
+  window_metrics: {protocol_counters: {
+    "10s": {frame_discard: 2}, "60s": {frame_discard: 5},
+  }},
+});
+assertMetric(webRtcReader, "Frame Discard", "10s 2 · 60s 5");
+assert.doesNotMatch(webRtcReader, /Jitter|Loss|RTT/);
+
+const icePair = renderReader({
+  type: "webRTCSession",
+  details: {},
+  protocol_metrics: {metadata: {
+    local_candidate: "host/udp/127.0.0.1/8189",
+    remote_candidate: {type: "srflx", protocol: "tcp", address: "10.77.0.1", port: 54321},
+  }},
+});
+assertMetric(
+  icePair,
+  "ICE",
+  "host · UDP · 127.0.0.1:8189 ↔ srflx · TCP · 10.77.0.1:54321",
+);
+assert.equal((icePair.match(/↔/g) || []).length, 1);
+
+const iceLocalOnly = renderReader({
+  type: "webRTCSession",
+  details: {},
+  protocol_metrics: {metadata: {
+    local_candidate: "relay/udp/127.0.0.1/8189",
+    remote_candidate: "",
+  }},
+});
+assertMetric(iceLocalOnly, "ICE Local", "relay · UDP · 127.0.0.1:8189");
+assert.doesNotMatch(iceLocalOnly, /↔/);
+
+const iceRemoteOnly = renderReader({
+  type: "webRTCSession",
+  details: {},
+  protocol_metrics: {metadata: {
+    local_candidate: {},
+    remote_candidate: {type: "host", protocol: "udp", ip: "10.77.0.1", port: 54321},
+  }},
+});
+assertMetric(iceRemoteOnly, "ICE Remote", "host · UDP · 10.77.0.1:54321");
+assert.doesNotMatch(iceRemoteOnly, /↔/);
+
+const noIceCandidate = renderReader({
+  type: "webRTCSession",
+  details: {},
+  protocol_metrics: {metadata: {}},
+});
+assert.doesNotMatch(noIceCandidate, /metric-label">ICE|↔/);
+
+const moqReader = renderReader({
+  type: "moqSession",
+  common: {remoteAddr: "192.0.2.40:4443", tx_mbit_s: 1.5, total_bytes: 1024},
+  details: {},
+  protocol_metrics: {metadata: {
+    transport: "quic", version: "draft-01", state: "read",
+  }},
+});
+assertMetric(moqReader, "Transport", "quic");
+assertMetric(moqReader, "Version", "draft-01");
+assertMetric(moqReader, "State", "read");
+assert.doesNotMatch(moqReader, /RTT|Jitter|Loss/);
 
 const missingSrtLatency = renderReader({
   type: "srtConn",
@@ -852,6 +976,45 @@ assert.ok(
   && multiReaderCard.innerHTML.indexOf("RTMP") < multiReaderCard.innerHTML.indexOf("HLS"),
 );
 assert.equal((multiReaderCard.innerHTML.match(/AAC · 48 kHz · Stereo/g) || []).length, 1);
+
+const originalDateNow = Date.now;
+Date.now = () => Date.parse("2026-08-16T20:08:23Z");
+const twoHlsReadersCard = renderStreamCard({
+  name: "hls-multi",
+  source: {type: "rtmpConn", details: {}},
+  hls_muxer: {
+    scope: "hls_muxer",
+    lastRequest: "2026-08-16T20:08:22Z",
+    window_metrics: {protocol_counters: {
+      "10s": {mux_discard: 2}, "60s": {mux_discard: 5},
+    }},
+  },
+  readers: [
+    {
+      type: "hlsSession",
+      id: "hls-a",
+      bitrate_mbps: 4.8,
+      rate_metrics: {"10s": {average_mbps: 4.12, sample_count: 5}},
+      details: {remoteAddr: "192.0.2.50:5000", userAgent: "A"},
+    },
+    {
+      type: "hlsSession",
+      id: "hls-b",
+      bitrate_mbps: 0.2,
+      rate_metrics: {"10s": {average_mbps: 4.08, sample_count: 5}},
+      details: {remoteAddr: "192.0.2.51:5001", userAgent: "B"},
+    },
+  ],
+});
+Date.now = originalDateNow;
+assert.equal((twoHlsReadersCard.innerHTML.match(/<h3>HLS Muxer<\/h3>/g) || []).length, 1);
+assert.equal((twoHlsReadersCard.innerHTML.match(/metric-label">Mux Discard/g) || []).length, 1);
+assert.equal((twoHlsReadersCard.innerHTML.match(/metric-label">Last Request/g) || []).length, 1);
+assert.equal((twoHlsReadersCard.innerHTML.match(/metric-label">TX Ø10s/g) || []).length, 2);
+assert.equal((twoHlsReadersCard.innerHTML.match(/<h3>Reader [12]<\/h3>/g) || []).length, 2);
+assert.match(twoHlsReadersCard.innerHTML, /<dd title="2026-08-16T20:08:22Z">vor 1 s<\/dd>/);
+assert.match(twoHlsReadersCard.innerHTML, /192\.0\.2\.50:5000/);
+assert.match(twoHlsReadersCard.innerHTML, /192\.0\.2\.51:5001/);
 
 const previewPayload = '"><svg onload=alert(1)>';
 const injectionCard = renderStreamCard({

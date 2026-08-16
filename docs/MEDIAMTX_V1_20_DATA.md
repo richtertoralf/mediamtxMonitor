@@ -83,9 +83,12 @@ Neben den vom Monitor verwendeten HLS-Sessions stellt MediaMTX mit
 `GET /v3/hlsmuxers/list` eigene HLS-Muxer-Telemetrie bereit. Ein HLS-Sessionobjekt
 enthält unter anderem `outboundBytes`, `remoteAddr`, `userAgent` und `isCDN`.
 Ein HLS-Muxerobjekt enthält `created`, `lastRequest`, `outboundBytes`,
-`outboundFramesDiscarded` und `path`. Der aktuelle mediamtxMonitor wertet
-HLS-Muxer nicht separat aus; User-Agent und CDN-Kennung aus HLS-Sessions bleiben
-hingegen Teil der aktuellen Darstellung.
+`outboundFramesDiscarded` und `path`. Der Collector lädt diesen Endpunkt,
+sobald eine aktive `hlsSession` referenziert wird, und ordnet Muxer
+ausschließlich über das native Feld `path` zu. Muxer-Discard wird reset-sicher
+in 10-s-/60-s-Fenstern geführt und bleibt ausdrücklich ein Muxer-/Path-Wert,
+kein individueller Browserverlust. User-Agent und CDN-Kennung aus HLS-Sessions
+bleiben Teil der Darstellung.
 
 RTSP- und RTSPS-RTP-/RTCP-Daten stammen ausdrücklich aus den Session-Endpunkten.
 Die zusätzlich möglichen Reader-Typen `rtspConn` und `rtspsConn` werden über
@@ -105,17 +108,31 @@ als Ersatz für die RTP-/RTCP-Zähler der Session-Objekte.
   einen Bitratenverlauf. Für Reader werden Frame-Discard-Fenster gebildet;
   zusätzlich existiert eine begrenzte, nur eindeutig zuordenbare
   Connection-Stability-Anzeige.
-- **RTSP/RTSPS:** Session-Publisher zeigen Jitter, Loss, RTP Error und RTCP
-  Error; Session-Reader zeigen Loss und Discard. `rtspConn` und `rtspsConn`
-  besitzen nicht dieselbe protokollspezifische Tiefe wie die Sessionobjekte.
-- **WebRTC und MoQ:** Native Detailobjekte können im Snapshot vorhanden sein,
-  während das Dashboard diese Verbindungen derzeit überwiegend generisch über
-  Rate, Bytes und Alter darstellt.
-- **HLS:** Zusätzlich zur generischen Darstellung zeigt das Dashboard, soweit
-  von MediaMTX geliefert, User-Agent und CDN-Kennung.
+- **RTSP/RTSPS:** Session-Publisher zeigen Transport, Jitter samt Verlauf sowie
+  Loss, RTP Error und RTCP Error in 10-s-/60-s-Fenstern. Session-Reader zeigen
+  `Reported Loss` und Discard in denselben Fenstern. `rtspConn` und
+  `rtspsConn` besitzen nicht dieselbe protokollspezifische Tiefe.
+- **WebRTC:** Publisher zeigen nativen Jitter samt Verlauf, eingehenden
+  RTP-Verlust, PeerConnection-Status und ICE-Candidates. Reader zeigen nur
+  Ausgangs-Frame-Discard sowie Peer/ICE; Reader-RTT, -Loss oder -Jitter werden
+  nicht ergänzt.
+- **HLS:** Pro Session werden ein aus ihrer bestehenden Connection-History
+  abgeleiteter `TX Ø10s`, Bytes, Alter, User-Agent und CDN-Kennung gezeigt. Der
+  aktuelle Pollwert bleibt im Snapshot erhalten und ist im Tooltip sichtbar.
+  Pathbezogene HLS-Muxerwerte erscheinen getrennt genau einmal pro OUT-Spalte;
+  Last Request wird relativ angezeigt, während der native ISO-Wert im Tooltip
+  und Snapshot erhalten bleibt.
+- **MoQ:** Zeigt neben den gemeinsamen Richtungswerten die nativen Felder
+  Transport, Version und State; RTT, Jitter oder Loss werden nicht abgeleitet.
 
 MediaMTX kann damit mehr protokollspezifische Rohfelder bereitstellen, als die
 aktuelle Weboberfläche speziell visualisiert.
+
+Nicht-SRT-Gesamtcounter werden nur als kurzlebiger Redis-Messzustand gehalten.
+Der Snapshot enthält reset-sichere Intervallwerte und die daraus über die
+gemeinsame History gebildeten 10-s-/60-s-Summen. Ein Counter-Reset erzeugt
+keinen negativen Wert; eine neue Connection-ID beginnt mit eigener Baseline.
+SRT verwendet unverändert seinen bestehenden Health-State und seine Fenster.
 
 ## Raten, RTT und Forwarding
 

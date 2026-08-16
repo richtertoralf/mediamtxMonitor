@@ -4,8 +4,11 @@ from bin.redis_keys import (
     DEFAULT_STREAM_SNAPSHOT_KEY,
     DEFAULT_SYSTEM_SNAPSHOT_KEY,
     bitrate_state_keys,
+    connection_counter_key,
     connection_lifecycle_key,
     connection_history_key,
+    hls_muxer_metric_key,
+    path_metric_key,
     publisher_connection_key,
     publisher_srt_health_key,
     reader_connection_key,
@@ -75,6 +78,23 @@ class ConnectionStateKeyTests(unittest.TestCase):
         self.assertEqual(
             connection_lifecycle_key("camera/main", "reader", "rtmpConn"),
             "lifecycle:reader:camera/main:rtmpConn",
+        )
+
+    def test_shared_counter_path_and_muxer_identities_are_central(self):
+        reader = reader_connection_key("camera/main", "rtspSession", "reader:1")
+        self.assertEqual(
+            connection_counter_key(reader),
+            "rd:camera/main:rtspSession:reader:1:counters",
+        )
+        self.assertEqual(path_metric_key("camera/main"), "path:camera/main")
+        self.assertEqual(hls_muxer_metric_key("camera/main"), "hls-muxer:camera/main")
+        self.assertEqual(
+            path_metric_key("camera/main", "rtspSession:source:1"),
+            "path:camera/main:rtspSession:source:1",
+        )
+        self.assertEqual(
+            hls_muxer_metric_key("camera/main", "2026-08-16T00:00:00Z"),
+            "hls-muxer:camera/main:2026-08-16T00:00:00Z",
         )
 
 

@@ -24,6 +24,9 @@ _SRT_EVENT_FIELDS = (
 
 _FRAME_DISCARD_FIELD = "frame_discard_delta"
 
+_PROTOCOL_COUNTERS_FIELD = "protocol_counter_deltas"
+_JITTER_FIELD = "jitter_ms"
+
 _WINDOW_SECONDS = (10, 60)
 
 
@@ -54,6 +57,16 @@ def build_history_sample(
 
     if connection.get(_FRAME_DISCARD_FIELD) is not None:
         sample[_FRAME_DISCARD_FIELD] = connection[_FRAME_DISCARD_FIELD]
+
+    protocol_metrics = connection.get("protocol_metrics", {}) or {}
+    gauges = protocol_metrics.get("gauges", {}) or {}
+    if gauges.get(_JITTER_FIELD) is not None:
+        sample[_JITTER_FIELD] = gauges[_JITTER_FIELD]
+    deltas = dict(protocol_metrics.get("counter_deltas", {}) or {})
+    if connection.get(_FRAME_DISCARD_FIELD) is not None:
+        deltas.pop("frame_discard", None)
+    if deltas:
+        sample[_PROTOCOL_COUNTERS_FIELD] = dict(deltas)
 
     return sample
 
@@ -151,6 +164,47 @@ def summarize_history(
             frame_discard[f"{seconds}s"] = int(sum(values))
     if frame_discard:
         summary["frame_discard"] = frame_discard
+
+    jitter = {}
+    protocol_counters = {}
+    for seconds in _WINDOW_SECONDS:
+        window_name = f"{seconds}s"
+        window = [
+            sample for sample in samples
+            if isinstance(sample.get("timestamp"), (int, float))
+            and sample["timestamp"] > timestamp - seconds
+            and sample["timestamp"] <= timestamp
+        ]
+        jitter_values = _numeric_values(window, _JITTER_FIELD)
+        if jitter_values:
+            p50 = round(_percentile(jitter_values, 0.50), 2)
+            p95 = round(_percentile(jitter_values, 0.95), 2)
+            jitter[window_name] = {
+                "sample_count": len(jitter_values),
+                "current_ms": round(jitter_values[-1], 2),
+                "p50_ms": p50,
+                "p95_ms": p95,
+                "variation_ms": round(p95 - p50, 2),
+            }
+        names = {
+            name
+            for sample in window
+            for name in (sample.get(_PROTOCOL_COUNTERS_FIELD, {}) or {})
+        }
+        values_by_name = {}
+        for name in names:
+            values = _numeric_values(
+                [sample.get(_PROTOCOL_COUNTERS_FIELD, {}) or {} for sample in window],
+                name,
+            )
+            if values:
+                values_by_name[name] = int(sum(values))
+        if values_by_name:
+            protocol_counters[window_name] = values_by_name
+    if jitter:
+        summary["jitter"] = jitter
+    if protocol_counters:
+        summary["protocol_counters"] = protocol_counters
     return summary
 
 
@@ -168,5 +222,47 @@ def rate_history(
         points.append({
             "timestamp": float(timestamp),
             "mbps": round(values[0], 2) if values else None,
+        })
+    return points
+
+
+def average_rate(
+    samples: list[Mapping[str, Any]],
+    direction: str,
+    timestamp: float,
+    seconds: int,
+    *,
+    minimum_samples: int = 2,
+) -> dict[str, Any] | None:
+    """Return an arithmetic rate mean from one existing time window."""
+    field = "rx_mbps" if direction == "publisher" else "tx_mbps"
+    window = [
+        sample
+        for sample in samples
+        if isinstance(sample.get("timestamp"), (int, float))
+        and not isinstance(sample.get("timestamp"), bool)
+        and sample["timestamp"] > timestamp - seconds
+        and sample["timestamp"] <= timestamp
+    ]
+    values = _numeric_values(window, field)
+    if len(values) < minimum_samples:
+        return None
+    return {
+        "average_mbps": round(sum(values) / len(values), 2),
+        "sample_count": len(values),
+    }
+
+
+def jitter_history(samples: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Return available native jitter gauges for a compact 60-second trend."""
+    points = []
+    for sample in samples:
+        timestamp = sample.get("timestamp")
+        if not isinstance(timestamp, (int, float)) or isinstance(timestamp, bool):
+            continue
+        values = _numeric_values([sample], _JITTER_FIELD)
+        points.append({
+            "timestamp": float(timestamp),
+            "ms": round(values[0], 2) if values else None,
         })
     return points

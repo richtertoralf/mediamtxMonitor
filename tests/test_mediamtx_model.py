@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bin"))
 
 from mediamtx_model import (  # noqa: E402
     DETAIL_ENDPOINTS,
+    HLS_MUXER_ENDPOINT,
     OPTIONAL_SECURE_ENDPOINTS,
     build_media_model,
     get_details_by_type,
@@ -30,6 +31,9 @@ class VersionTests(unittest.TestCase):
 
 
 class ModelTests(unittest.TestCase):
+    def test_hls_muxer_endpoint_is_explicitly_named(self):
+        self.assertEqual(HLS_MUXER_ENDPOINT, "/v3/hlsmuxers/list")
+
     def test_all_required_protocol_endpoints_are_present(self):
         self.assertEqual(DETAIL_ENDPOINTS, {
             "srtConn": "/v3/srtconns/list",

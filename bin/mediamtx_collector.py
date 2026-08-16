@@ -60,10 +60,13 @@ except ImportError:  # Unit tests load product modules without runtime dependenc
 
 try:
     from .bitrate import calc_bitrate
+    from .counter_metrics import counter_delta, counter_deltas
     from .connection_history import (
         HISTORY_RETENTION_SECONDS,
         HISTORY_TTL_SECONDS,
+        average_rate,
         build_history_sample,
+        jitter_history,
         rate_history,
         summarize_history,
     )
@@ -74,6 +77,7 @@ try:
     from .mediamtx_client import MediaMTXClient, MediaMTXError, MediaMTXHTTPError
     from .mediamtx_model import (
         DETAIL_ENDPOINTS,
+        HLS_MUXER_ENDPOINT,
         MINIMUM_MEDIAMTX_VERSION,
         OPTIONAL_SECURE_ENDPOINTS,
         index_details,
@@ -85,8 +89,11 @@ try:
         resolve_monitoring_config,
     )
     from .redis_keys import (
+        connection_counter_key,
         connection_lifecycle_key,
         connection_history_key,
+        hls_muxer_metric_key,
+        path_metric_key,
         publisher_connection_key,
         publisher_srt_health_key,
         reader_connection_key,
@@ -95,15 +102,23 @@ try:
         stream_snapshot_freshness_key,
     )
     from .redis_store import RedisStore
-    from .rtmp_metrics import frame_discard_delta
+    from .protocol_metrics import (
+        RTMP_CONNECTION_TYPES,
+        build_common_metrics,
+        build_protocol_metrics,
+        counter_fields,
+    )
     from .srt_health import build_srt_health
     from .stream_normalizer import connection_identity, normalize_stream
 except ImportError:
     from bitrate import calc_bitrate
+    from counter_metrics import counter_delta, counter_deltas
     from connection_history import (
         HISTORY_RETENTION_SECONDS,
         HISTORY_TTL_SECONDS,
+        average_rate,
         build_history_sample,
+        jitter_history,
         rate_history,
         summarize_history,
     )
@@ -111,6 +126,7 @@ except ImportError:
     from mediamtx_client import MediaMTXClient, MediaMTXError, MediaMTXHTTPError
     from mediamtx_model import (
         DETAIL_ENDPOINTS,
+        HLS_MUXER_ENDPOINT,
         MINIMUM_MEDIAMTX_VERSION,
         OPTIONAL_SECURE_ENDPOINTS,
         index_details,
@@ -122,8 +138,11 @@ except ImportError:
         resolve_monitoring_config,
     )
     from redis_keys import (
+        connection_counter_key,
         connection_lifecycle_key,
         connection_history_key,
+        hls_muxer_metric_key,
+        path_metric_key,
         publisher_connection_key,
         publisher_srt_health_key,
         reader_connection_key,
@@ -132,7 +151,12 @@ except ImportError:
         stream_snapshot_freshness_key,
     )
     from redis_store import RedisStore
-    from rtmp_metrics import frame_discard_delta
+    from protocol_metrics import (
+        RTMP_CONNECTION_TYPES,
+        build_common_metrics,
+        build_protocol_metrics,
+        counter_fields,
+    )
     from srt_health import build_srt_health
     from stream_normalizer import connection_identity, normalize_stream
 
@@ -178,9 +202,6 @@ class PollCache:
 
 
 poll_cache = PollCache()
-
-RTMP_CONNECTION_TYPES = frozenset({"rtmpConn", "rtmpsConn"})
-
 
 def reset_poll_cache() -> None:
     """Reset slow-path state, primarily for runtime reconfiguration and tests."""
@@ -303,6 +324,8 @@ def _update_connection_history(
     direction: str,
     timestamp: float,
     include_rate_history: bool = False,
+    include_jitter_history: bool = False,
+    rate_average_seconds: Optional[int] = None,
 ) -> None:
     """Persist optional live history without breaking the current snapshot."""
     sample = build_history_sample(
@@ -328,8 +351,67 @@ def _update_connection_history(
             connection["window_metrics"] = summary
         if include_rate_history:
             connection["rate_history"] = rate_history(samples, direction)
+        if include_jitter_history:
+            connection["jitter_history"] = jitter_history(samples)
+        if rate_average_seconds is not None:
+            average = average_rate(
+                samples,
+                direction,
+                timestamp,
+                rate_average_seconds,
+            )
+            if average is not None:
+                connection.setdefault("rate_metrics", {})[
+                    f"{rate_average_seconds}s"
+                ] = average
     except (RedisError, ConnectionError, TimeoutError, TypeError, ValueError) as exc:
         logging.warning("Kurzzeithistorie konnte nicht geschrieben werden: %s", exc)
+
+
+def _enrich_protocol_metrics(
+    connection: Dict[str, Any],
+    *,
+    connection_type: Optional[str],
+    details: Dict[str, Any],
+    direction: str,
+    connection_key: str,
+) -> None:
+    """Attach normalized non-SRT metrics from connection-local API fields."""
+    if connection_type == "srtConn":
+        return
+    fields = counter_fields(connection_type, direction)
+    if connection_type in RTMP_CONNECTION_TYPES and direction == "reader":
+        discard = counter_delta(
+            r,
+            key=rtmp_frame_discard_key(connection_key),
+            value=details.get("outboundFramesDiscarded"),
+            ttl=BITRATE_TTL,
+        )
+        deltas = {} if discard is None else {"frame_discard": discard}
+        if discard is not None:
+            connection["frame_discard_delta"] = discard
+    else:
+        deltas = counter_deltas(
+            r,
+            base_key=connection_counter_key(connection_key),
+            details=details,
+            fields=fields,
+            ttl=BITRATE_TTL,
+        )
+    metrics = build_protocol_metrics(
+        connection_type,
+        details,
+        direction,
+        deltas,
+    )
+    if metrics:
+        connection["protocol_metrics"] = metrics
+    connection["common"] = build_common_metrics(
+        connection_type,
+        details,
+        direction,
+        connection.get("bitrate_mbps"),
+    )
 
 
 def _observe_lifecycle(
@@ -517,6 +599,13 @@ def collect_and_store() -> Dict[str, float]:
         for obj_type in DETAIL_ENDPOINTS
         if obj_type in active_types
     })
+    hls_muxers = {}
+    if "hlsSession" in active_types:
+        hls_muxers = {
+            str(item.get("path")): item
+            for item in cycle_fetch(HLS_MUXER_ENDPOINT).get("items", [])
+            if isinstance(item, dict) and item.get("path") is not None
+        }
 
     if now >= poll_cache.next_forward_refresh:
         poll_cache.forward_destinations = {
@@ -545,6 +634,62 @@ def collect_and_store() -> Dict[str, float]:
         src_details = source["details"]
         normalized_readers = entry["readers"]
         entry["readers"] = []
+
+        path_state_key = path_metric_key(
+            name,
+            f"{source.get('type')}:{source.get('id')}"
+            if source.get("type") and source.get("id") else None,
+        )
+
+        path_delta = counter_delta(
+            r,
+            key=f"{path_state_key}:inboundFramesInError",
+            value=path.get("inboundFramesInError"),
+            ttl=BITRATE_TTL,
+        )
+        path_metrics: Dict[str, Any] = {"scope": "path"}
+        if path_delta is not None:
+            path_metrics["protocol_metrics"] = {
+                "family": "path",
+                "counter_deltas": {"frame_error": path_delta},
+            }
+        _update_connection_history(
+            path_metrics,
+            history_key=connection_history_key(path_state_key),
+            direction="publisher",
+            timestamp=now,
+        )
+        if path_metrics.get("window_metrics"):
+            entry["path_metrics"] = path_metrics
+
+        hls_muxer = hls_muxers.get(name)
+        if hls_muxer:
+            muxer_state_key = hls_muxer_metric_key(name, hls_muxer.get("created"))
+            mux_delta = counter_delta(
+                r,
+                key=f"{muxer_state_key}:outboundFramesDiscarded",
+                value=hls_muxer.get("outboundFramesDiscarded"),
+                ttl=BITRATE_TTL,
+            )
+            mux_entry: Dict[str, Any] = {
+                "scope": "hls_muxer",
+                "path": name,
+                "created": hls_muxer.get("created"),
+                "lastRequest": hls_muxer.get("lastRequest"),
+                "outboundBytes": hls_muxer.get("outboundBytes"),
+            }
+            if mux_delta is not None:
+                mux_entry["protocol_metrics"] = {
+                    "family": "hls",
+                    "counter_deltas": {"mux_discard": mux_delta},
+                }
+            _update_connection_history(
+                mux_entry,
+                history_key=connection_history_key(muxer_state_key),
+                direction="reader",
+                timestamp=now,
+            )
+            entry["hls_muxer"] = mux_entry
 
         # ---------------------------
         # Publisher-Bitrate berechnen
@@ -606,6 +751,14 @@ def collect_and_store() -> Dict[str, float]:
                 ttl=BITRATE_TTL,
                 transport_rtt_ms=entry["source"].get("transport_rtt_ms"),
             )
+        else:
+            _enrich_protocol_metrics(
+                entry["source"],
+                connection_type=src_type,
+                details=src_details,
+                direction="publisher",
+                connection_key=pub_key,
+            )
 
         if src_type:
             history_started = time.perf_counter()
@@ -615,6 +768,9 @@ def collect_and_store() -> Dict[str, float]:
                 direction="publisher",
                 timestamp=now,
                 include_rate_history=src_type in RTMP_CONNECTION_TYPES,
+                include_jitter_history=src_type in {
+                    "rtspSession", "rtspsSession", "webRTCSession",
+                },
             )
             metrics["history_duration_ms"] += (
                 time.perf_counter() - history_started
@@ -688,15 +844,14 @@ def collect_and_store() -> Dict[str, float]:
                     ttl=BITRATE_TTL,
                     transport_rtt_ms=reader_entry.get("transport_rtt_ms"),
                 )
-            elif rtype in RTMP_CONNECTION_TYPES:
-                discard_delta = frame_discard_delta(
-                    r,
-                    key=rtmp_frame_discard_key(rd_key),
-                    value=rd_details.get("outboundFramesDiscarded"),
-                    ttl=BITRATE_TTL,
+            else:
+                _enrich_protocol_metrics(
+                    reader_entry,
+                    connection_type=rtype,
+                    details=rd_details,
+                    direction="reader",
+                    connection_key=rd_key,
                 )
-                if discard_delta is not None:
-                    reader_entry["frame_discard_delta"] = discard_delta
             history_started = time.perf_counter()
             _update_connection_history(
                 reader_entry,
@@ -704,6 +859,7 @@ def collect_and_store() -> Dict[str, float]:
                 direction="reader",
                 timestamp=now,
                 include_rate_history=rtype in RTMP_CONNECTION_TYPES,
+                rate_average_seconds=10 if rtype == "hlsSession" else None,
             )
             metrics["history_duration_ms"] += (
                 time.perf_counter() - history_started

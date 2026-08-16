@@ -242,6 +242,11 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
                         "remoteAddr": "192.0.2.20:1935",
                     },
                     "bitrate_mbps": None,
+                    "common": {
+                        "protocol": "rtmp",
+                        "direction": "IN",
+                        "remoteAddr": "192.0.2.20:1935",
+                    },
                     "rate_history": [{"timestamp": mock.ANY, "mbps": None}],
                     "connection_stability": {
                         "changes_60s": 0,
@@ -263,6 +268,11 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
                         "bitrate_mbps": None,
                         "details": {
                             "id": "rtmp-reader",
+                            "remoteAddr": "192.0.2.21:1935",
+                        },
+                        "common": {
+                            "protocol": "rtmp",
+                            "direction": "OUT",
                             "remoteAddr": "192.0.2.21:1935",
                         },
                         "rate_history": [{"timestamp": mock.ANY, "mbps": None}],

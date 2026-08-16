@@ -15,6 +15,9 @@ _BITRATE_PREV_TS = "prev_ts"
 _BITRATE_EWMA_MBPS = "ewma_mbps"
 _RTMP_FRAME_DISCARD = "rtmp_frame_discard"
 _CONNECTION_LIFECYCLE_PREFIX = "lifecycle"
+_COUNTER_STATE_SUFFIX = "counters"
+_PATH_PREFIX = "path"
+_HLS_MUXER_PREFIX = "hls-muxer"
 
 
 def publisher_connection_key(
@@ -74,6 +77,23 @@ def srt_counter_key(srt_health_key: str, counter: str) -> str:
 def rtmp_frame_discard_key(reader_key: str) -> str:
     """Build the cumulative RTMP reader frame-discard state key."""
     return f"{reader_key}:{_RTMP_FRAME_DISCARD}"
+
+
+def connection_counter_key(connection_key: str) -> str:
+    """Build the shared non-SRT cumulative-counter state base key."""
+    return f"{connection_key}:{_COUNTER_STATE_SUFFIX}"
+
+
+def path_metric_key(path: str, source_identity: str | None = None) -> str:
+    """Build Path metric state, optionally scoped to its current source."""
+    base = f"{_PATH_PREFIX}:{path}"
+    return f"{base}:{source_identity}" if source_identity else base
+
+
+def hls_muxer_metric_key(path: str, created: str | None = None) -> str:
+    """Build one path-scoped HLS muxer generation identity."""
+    base = f"{_HLS_MUXER_PREFIX}:{path}"
+    return f"{base}:{created}" if created else base
 
 
 def connection_lifecycle_key(path: str, role: str, connection_type: str) -> str:

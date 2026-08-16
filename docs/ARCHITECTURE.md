@@ -279,6 +279,37 @@ Suffixe, Rollen, TTL-Verwendung und Node-Zuordnung dürfen nicht frei über
 Fachmodule verteilt werden. Zustands-Keys für Publisher und Reader bleiben
 getrennt.
 
+Nicht-SRT-Verbindungen verwenden für kumulative MediaMTX-Zähler den
+verbindungsbezogenen Zustandszweig
+`{pub|rd}:<path>:<type>:<connection-id>:counters:<native-field>`. Path-Zähler
+verwenden `path:<path>:<source-identity>:<native-field>`, HLS-Muxer-Zähler
+`hls-muxer:<path>:<created>:<native-field>`. Source-ID beziehungsweise native
+Muxer-Erstellzeit verhindern, dass History auf eine neue Generation übertragen
+wird. Alle Ebenen laufen mit der TTL des
+kurzlebigen Messzustands aus. Ihre Intervallwerte werden in die bestehende
+Kurzzeithistorie unter `history:<identity>` geschrieben; 10-s- und 60-s-Werte
+entstehen aus dieser einen History. Die bestehenden SRT-Health-Keys und ihre
+Semantik bleiben unverändert.
+
+Der normalisierte Nicht-SRT-Vertrag trennt `common` (Richtung, Protokoll,
+Adresse, Erstellzeit, Zustand, Bytes und Rate soweit vorhanden) von
+`protocol_metrics` (native Gauges, Metadaten und reset-sichere
+Intervallcounter). `window_metrics.protocol_counters` enthält die aus der
+History summierten Ereignisse. Jitter bleibt ein Gauge und besitzt eine kurze
+`jitter_history`; er wird nie als Counter behandelt.
+
+Für burstende Protokolle kann derselbe Connection-History-Bestand optional
+eine klar benannte Ratenableitung liefern. HLS-Sessions verwenden daraus einen
+arithmetischen 10-s-Mittelwert über mindestens zwei vorhandene `tx_mbps`-
+Samples. Der aktuelle Pollwert und die nativen Byte-Zähler bleiben im Snapshot
+unverändert; es entstehen weder zusätzliche Redis-Keys noch eine parallele
+History.
+
+Path-Fehler stehen unter `path_metrics` mit `scope: path`. HLS-Muxerdaten
+stehen getrennt unter `hls_muxer` mit `scope: hls_muxer` und werden per
+Pathname zugeordnet. Weder Path- noch Muxerwerte werden einer einzelnen
+Connection zugeschrieben.
+
 ### System Metrics
 
 Systemmetriken erfassen Hostdaten über eine klar begrenzte Quelle, normalisieren

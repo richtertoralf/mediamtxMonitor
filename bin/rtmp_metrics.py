@@ -6,8 +6,12 @@ classifying connection health.
 
 from __future__ import annotations
 
-import logging
 from typing import Any, Optional
+
+try:
+    from .counter_metrics import counter_delta
+except ImportError:
+    from counter_metrics import counter_delta
 
 
 def frame_discard_delta(
@@ -18,20 +22,9 @@ def frame_discard_delta(
     ttl: int,
 ) -> Optional[int]:
     """Return a reset-safe delta of a cumulative reader discard counter."""
-    if value is None:
-        return None
-
-    try:
-        current = int(value)
-        previous = redis_client.get(key)
-        redis_client.set(key, current, ex=ttl)
-        if previous is None:
-            return None
-        delta = current - int(previous)
-        return delta if delta >= 0 else None
-    except (TypeError, ValueError) as exc:
-        logging.debug("Invalid RTMP frame-discard counter %s=%r: %s", key, value, exc)
-        return None
-    except Exception as exc:
-        logging.debug("RTMP frame-discard state failed for %s: %s", key, exc)
-        return None
+    return counter_delta(
+        redis_client,
+        key=key,
+        value=value,
+        ttl=ttl,
+    )

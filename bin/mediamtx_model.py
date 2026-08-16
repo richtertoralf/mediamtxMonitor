@@ -21,6 +21,8 @@ DETAIL_ENDPOINTS = {
     "moqSession": "/v3/moqsessions/list",
 }
 
+HLS_MUXER_ENDPOINT = "/v3/hlsmuxers/list"
+
 # MediaMTX does not register these routes when the corresponding TLS listener
 # is disabled. In that case, a 404 means an empty protocol list.
 OPTIONAL_SECURE_ENDPOINTS = {

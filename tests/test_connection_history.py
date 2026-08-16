@@ -1,6 +1,12 @@
 import unittest
 
-from bin.connection_history import build_history_sample, rate_history, summarize_history
+from bin.connection_history import (
+    average_rate,
+    build_history_sample,
+    jitter_history,
+    rate_history,
+    summarize_history,
+)
 
 
 class HistorySampleTests(unittest.TestCase):
@@ -54,6 +60,19 @@ class HistorySampleTests(unittest.TestCase):
             "timestamp": 202.0,
             "tx_mbps": 4.5,
             "frame_discard_delta": 3,
+        })
+
+    def test_protocol_gauges_and_counter_deltas_share_the_compact_history(self):
+        sample = build_history_sample({
+            "protocol_metrics": {
+                "gauges": {"jitter_ms": 4.5},
+                "counter_deltas": {"loss": 2, "rtp_error": 0},
+            },
+        }, "publisher", 203.0)
+        self.assertEqual(sample, {
+            "timestamp": 203.0,
+            "jitter_ms": 4.5,
+            "protocol_counter_deltas": {"loss": 2, "rtp_error": 0},
         })
 
 
@@ -214,8 +233,59 @@ class HistorySummaryTests(unittest.TestCase):
         self.assertEqual(summary["frame_discard"], {"10s": 8, "60s": 18})
         self.assertNotIn("events", summary)
 
+    def test_protocol_windows_and_jitter_statistics_use_real_time(self):
+        samples = [
+            {
+                "timestamp": 45.0,
+                "jitter_ms": 1.0,
+                "protocol_counter_deltas": {"loss": 5},
+            },
+            {
+                "timestamp": 55.0,
+                "jitter_ms": 3.0,
+                "protocol_counter_deltas": {"loss": 2, "rtp_error": 1},
+            },
+            {
+                "timestamp": 60.0,
+                "jitter_ms": 5.0,
+                "protocol_counter_deltas": {"loss": 0},
+            },
+        ]
+        summary = summarize_history(samples, 60.0)
+        self.assertEqual(summary["protocol_counters"]["10s"], {
+            "loss": 2,
+            "rtp_error": 1,
+        })
+        self.assertEqual(summary["protocol_counters"]["60s"]["loss"], 7)
+        self.assertEqual(summary["jitter"]["10s"]["current_ms"], 5.0)
+        self.assertEqual(jitter_history(samples)[-1], {
+            "timestamp": 60.0, "ms": 5.0,
+        })
+
 
 class RateHistoryTests(unittest.TestCase):
+    def test_ten_second_average_uses_available_burst_samples_without_mutation(self):
+        samples = [
+            {"timestamp": 91.0, "tx_mbps": 0.2},
+            {"timestamp": 94.0, "tx_mbps": 4.8},
+            {"timestamp": 97.0, "tx_mbps": 0.1},
+            {"timestamp": 100.0, "tx_mbps": 4.4},
+        ]
+        original = [dict(sample) for sample in samples]
+        self.assertEqual(
+            average_rate(samples, "reader", 100.0, 10),
+            {"average_mbps": 2.38, "sample_count": 4},
+        )
+        self.assertEqual(samples, original)
+
+    def test_average_requires_two_numeric_samples(self):
+        self.assertIsNone(average_rate(
+            [{"timestamp": 100.0, "tx_mbps": 4.2}],
+            "reader",
+            100.0,
+            10,
+        ))
+
     def test_directional_rates_keep_missing_samples_as_gaps(self):
         samples = [
             {"timestamp": 1.0},
