@@ -41,6 +41,8 @@ REDIS_HOST = redis_cfg["host"]
 REDIS_PORT = redis_cfg["port"]
 REDIS_KEY = redis_cfg["key"]
 SYSTEM_REDIS_KEY = config["system_monitor"]["redis_key"]
+VERSION_PATH = Path(__file__).resolve().parents[1] / "VERSION"
+monitor_version = None
 r = None
 snapshot_store = None
 
@@ -54,10 +56,18 @@ def load_runtime_config(path: Path | str = DEFAULT_CONFIG_PATH) -> dict:
         return resolve_monitoring_config({})
 
 
+def load_monitor_version(path: Path = VERSION_PATH) -> str | None:
+    """Return the version file content without surrounding whitespace."""
+    try:
+        return path.read_text(encoding="utf-8").strip() or None
+    except OSError:
+        return None
+
+
 def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
     """Configure logging and initialize the API snapshot store."""
     global config, redis_cfg, REDIS_HOST, REDIS_PORT, REDIS_KEY
-    global SYSTEM_REDIS_KEY, r, snapshot_store
+    global SYSTEM_REDIS_KEY, monitor_version, r, snapshot_store
 
     config = load_runtime_config(config_path)
     redis_cfg = config["redis"]
@@ -72,6 +82,9 @@ def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
         level=log_level,
         format="%(asctime)s [%(levelname)s] %(message)s",
     )
+    monitor_version = load_monitor_version()
+    if monitor_version is None:
+        logging.warning("Monitor version file could not be read: %s", VERSION_PATH)
 
     try:
         r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
@@ -141,6 +154,7 @@ def get_streams():
         "collected_at": collected_at,
         "snapshot_refresh_ms": frontend_cfg["snapshot_refresh_ms"],
         "streamlist_refresh_ms": frontend_cfg["streamlist_refresh_ms"],
+        "monitor_version": monitor_version,
         "systeminfo": systeminfo
     })
 

@@ -1,5 +1,7 @@
 import json
+from pathlib import Path
 import sys
+import tempfile
 import types
 import unittest
 from unittest import mock
@@ -85,6 +87,47 @@ class ApiFreshnessTests(unittest.TestCase):
         payload = json.loads(response.body)
 
         self.assertEqual(payload["systeminfo"], systeminfo)
+
+    def test_monitor_version_is_read_without_trailing_newline(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            version_file = Path(temp_dir) / "VERSION"
+            version_file.write_text("0.8.0\n", encoding="utf-8")
+
+            self.assertEqual(self.api.load_monitor_version(version_file), "0.8.0")
+
+    def test_missing_or_unreadable_version_does_not_fail(self):
+        missing_file = Path("/missing/monitor/VERSION")
+        self.assertIsNone(self.api.load_monitor_version(missing_file))
+        with mock.patch.object(Path, "read_text", side_effect=PermissionError):
+            self.assertIsNone(self.api.load_monitor_version(Path("VERSION")))
+
+    def test_api_exposes_monitor_version(self):
+        values = {
+            self.api.REDIS_KEY: json.dumps([]),
+            self.api.SYSTEM_REDIS_KEY: json.dumps({}),
+        }
+        self.api.snapshot_store = RedisStore(FakeRedis(values))
+
+        with mock.patch.object(self.api, "monitor_version", "0.8.0"):
+            response = self.api.get_streams()
+
+        payload = json.loads(response.body)
+        self.assertEqual(payload["monitor_version"], "0.8.0")
+
+    def test_api_remains_available_without_monitor_version(self):
+        streams = [{"name": "path-x", "readers": []}]
+        values = {
+            self.api.REDIS_KEY: json.dumps(streams),
+            self.api.SYSTEM_REDIS_KEY: json.dumps({}),
+        }
+        self.api.snapshot_store = RedisStore(FakeRedis(values))
+
+        with mock.patch.object(self.api, "monitor_version", None):
+            response = self.api.get_streams()
+
+        payload = json.loads(response.body)
+        self.assertIsNone(payload["monitor_version"])
+        self.assertEqual(payload["streams"], streams)
 
 
 if __name__ == "__main__":

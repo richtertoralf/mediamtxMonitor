@@ -6,7 +6,8 @@
  *   streams: [...],                 // Liste der aktuellen Streams
  *   collected_at: Number | null,    // Zeitpunkt des letzten Collector-Snapshots
  *   snapshot_refresh_ms: Number,   // Intervall für Snapshot-Reload
- *   streamlist_refresh_ms: Number  // Intervall für Streamliste
+ *   streamlist_refresh_ms: Number, // Intervall für Streamliste
+ *   monitor_version: String | null // Version des MediaMTX Monitor
  * }
  * 
  * @returns {Promise<Object>} - Datenobjekt oder leeres Fallback-Objekt bei Fehlern

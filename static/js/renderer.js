@@ -35,6 +35,16 @@ function formatCount(value) {
   return number == null ? null : `${number}`;
 }
 
+/** Render the monitor version in the page heading and browser tab. */
+export function renderMonitorTitle(titleElement, monitorVersion) {
+  const version = typeof monitorVersion === "string" ? monitorVersion.trim() : "";
+  const title = version
+    ? `MediaMTX Stream Monitor · v${version} - richterprojects.com`
+    : "MediaMTX Stream Monitor - richterprojects.com";
+  if (titleElement) titleElement.textContent = title;
+  document.title = title;
+}
+
 /** Format the age of the last successful collector snapshot. */
 export function formatDataAge(collectedAt, nowMs = Date.now()) {
   const timestamp = optionalNumber(collectedAt);

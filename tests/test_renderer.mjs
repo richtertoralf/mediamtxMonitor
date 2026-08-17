@@ -15,6 +15,7 @@ const {
   formatDataAge,
   formatRelativeTime,
   recordSnapshotTelemetry,
+  renderMonitorTitle,
   renderReader,
   renderSrtHealth,
   renderStreamCard,
@@ -25,6 +26,17 @@ const {
   telemetryTrendY,
   telemetryVariationY,
 } = await import(`data:text/javascript;base64,${Buffer.from(rendererSource).toString("base64")}`);
+
+const originalDocument = globalThis.document;
+const pageTitle = {textContent: ""};
+globalThis.document = {title: ""};
+renderMonitorTitle(pageTitle, "0.8.0");
+assert.equal(pageTitle.textContent, "MediaMTX Stream Monitor · v0.8.0 - richterprojects.com");
+assert.equal(document.title, pageTitle.textContent);
+renderMonitorTitle(pageTitle, undefined);
+assert.equal(pageTitle.textContent, "MediaMTX Stream Monitor - richterprojects.com");
+assert.equal(document.title, pageTitle.textContent);
+globalThis.document = originalDocument;
 
 assert.doesNotMatch(rendererSource, /protocol-marker|marker-srt|marker-rtmp/);
 assert.doesNotMatch(rendererStyles, /protocol-marker|marker-srt|marker-rtmp/);

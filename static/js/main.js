@@ -23,6 +23,7 @@ import {
   dataAgeStatusClass,
   formatDataAge,
   recordSnapshotTelemetry,
+  renderMonitorTitle,
   renderStreamCard,
   updateStreamCard,
 } from "./renderer.js";
@@ -30,6 +31,7 @@ import { renderSystemInfo } from "./systeminfo.js";
 
 const container = document.getElementById("streams");
 const noStreams = document.getElementById("no-streams");
+const pageTitle = document.getElementById("page-title");
 const streamCards = new Map(); // Name → DOM-Element
 
 let refreshIntervalMs = 1000; // Defaultwert, wird gleich überschrieben
@@ -37,6 +39,8 @@ let refreshTimer = null;
 
 async function updateUI() {
   const result = await fetchStreamsFromApi();
+
+  renderMonitorTitle(pageTitle, result.monitor_version);
 
   const ageText = formatDataAge(result.collected_at);
   renderSystemInfo(
