@@ -1,26 +1,11 @@
-# /opt/mediamtx-monitoring-backend/bin/bitrate.py
 """
-bitrate.py – Einfache, generische Bitratenberechnung (Publisher & Reader)
+MediaMTX Monitor - stateful bitrate calculation.
 
-Dieses Modul berechnet eine Bitrate (in Mbit/s) aus kumulierten Byte-Zählern
-(z. B. inboundBytes/outboundBytes) mittels Delta über die Zeit (ΔBytes / Δt).
-Der Zustand (letzter Zählerstand und Zeitstempel) wird in Redis gehalten.
+Converts cumulative byte counters into reset-safe Mbit/s values using previous
+counter state. Optional EWMA smoothing preserves a stable time response across
+different sampling intervals.
 
-Einsatz:
-- Einheitliche Berechnung für eingehende Verbindungen (Publisher/Source)
-  und ausgehende Verbindungen (Reader).
-- API‑Werte (z. B. SRT mbpsSendRate/mbpsReceiveRate) können im Collector
-  bevorzugt werden; dieses Modul liefert nur die Delta‑Berechnung.
-
-Persistenz in Redis:
-- <key>:prev_bytes  → letzter bekannter Byte‑Zähler (int)
-- <key>:prev_ts     → zugehöriger Zeitstempel (float, Sekunden seit Epoch)
-- <key>:ewma_mbps   → optionaler geglätteter Mbit/s‑Wert (float)
-
-Empfehlung:
-- Im Collector den Schlüssel-Namespace unterscheiden:
-  "pub:<stream>:<type>:<connID>" für Publisher
-  "rd:<stream>:<type>:<id>"     für Reader
+Does not select between native protocol rates and calculated fallback rates.
 """
 
 from __future__ import annotations
@@ -46,50 +31,12 @@ def calc_bitrate(
     smooth_reference_seconds: Optional[float] = None,
     ttl: int = 300,
 ) -> Optional[float]:
+    """Return a rounded Mbit/s delta from a cumulative byte counter.
+
+    ``None`` is returned until previous state exists, when the interval is too
+    short, after a counter reset, or when state processing fails. When supplied,
+    ``smooth_reference_seconds`` keeps EWMA behavior stable across poll cadences.
     """
-    Berechnet die Bitrate in Mbit/s aus einem kumulierten Byte-Zähler.
-
-    Das Verfahren nutzt den zuletzt in Redis gespeicherten Zustand (<key>:prev_bytes,
-    <key>:prev_ts). Nach der Berechnung wird der Zustand aktualisiert. Optional kann
-    eine EWMA-Glättung (Exponentially Weighted Moving Average) angewendet werden.
-
-    Parameter
-    ---------
-    r : redis.Redis
-        Offene Redis-Verbindung (decode_responses=True empfohlen).
-    key : str
-        Eindeutiger Schlüssel je Verbindung, z. B. "pub:stream:rtmpConn:abc123".
-    bytes_now : int
-        Aktueller kumulierter Byte-Zähler (z. B. inboundBytes/outboundBytes).
-    now : float | None
-        Aktueller Zeitstempel in Sekunden (time.time()). Wird None übergeben,
-        wird time.time() verwendet (Standard).
-    min_dt : float
-        Minimales Δt in Sekunden. Liegt die Zeitdifferenz darunter, wird None
-        zurückgegeben (Messung zu kurz/instabil).
-    smooth_alpha : float | None
-        Alpha (0..1) für EWMA-Glättung. None deaktiviert die Glättung.
-        Typisch: 0.3..0.7 (z. B. 0.5).
-    smooth_reference_seconds : float | None
-        Referenzintervall für ``smooth_alpha``. Bei abweichendem Messabstand
-        wird Alpha so angepasst, dass die zeitliche Filterwirkung erhalten bleibt.
-    ttl : int
-        Ablaufzeit (Sekunden) für die gespeicherten Redis-Keys, verhindert Altlasten.
-
-    Rückgabewert
-    ------------
-    float | None
-        Bitrate in Mbit/s, auf zwei Nachkommastellen gerundet, oder None, wenn
-        keine valide Berechnung möglich war (zu kleines Δt, Reset, Fehler).
-
-    Hinweise
-    --------
-    - Negative Deltas (Zähler-Reset/Neuverbindung) werden verworfen (None).
-    - Die Funktion ist zustandsbehaftet über Redis (prev_bytes/prev_ts).
-    - API-Bitratenschätzer (z. B. SRT mbps*Rate) sollten im Collector bevorzugt
-      verwendet werden; diese Funktion liefert nur die Delta-Schätzung.
-    """
-    # Eingangsvalidierung
     if key is None or key == "":
         logging.debug("calc_bitrate: leerer Schlüssel")
         return None
@@ -102,11 +49,10 @@ def calc_bitrate(
     try:
         prev_bytes_key, prev_ts_key, ewma_key = bitrate_state_keys(key)
 
-        # Vorzustand lesen
         prev_bytes_str = r.get(prev_bytes_key)
         prev_ts_str = r.get(prev_ts_key)
 
-        # Wenn noch kein Zustand existiert, initialisieren und keine Rate liefern
+        # The first observation establishes a baseline and cannot yield a rate.
         if prev_bytes_str is None or prev_ts_str is None:
             _store_state(r, key, int(bytes_now), now, ttl)
             return None
@@ -115,20 +61,17 @@ def calc_bitrate(
         prev_ts = float(prev_ts_str)
         dt = now - prev_ts
 
-        # Zu kurze Messintervalle vermeiden
         if dt < min_dt:
             return None
 
         delta = int(bytes_now) - prev_bytes
-        # Counter-Reset / Neuverbindung → keine negative Rate melden
+        # A counter reset or connection replacement must not produce a negative rate.
         if delta < 0:
             _store_state(r, key, int(bytes_now), now, ttl)
             return None
 
-        # Bitrate in Mbit/s
         mbps = (delta * 8) / (dt * 1_000_000)
 
-        # Optionale EWMA-Glättung
         if smooth_alpha is not None:
             try:
                 prev_mbps_str = r.get(ewma_key)
@@ -139,37 +82,29 @@ def calc_bitrate(
                         reference = float(smooth_reference_seconds)
                         if reference > 0:
                             alpha = 1.0 - math.pow(1.0 - alpha, dt / reference)
-                    # EWMA: aktueller Wert stärker gewichten je nach alpha
                     mbps = alpha * mbps + (1.0 - alpha) * prev_mbps
-                # Geglätteten Wert speichern
                 r.set(ewma_key, mbps, ex=ttl)
             except Exception as e:
-                # Glättung ist optional – bei Fehlern nur protokollieren
+                # Optional smoothing failures must not discard the raw rate.
                 logging.debug(f"calc_bitrate: EWMA-Fehler für {key}: {e}")
 
-        # Zustand aktualisieren (prev_bytes/prev_ts)
         _store_state(r, key, int(bytes_now), now, ttl)
 
-        # Zwei Nachkommastellen genügen für Anzeige/Logging
         return round(mbps, 2)
 
     except Exception as e:
         logging.debug(f"calc_bitrate: Fehler bei {key}: {e}")
-        # Bei Fehlern Zustand dennoch aktualisieren, damit sich das System fängt
+        # Refresh the baseline so a transient state error does not persist.
         try:
             _store_state(r, key, int(bytes_now), now, ttl)
         except Exception:
-            # Sekundärfehler beim Speichern ignorieren, aber nicht verschlucken
+            # Preserve the original fallback while still exposing the secondary error.
             logging.debug("calc_bitrate: zusätzlicher Fehler beim Speichern des Zustands", exc_info=True)
         return None
 
 
 def reset_state(r, key: str) -> None:
-    """
-    Löscht den gespeicherten Zustand (prev_bytes/prev_ts/ewma_mbps) für einen Schlüssel.
-
-    Nützlich bei manuellen Resets, Tests oder wenn Verbindungen bewusst neu gestartet werden.
-    """
+    """Delete the previous counter, timestamp, and EWMA state for one key."""
     try:
         prev_bytes_key, prev_ts_key, ewma_key = bitrate_state_keys(key)
         r.delete(prev_bytes_key)
@@ -180,9 +115,7 @@ def reset_state(r, key: str) -> None:
 
 
 def _store_state(r, key: str, bytes_now: int, ts: float, ttl: int) -> None:
-    """
-    Interne Hilfsfunktion: speichert prev_bytes/prev_ts atomar (Pipeline) mit TTL.
-    """
+    """Store the counter baseline atomically with its expiration."""
     try:
         prev_bytes_key, prev_ts_key, _ = bitrate_state_keys(key)
         pipe = r.pipeline()

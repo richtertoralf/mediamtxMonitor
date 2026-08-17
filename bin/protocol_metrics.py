@@ -36,6 +36,7 @@ COUNTER_FIELDS: dict[tuple[str, str], dict[str, str]] = {
 
 
 def protocol_family(connection_type: str | None) -> str | None:
+    """Map a native MediaMTX connection type to its protocol family."""
     if connection_type in RTSP_SESSION_TYPES:
         return "rtsp"
     if connection_type in RTMP_CONNECTION_TYPES:
@@ -52,6 +53,7 @@ def protocol_family(connection_type: str | None) -> str | None:
 def counter_fields(
     connection_type: str | None, direction: str
 ) -> Mapping[str, str]:
+    """Return native cumulative counters available for one role and protocol."""
     family = protocol_family(connection_type)
     return COUNTER_FIELDS.get((family or "", direction), {})
 

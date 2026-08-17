@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-system_monitor.py – Systemmonitoring für MediaMTX
+MediaMTX Monitor - local host-system monitoring.
 
-Erfasst CPU, RAM, Swap, Disk, Netzwerk und Temperaturinformationen und speichert:
-- in Redis (Key: mediamtx:system:latest)
-- optional als JSON-Datei (z. B. /tmp/mediamtx_system.json)
+Collects host identity, CPU, memory, disk, filtered network counters and rates,
+and available temperatures, then writes the current system snapshot. Temperature
+selection prefers the CPU package sensor and falls back to another available
+sensor value.
 
-Läuft als eigenständiger Dienst analog zu mediamtx_collector.py.
-Die Konfiguration erfolgt über collector.yaml.
+Does not query the MediaMTX Control API or interpret stream and connection data.
 """
 
 import ipaddress
@@ -62,6 +62,7 @@ def _is_identity_interface(name: str) -> bool:
 
 
 def configure_runtime(raw_config: Dict[str, Any]) -> None:
+    """Apply normalized settings used by the system-monitor process."""
     global config, redis_cfg, REDIS_HOST, REDIS_PORT
     global system_monitor_cfg, REDIS_KEY, JSON_OUTPUT_PATH, INTERVAL_SECONDS
 
@@ -76,6 +77,7 @@ def configure_runtime(raw_config: Dict[str, Any]) -> None:
 
 
 def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
+    """Load configuration and initialize host sensors and snapshot storage."""
     global r, snapshot_store, psutil
 
     import psutil as psutil_module
@@ -96,8 +98,8 @@ def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
         logging.error(f"❌ Verbindung zu Redis fehlgeschlagen: {exc}")
         sys.exit(1)
 
-# 🌡️ Temperatur auslesen
 def get_temperatures():
+    """Return available host temperature sensor records, or an empty mapping."""
     try:
         temps = psutil.sensors_temperatures()
         return {k: [t._asdict() for t in v] for k, v in temps.items()}
@@ -105,12 +107,8 @@ def get_temperatures():
         logging.warning(f"🌡️ Temperaturdaten nicht verfügbar: {e}")
         return {}
 
-# 📶 Netzwerkfilter (nur echte NICs)
 def get_filtered_net_io():
-    """
-    Gibt aufsummierte Netzwerknutzung (bytes_recv, bytes_sent) aller physikalischen NICs zurück.
-    Ignoriert Loopback, Docker, virtuelle Bridges, VPNs etc.
-    """
+    """Sum counters after excluding known loopback and virtual interfaces."""
     interfaces = psutil.net_io_counters(pernic=True)
     filtered = {
         name: stats for name, stats in interfaces.items()
@@ -143,15 +141,14 @@ def get_server_ips() -> list[str]:
                 return addresses
     return addresses
 
-# ⏱️ Zwischenspeicher für Netzwerk-Bitrate
 _last_net_io = {
     "bytes_recv": None,
     "bytes_sent": None,
     "timestamp": None
 }
 
-# 📊 Netzwerkbitrate berechnen
 def calculate_network_bitrate(current_net_io, current_time):
+    """Return host network rates from the previous aggregate counter sample."""
     global _last_net_io
 
     prev_recv = _last_net_io["bytes_recv"]
@@ -193,8 +190,8 @@ def calculate_network_bitrate(current_net_io, current_time):
         "net_mbit_tx": round(net_mbit_tx, 2)
     }
 
-# 📥 Daten sammeln und speichern
 def collect_and_store():
+    """Collect and persist one current host-system snapshot."""
     now = time.time()
     try:
         net_io = get_filtered_net_io()
@@ -227,18 +224,14 @@ def collect_and_store():
     except Exception as e:
         logging.error(f"❌ Fehler beim Erfassen der Systemdaten: {e}")
 
-# 🌡️ Temperatur extrahieren
 def extract_temperature(temp_data):
-    """
-    Extrahiert bevorzugt die Temperatur von 'coretemp' → 'Package id 0'.
-    Falls nicht verfügbar, nimmt den ersten verfügbaren Sensorwert mit 'current'.
-    """
-    # Bevorzugt: Package id 0 bei coretemp
+    """Return the preferred CPU package temperature or first available value."""
+    # The package sensor best represents overall CPU temperature when available.
     for entry in temp_data.get("coretemp", []):
         if entry.get("label") == "Package id 0":
             return round(entry.get("current", 0), 1)
 
-    # Fallback: erster beliebiger Sensorwert mit 'current'
+    # Sensor naming varies by platform, so retain a generic current-value fallback.
     for group in temp_data.values():
         for sensor in group:
             if isinstance(sensor, dict) and "current" in sensor:
@@ -247,8 +240,8 @@ def extract_temperature(temp_data):
     return None
 
 
-# 📤 API-Datenstruktur bereitstellen
 def get_system_info():
+    """Return the stored system snapshot in the existing API response shape."""
     try:
         data = snapshot_store.read_snapshot(REDIS_KEY)
         if data is None:
@@ -275,6 +268,7 @@ def get_system_info():
 
 
 def _run_interval_loop(job: Callable[[], None], interval_seconds: float) -> None:
+    """Run a fixed-cadence job while skipping intervals missed by slow work."""
     next_run = time.monotonic() + interval_seconds
     while True:
         time.sleep(max(0.0, next_run - time.monotonic()))
@@ -291,6 +285,7 @@ def _run_interval_loop(job: Callable[[], None], interval_seconds: float) -> None
 
 
 def main() -> None:
+    """Initialize and run the persistent local system-monitor loop."""
     logging.basicConfig(
         level=logging.DEBUG,
         format="%(asctime)s [%(levelname)s] %(message)s",

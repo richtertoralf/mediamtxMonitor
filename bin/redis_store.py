@@ -1,4 +1,10 @@
-"""JSON snapshot persistence over an existing Redis-compatible client."""
+"""
+MediaMTX Monitor - Redis snapshot and short-history persistence.
+
+Stores current JSON snapshots without expiration and compact connection-history
+samples with time-based retention and TTL. Key construction, metric calculation,
+and MediaMTX interpretation remain outside this module.
+"""
 
 from __future__ import annotations
 
@@ -15,7 +21,7 @@ class SnapshotDecodeError(ValueError):
 
 
 class RedisStore:
-    """Read and write current monitoring snapshots as JSON without TTL."""
+    """Persist current snapshots and short-lived history as JSON in Redis."""
 
     def __init__(self, redis_client: Any) -> None:
         self._redis = redis_client

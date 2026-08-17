@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
-monitoring_api.py – API-Server zur Bereitstellung von MediaMTX-Monitoringdaten
+MediaMTX Monitor - read-only monitoring API.
 
-Stellt eine einfache FastAPI-Schnittstelle zur Anzeige von Streamdaten und 
-eine statische Weboberfläche bereit. 
-Die Konfiguration erfolgt zentral über collector.yaml.
+Serves current stream and host-system snapshots, snapshot freshness, frontend
+refresh settings, and the static dashboard.
+
+Does not poll the MediaMTX Control API, calculate stream metrics, or produce
+monitoring snapshots.
 """
 
 from contextlib import asynccontextmanager
@@ -44,6 +46,7 @@ snapshot_store = None
 
 
 def load_runtime_config(path: Path | str = DEFAULT_CONFIG_PATH) -> dict:
+    """Load normalized runtime settings, falling back to compatible defaults."""
     try:
         return resolve_monitoring_config(load_monitoring_config(path))
     except Exception as exc:
@@ -52,6 +55,7 @@ def load_runtime_config(path: Path | str = DEFAULT_CONFIG_PATH) -> dict:
 
 
 def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
+    """Configure logging and initialize the API snapshot store."""
     global config, redis_cfg, REDIS_HOST, REDIS_PORT, REDIS_KEY
     global SYSTEM_REDIS_KEY, r, snapshot_store
 
@@ -81,19 +85,18 @@ def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    """Initialize runtime dependencies and validate the static directory."""
     initialize_runtime()
     if not static_dir.is_dir():
         raise RuntimeError(f"Directory '{static_dir}' does not exist")
     yield
 
-# 🌐 FastAPI-Instanz erstellen
 app = FastAPI(
     title="MediaMTX Monitoring API",
     version="1.0",
     lifespan=lifespan,
 )
 
-# 📁 Statische Dateien einbinden (Frontend)
 static_dir = Path(config["api_server"]["static_dir"])
 index_file = config["api_server"]["index_file"]
 app.mount(
@@ -104,12 +107,12 @@ app.mount(
 
 @app.get("/")
 def serve_index():
-    """Liefert die HTML-Startseite (Frontend)."""
+    """Return the static dashboard entry page."""
     return FileResponse(static_dir / index_file)
 
 @app.get("/api/streams", response_class=JSONResponse, summary="Streamdaten abrufen")
 def get_streams():
-    """Liefert aktuelle Streamdaten aus Redis, inkl. UI-Refresh-Konfiguration und Systeminfos."""
+    """Return current snapshots, freshness, and frontend refresh settings."""
     try:
         streams = snapshot_store.read_snapshot(REDIS_KEY)
         if streams is None:
@@ -124,7 +127,6 @@ def get_streams():
     except SnapshotDecodeError:
         collected_at = None
 
-    # Systeminfos aus Redis holen
     try:
         systeminfo = snapshot_store.read_snapshot(SYSTEM_REDIS_KEY)
         if systeminfo is None:
@@ -143,9 +145,9 @@ def get_streams():
     })
 
 def main() -> None:
+    """Run the configured monitoring API server."""
     import uvicorn
 
-    # Host und Port aus YAML holen (Fallback optional)
     server_cfg = load_runtime_config()["api_server"]
     host = server_cfg["listen_host"]
     port = server_cfg["listen_port"]

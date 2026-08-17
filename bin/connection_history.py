@@ -2,7 +2,8 @@
 MediaMTX Monitor - short connection history.
 
 Builds compact samples from normalized publisher and reader connections.
-History is live-only and intentionally limited to about one minute.
+History is live-only and intentionally limited to about one minute; it neither
+defines the current snapshot nor infers reconnects or connection lifecycle.
 """
 
 from __future__ import annotations

@@ -1,4 +1,9 @@
-"""Nebenwirkungsfreie Auflösung gemeinsam verwendeter Monitoring-Konfiguration."""
+"""
+MediaMTX Monitor - shared runtime configuration.
+
+Defines compatible defaults and normalizes configuration consumed by the
+collector, API, and system monitor without initializing services or connections.
+"""
 
 from __future__ import annotations
 
@@ -120,7 +125,7 @@ def resolve_bitrate_config(config: Mapping[str, Any]) -> Dict[str, Any]:
 
 
 def resolve_system_monitor_config(config: Mapping[str, Any]) -> Dict[str, Any]:
-    """Löst den ``system_monitor``-Block mit kompatiblen Defaults auf."""
+    """Resolve system-monitor settings with compatible defaults."""
     resolved = _component_config(config, "system_monitor", SYSTEM_MONITOR_DEFAULTS)
     resolved["interval_seconds"] = int(resolved["interval_seconds"])
     return resolved

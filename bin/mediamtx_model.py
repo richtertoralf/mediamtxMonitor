@@ -1,4 +1,11 @@
-"""Pure helpers for the MediaMTX v1.20 monitoring model."""
+"""
+MediaMTX Monitor - MediaMTX v1.20 data model knowledge.
+
+Defines supported versions and Control API endpoints, indexes connection
+details referenced by paths, and builds the compact track and media model.
+
+Does not perform HTTP requests, polling, Redis I/O, or metric calculation.
+"""
 
 from __future__ import annotations
 
@@ -68,6 +75,7 @@ def parse_version(value: Any) -> Optional[Tuple[int, int, int]]:
 
 
 def is_supported_version(value: Any) -> bool:
+    """Return whether a MediaMTX version meets the supported minimum."""
     parsed = parse_version(value)
     return parsed is not None and parsed >= MINIMUM_MEDIAMTX_VERSION
 

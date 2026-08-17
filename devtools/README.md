@@ -13,6 +13,12 @@ Der gemeinsame mechanische Prüfpfad für lokale Änderungen ist:
 Die Verifikation führt kein Deployment aus. Der Deployment-Vergleich und das
 echte Deployment bleiben davon getrennte Schritte.
 
+Für die JavaScript-Renderer-Tests benötigt `verify.sh` das Kommando `node` und
+damit eine lokale Node.js-Installation. Die Tests verwenden `node` direkt;
+`npm` ist dafür nicht erforderlich. Node.js ist keine Laufzeitabhängigkeit des
+produktiven MediaMTX Monitor: Eine normale Produktionsinstallation verwendet
+die ausgelieferten statischen Frontend-Dateien und benötigt dafür kein Node.js.
+
 ## Prinzip
 
 Entwicklung und Versionskontrolle erfolgen im Git-Repository:

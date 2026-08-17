@@ -1,44 +1,13 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-mediamtx_collector.py – Streamdaten-Monitoring für MediaMTX
+MediaMTX Monitor - stream collection orchestrator.
 
-Erfasst alle aktiven Pfade, Quellen (Publisher/Ingest), Leser (Reader/Clients) und
-berechnet – soweit nicht von der MediaMTX-API bereitgestellt – Bitraten anhand
-von Bytes-Deltas über die Zeit (ΔBytes / Δt). Ergebnisse werden in Redis und
-optional als JSON-Datei abgelegt.
+Polls raw MediaMTX data through the client boundary, normalizes paths and
+connections, enriches protocol and calculated metrics, updates short history
+and lifecycle state, and writes the current snapshot with its collection time.
 
-Konfiguration:
-- /opt/mediamtx-monitoring-backend/config/collector.yaml
-  Erwartete Keys (Beispiele; alle optional mit Defaults):
-    api_base_url: "http://localhost:9997"
-    interval_seconds: 1
-    version_refresh_seconds: 60
-    forward_refresh_seconds: 5
-    output_refresh_seconds: 5
-    output_json_path: "/tmp/mediamtx_streams.json"
-    redis:
-      host: "localhost"
-      port: 6379
-      key: "mediamtx:streams:latest"
-    bitrate:
-      min_dt: 0.5           # Mindest-Δt für Messung
-      smooth_alpha: 0.5     # EWMA-Glättung (None zum Deaktivieren)
-      ttl: 300              # TTL für prev_* und glättungs-Keys
-      ignore_loopback: true # Reader von 127.0.0.0/8 bzw. ::1 ausblenden
-
-Ablauf:
-1) MediaMTX-Version und API abfragen (Paths und Protokoll-Sessions/-Verbindungen).
-2) Pro Path:
-   - Publisher-Details auflösen (je nach Typ).
-   - Publisher-Bitrate: API (SRT) bevorzugen; sonst Delta aus inboundBytes.
-   - Reader-Liste auflösen; pro Reader Bitrate: API (SRT) bevorzugen; sonst Delta aus outboundBytes.
-3) Aggregiertes Objekt in Redis schreiben (Key aus config).
-4) Optional JSON-Datei für Debug/Inspektion.
-
-Voraussetzung:
-- Modul bitrate.py im selben bin/-Verzeichnis:
-  from bitrate import calc_bitrate
+Does not implement Control API transport, Redis key construction, the monitoring
+API or frontend, or local host-system monitoring.
 """
 
 from __future__ import annotations
@@ -161,10 +130,6 @@ except ImportError:
     from stream_normalizer import connection_identity, normalize_stream
 
 
-# ---------------------------------------------------------------------------
-# Konfiguration laden
-# ---------------------------------------------------------------------------
-
 config = resolve_monitoring_config({})
 API_BASE = config["api_base_url"]
 REDIS_CFG = config["redis"]
@@ -210,6 +175,7 @@ def reset_poll_cache() -> None:
 
 
 def configure_runtime(raw_config: Dict[str, Any]) -> None:
+    """Apply normalized collector settings and reset cadence state."""
     global config, API_BASE, REDIS_CFG, REDIS_HOST, REDIS_PORT, REDIS_KEY
     global COLLECTOR_CFG, JSON_OUTPUT_PATH, INTERVAL, IGNORE_PATH_PREFIXES
     global BITRATE_CFG, BITRATE_MIN_DT, BITRATE_SMOOTH_ALPHA
@@ -238,6 +204,7 @@ def configure_runtime(raw_config: Dict[str, Any]) -> None:
 
 
 def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
+    """Load configuration and initialize Redis and MediaMTX clients."""
     global r, snapshot_store, mediamtx_client
 
     import redis
@@ -258,21 +225,17 @@ def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
     mediamtx_client = MediaMTXClient(API_BASE)
 
 
-# ---------------------------------------------------------------------------
-# Hilfsfunktionen
-# ---------------------------------------------------------------------------
-
-
 def fetch(
     endpoint: str,
     params: Optional[Dict[str, str]] = None,
     *,
     required: bool = False,
 ) -> Dict[str, Any]:
-    """
-    Holt JSON vom MediaMTX-API-Endpunkt. Optionale Abfragen liefern bei Fehlern
-    eine leere Liste; Fehler verpflichtender Current-State-Abfragen werden
-    weitergereicht, damit kein leerer oder teilweise veralteter Snapshot entsteht.
+    """Fetch one MediaMTX endpoint under the collector failure policy.
+
+    Optional requests degrade to an empty item list. Required current-state
+    requests propagate failures so they cannot replace the snapshot with empty
+    or partially stale data.
     """
     url = mediamtx_client.build_url(endpoint)
     try:
@@ -294,10 +257,7 @@ def fetch(
 
 
 def is_loopback(remote: str) -> bool:
-    """
-    Ermittelt, ob eine Remote-Adresse eine Loopback-Adresse ist.
-    IPv4 127.0.0.0/8 oder IPv6 ::1 / [::1].
-    """
+    """Return whether a remote address uses IPv4 or IPv6 loopback."""
     if not remote:
         return False
     remote = remote.strip()
@@ -495,17 +455,8 @@ def _enrich_rtmp_lifecycle(
     known_roles.update(current_roles)
 
 
-# ---------------------------------------------------------------------------
-# Kernfunktion: Sammeln und Speichern
-# ---------------------------------------------------------------------------
-
-
 def collect_and_store() -> Dict[str, float]:
-    """
-    Sammelt Pfad-, Publisher- und Reader-Infos aus der MediaMTX-API,
-    reichert diese um berechnete Bitraten an und schreibt das Ergebnis
-    nach Redis und optional als JSON-Datei.
-    """
+    """Collect, enrich, and persist one current MediaMTX monitoring snapshot."""
     cycle_started = time.perf_counter()
     metrics = {
         "api_duration_ms": 0.0,
@@ -691,13 +642,9 @@ def collect_and_store() -> Dict[str, float]:
             )
             entry["hls_muxer"] = mux_entry
 
-        # ---------------------------
-        # Publisher-Bitrate berechnen
-        # ---------------------------
-        # API-Rate bevorzugen (nur SRT liefert typischerweise mbpsReceiveRate)
+        # Prefer the native SRT receive rate over a byte-counter estimate.
         api_rx_mbps = src_details.get("mbpsReceiveRate")
-        # Fallback: aus Byte-Deltas berechnen. SRT behält native Transportzähler.
-        # Quelle bytes: bevorzugt die Detailverbindung, sonst Path-Feld
+        # Detail counters preserve connection scope; the path counter is a fallback.
         pub_bytes_value = first_available(src_details, "inboundBytes")
         if pub_bytes_value is None and src_type == "srtConn":
             pub_bytes_value = first_available(src_details, "bytesReceived")
@@ -776,21 +723,17 @@ def collect_and_store() -> Dict[str, float]:
                 time.perf_counter() - history_started
             ) * 1000
 
-        # ------------------------
-        # Reader-Liste aufbereiten
-        # ------------------------
         for rd in normalized_readers:
             rtype: Optional[str] = rd["type"]
             rid: Optional[str] = rd["id"]
             rd_details = rd["details"]
 
-            # Optional lokale/loopback-Reader ignorieren
             if IGNORE_LOOPBACK:
                 remote = rd_details.get("remoteAddr", "")
                 if is_loopback(remote):
                     continue
 
-            # Reader-Bitrate: API (SRT) bevorzugen, sonst Delta aus outboundBytes
+            # Prefer the native SRT send rate over a byte-counter estimate.
             api_tx_mbps = rd_details.get("mbpsSendRate")
             rd_bytes_value = first_available(rd_details, "outboundBytes")
             if rd_bytes_value is None and rtype == "srtConn":
@@ -869,9 +812,6 @@ def collect_and_store() -> Dict[str, float]:
         _enrich_rtmp_lifecycle(entry, name, now)
         aggregated.append(entry)
 
-    # -----------------------------------------------------------------------
-    # Ergebnis nach Redis und optional als JSON-Datei schreiben
-    # -----------------------------------------------------------------------
     collected_at = time.time()
     snapshot_started = time.perf_counter()
     try:
@@ -916,12 +856,8 @@ def collect_and_store() -> Dict[str, float]:
     return metrics
 
 
-# ---------------------------------------------------------------------------
-# main
-# ---------------------------------------------------------------------------
-
-
 def _run_interval_loop(job: Callable[[], None], interval_seconds: float) -> None:
+    """Run a fixed-cadence job while skipping intervals missed by slow work."""
     next_run = time.monotonic() + interval_seconds
     while True:
         time.sleep(max(0.0, next_run - time.monotonic()))
@@ -938,9 +874,7 @@ def _run_interval_loop(job: Callable[[], None], interval_seconds: float) -> None
 
 
 def main(run_once: bool = False) -> None:
-    """
-    Startet den Collector einmalig oder als dauerhaften Hintergrundjob.
-    """
+    """Run one collection cycle or start the persistent collector loop."""
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",

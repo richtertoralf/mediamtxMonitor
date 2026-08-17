@@ -1,4 +1,10 @@
-"""Pure builders for the existing MediaMTX Monitor Redis key schema."""
+"""
+MediaMTX Monitor - centralized Redis key schema.
+
+Provides pure key builders so callers do not assemble measurement identities,
+prefixes, or suffixes themselves. It performs no Redis I/O, serialization, or
+metric calculation.
+"""
 
 from __future__ import annotations
 
