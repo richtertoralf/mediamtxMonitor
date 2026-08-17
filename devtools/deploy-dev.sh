@@ -5,11 +5,20 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-TARGET="/opt/mediamtx-monitoring-backend"
+readonly DEFAULT_TARGET="/opt/mediamtx-monitoring-backend"
+readonly TARGET="${MEDIAMTX_MONITOR_INSTALL_DIR:-$DEFAULT_TARGET}"
+readonly DEFAULT_SERVICE_DIR="/etc/systemd/system"
+readonly SERVICE_DIR="${MEDIAMTX_MONITOR_SERVICE_DIR:-$DEFAULT_SERVICE_DIR}"
 
 SERVICE_API="mediamtx-api"
 SERVICE_COLLECTOR="mediamtx-collector"
 SERVICE_SYSTEM="mediamtx-system"
+
+readonly MONITOR_UNITS=(
+    mediamtx-api.service
+    mediamtx-collector.service
+    mediamtx-system.service
+)
 
 DRY_RUN=0
 
@@ -46,7 +55,10 @@ for path in \
     "${REPO_DIR}/bin" \
     "${REPO_DIR}/static" \
     "${REPO_DIR}/config/collector.yaml" \
-    "${REPO_DIR}/VERSION"
+    "${REPO_DIR}/VERSION" \
+    "${REPO_DIR}/systemd/mediamtx-api.service" \
+    "${REPO_DIR}/systemd/mediamtx-collector.service" \
+    "${REPO_DIR}/systemd/mediamtx-system.service"
 do
     [[ -e "${path}" ]] || {
         echo "Fehler: Repository-Datei fehlt:"
@@ -109,11 +121,19 @@ VERSION_CHANGES="$(
         "${TARGET}/VERSION"
 )"
 
+UNIT_CHANGES=()
+for unit in "${MONITOR_UNITS[@]}"; do
+    if ! cmp -s "${REPO_DIR}/systemd/${unit}" "${SERVICE_DIR}/${unit}"; then
+        UNIT_CHANGES+=("${unit}")
+    fi
+done
+
 
 if [[ -z "${BIN_CHANGES}" &&
       -z "${STATIC_CHANGES}" &&
       -z "${CONFIG_CHANGES}" &&
-      -z "${VERSION_CHANGES}" ]]; then
+      -z "${VERSION_CHANGES}" &&
+      ${#UNIT_CHANGES[@]} -eq 0 ]]; then
 
     echo "Keine deploybaren Änderungen gefunden."
     exit 0
@@ -147,6 +167,12 @@ if [[ -n "${STATIC_CHANGES}" ]]; then
     echo
 fi
 
+if (( ${#UNIT_CHANGES[@]} > 0 )); then
+    echo "--- systemd/"
+    printf '%s\n' "${UNIT_CHANGES[@]}"
+    echo
+fi
+
 
 if (( DRY_RUN )); then
     echo "Dry-Run: Es wurden keine Dateien verändert."
@@ -160,21 +186,25 @@ fi
 
 echo "Übertrage Repository-Stand nach ${TARGET} ..."
 
-sudo rsync \
-    -rlc \
-    --delete \
-    --exclude='__pycache__/' \
-    --exclude='*.pyc' \
-    --chown=mediamtxmon:mediamtxmon \
-    "${REPO_DIR}/bin/" \
-    "${TARGET}/bin/"
+if [[ -n "${BIN_CHANGES}" ]]; then
+    sudo rsync \
+        -rlc \
+        --delete \
+        --exclude='__pycache__/' \
+        --exclude='*.pyc' \
+        --chown=mediamtxmon:mediamtxmon \
+        "${REPO_DIR}/bin/" \
+        "${TARGET}/bin/"
+fi
 
-sudo rsync \
-    -rlc \
-    --delete \
-    --chown=mediamtxmon:mediamtxmon \
-    "${REPO_DIR}/static/" \
-    "${TARGET}/static/"
+if [[ -n "${STATIC_CHANGES}" ]]; then
+    sudo rsync \
+        -rlc \
+        --delete \
+        --chown=mediamtxmon:mediamtxmon \
+        "${REPO_DIR}/static/" \
+        "${TARGET}/static/"
+fi
 
 if [[ -n "${CONFIG_CHANGES}" ]]; then
     sudo install \
@@ -194,14 +224,27 @@ if [[ -n "${VERSION_CHANGES}" ]]; then
         "${TARGET}/VERSION"
 fi
 
+if (( ${#UNIT_CHANGES[@]} > 0 )); then
+    for unit in "${UNIT_CHANGES[@]}"; do
+        sudo install \
+            -m 0644 \
+            "${REPO_DIR}/systemd/${unit}" \
+            "${SERVICE_DIR}/${unit}"
+    done
+
+    sudo systemctl daemon-reload
+fi
+
 
 # ------------------------------------------------------------
 # Dienste
 # ------------------------------------------------------------
 
-if [[ -n "${BIN_CHANGES}" || -n "${CONFIG_CHANGES}" ]]; then
+if [[ -n "${BIN_CHANGES}" ||
+      -n "${CONFIG_CHANGES}" ||
+      ${#UNIT_CHANGES[@]} -gt 0 ]]; then
     echo
-    echo "Backend oder collector.yaml geändert."
+    echo "Backend, collector.yaml oder Monitor-Unit geändert."
     echo "Starte Monitoring-Dienste neu ..."
 
     sudo systemctl restart \
@@ -218,7 +261,7 @@ if [[ -n "${BIN_CHANGES}" || -n "${CONFIG_CHANGES}" ]]; then
         "${SERVICE_SYSTEM}"
 else
     echo
-    echo "Kein Backend und keine collector.yaml geändert."
+    echo "Kein Backend, keine collector.yaml und keine Monitor-Unit geändert."
     echo "Kein Service-Neustart erforderlich."
 fi
 

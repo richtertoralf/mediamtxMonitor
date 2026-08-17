@@ -71,11 +71,19 @@ bin/                  → /opt/mediamtx-monitoring-backend/bin/
 static/               → /opt/mediamtx-monitoring-backend/static/
 config/collector.yaml → /opt/mediamtx-monitoring-backend/config/collector.yaml
 VERSION               → /opt/mediamtx-monitoring-backend/VERSION
+systemd/mediamtx-api.service       → /etc/systemd/system/mediamtx-api.service
+systemd/mediamtx-collector.service → /etc/systemd/system/mediamtx-collector.service
+systemd/mediamtx-system.service    → /etc/systemd/system/mediamtx-system.service
 ```
 
 `__pycache__/` und `*.pyc` werden ignoriert.
 
-Bei Änderungen an Backend oder `collector.yaml` werden die Monitoring-Dienste neu gestartet. Bei reinen Frontend-Änderungen genügt anschließend ein Browser-Reload.
+Die drei projekt-eigenen Monitor-Units werden nur bei inhaltlichen Abweichungen
+installiert. Danach lädt das Skript systemd genau einmal neu. Bei Änderungen an
+Backend, `collector.yaml` oder einer Monitor-Unit werden die Monitoring-Dienste
+neu gestartet. Bei reinen Frontend-Änderungen genügt anschließend ein
+Browser-Reload. `mediamtx.service` und die MediaMTX-Konfiguration werden vom
+Dev-Deployment nicht verwaltet.
 
 ## Nicht Teil des Dev-Deployments
 
@@ -84,7 +92,6 @@ Diese Dateien werden bewusst nicht über `deploy-dev.sh` ausgerollt:
 ```text
 config/monitor-preview-path.yml
 requirements.txt
-systemd/
 install.sh
 uninstall.sh
 ```
