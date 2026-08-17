@@ -133,10 +133,10 @@ mediamtx-monitor --version
 sudo mediamtx-monitor --upgrade
 ```
 
-Das Upgrade aktualisiert Programmcode und Python-Abhängigkeiten im bestehenden
-venv. Die lokale `config/collector.yaml` bleibt erhalten. Für eine
-Erstinstallation ist weiterhin `install.sh` zu verwenden. MediaMTX-
-Konfiguration und systemd-Units werden vom Upgrade nicht aktualisiert.
+Das Upgrade aktualisiert Programmcode, Python-Abhängigkeiten im bestehenden
+venv und die drei mit dem Monitor gelieferten systemd-Units. Die lokale
+`config/collector.yaml` und die MediaMTX-Konfiguration bleiben erhalten. Für
+eine Erstinstallation ist weiterhin `install.sh` zu verwenden.
 
 ## Dienste und Benutzer
 

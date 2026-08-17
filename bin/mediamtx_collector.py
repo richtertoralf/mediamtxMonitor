@@ -108,7 +108,7 @@ try:
         build_protocol_metrics,
         counter_fields,
     )
-    from .srt_health import build_srt_health
+    from .srt_metrics import build_srt_health
     from .stream_normalizer import connection_identity, normalize_stream
 except ImportError:
     from bitrate import calc_bitrate
@@ -157,7 +157,7 @@ except ImportError:
         build_protocol_metrics,
         counter_fields,
     )
-    from srt_health import build_srt_health
+    from srt_metrics import build_srt_health
     from stream_normalizer import connection_identity, normalize_stream
 
 

@@ -5,6 +5,8 @@ readonly DEFAULT_INSTALL_DIR="/opt/mediamtx-monitoring-backend"
 readonly INSTALL_DIR="${MEDIAMTX_MONITOR_INSTALL_DIR:-$DEFAULT_INSTALL_DIR}"
 readonly DEFAULT_CLI_PATH="/usr/local/bin/mediamtx-monitor"
 readonly CLI_PATH="${MEDIAMTX_MONITOR_CLI_PATH:-$DEFAULT_CLI_PATH}"
+readonly DEFAULT_SERVICE_DIR="/etc/systemd/system"
+readonly SERVICE_DIR="${MEDIAMTX_MONITOR_SERVICE_DIR:-$DEFAULT_SERVICE_DIR}"
 readonly REPOSITORY_URL="${MEDIAMTX_MONITOR_REPOSITORY_URL:-https://github.com/richtertoralf/mediamtxMonitor.git}"
 readonly SERVICE_USER="${MEDIAMTX_MONITOR_SERVICE_USER:-mediamtxmon}"
 
@@ -78,6 +80,16 @@ install_cli() {
   fi
 }
 
+install_monitor_units() {
+  local source_dir=$1
+  local service
+
+  for service in "${SERVICES[@]}"; do
+    install -m 0644 "$source_dir/systemd/$service" "$SERVICE_DIR/$service" || \
+      fail "Failed to install systemd unit: $service"
+  done
+}
+
 upgrade() {
   local temp_dir source_dir installed_version available_version service status
 
@@ -110,6 +122,10 @@ upgrade() {
   for source_path in bin static requirements.txt mediamtx-monitor; do
     [ -e "$source_dir/$source_path" ] || fail "Downloaded repository is incomplete: $source_path"
   done
+  for service in "${SERVICES[@]}"; do
+    [ -r "$source_dir/systemd/$service" ] || \
+      fail "Downloaded repository is incomplete: systemd/$service"
+  done
 
   printf 'Updating application...\n'
   rsync -rl --delete --exclude='__pycache__/' --exclude='*.pyc' \
@@ -125,8 +141,12 @@ upgrade() {
     chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/bin" "$INSTALL_DIR/static"
   fi
 
+  printf 'Updating systemd units...\n'
+  install_monitor_units "$source_dir"
+  systemctl daemon-reload || fail "Failed to reload systemd units"
+
   printf 'Restarting services...\n'
-  systemctl restart "${SERVICES[@]}"
+  systemctl restart "${SERVICES[@]}" || fail "Failed to restart monitor services"
   printf '\n'
   for service in "${SERVICES[@]}"; do
     if status=$(systemctl is-active "$service"); then

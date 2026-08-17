@@ -3,7 +3,7 @@ import unittest
 from collections import namedtuple
 from unittest import mock
 
-from bin import mediamtx_systeminfo
+from bin import system_monitor
 
 
 Address = namedtuple("Address", "family address")
@@ -31,20 +31,20 @@ class FakeNetIoPsutil:
 class SystemIdentityTests(unittest.TestCase):
     def assert_server_ips(self, addresses, expected):
         with mock.patch.object(
-            mediamtx_systeminfo,
+            system_monitor,
             "psutil",
             FakePsutil(addresses),
         ):
-            self.assertEqual(mediamtx_systeminfo.get_server_ips(), expected)
+            self.assertEqual(system_monitor.get_server_ips(), expected)
 
     def test_network_counters_keep_using_monitored_interfaces(self):
         with mock.patch.object(
-            mediamtx_systeminfo,
+            system_monitor,
             "psutil",
             FakeNetIoPsutil(),
         ):
             self.assertEqual(
-                mediamtx_systeminfo.get_filtered_net_io(),
+                system_monitor.get_filtered_net_io(),
                 {"bytes_recv": 100, "bytes_sent": 200},
             )
 

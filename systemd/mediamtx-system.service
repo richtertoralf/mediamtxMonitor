@@ -8,7 +8,7 @@ Type=simple
 User=mediamtxmon
 Group=mediamtxmon
 WorkingDirectory=/opt/mediamtx-monitoring-backend
-ExecStart=/opt/mediamtx-monitoring-backend/venv/bin/python3 bin/mediamtx_systeminfo.py
+ExecStart=/opt/mediamtx-monitoring-backend/venv/bin/python3 bin/system_monitor.py
 Restart=on-failure
 RestartSec=5
 Environment="PYTHONUNBUFFERED=1"

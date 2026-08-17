@@ -1,7 +1,7 @@
 import unittest
 from unittest import mock
 
-from bin import mediamtx_collector, mediamtx_systeminfo
+from bin import mediamtx_collector, system_monitor
 
 
 class FakeClock:
@@ -19,7 +19,7 @@ class FakeClock:
 
 class IntervalLoopTests(unittest.TestCase):
     def test_jobs_repeat_on_fixed_interval_after_initial_delay(self):
-        for module in (mediamtx_collector, mediamtx_systeminfo):
+        for module in (mediamtx_collector, system_monitor):
             with self.subTest(module=module.__name__):
                 clock = FakeClock()
                 starts = []
@@ -41,7 +41,7 @@ class IntervalLoopTests(unittest.TestCase):
                 self.assertEqual(clock.sleeps, [5.0, 3.0, 3.0])
 
     def test_job_exception_does_not_stop_loop(self):
-        for module in (mediamtx_collector, mediamtx_systeminfo):
+        for module in (mediamtx_collector, system_monitor):
             with self.subTest(module=module.__name__):
                 clock = FakeClock()
                 calls = 0

@@ -65,8 +65,8 @@ class ProductModuleImportTests(unittest.TestCase):
                 ),
             ):
                 import bin.mediamtx_collector as collector
-                import bin.mediamtx_api as api
-                import bin.mediamtx_systeminfo as systeminfo
+                import bin.monitoring_api as api
+                import bin.system_monitor as systeminfo
                 import bin.mediamtx_client
                 import bin.monitoring_config
                 import bin.redis_keys

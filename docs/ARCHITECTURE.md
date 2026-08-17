@@ -56,7 +56,7 @@ bereits extrahierten Module für Control-API-Zugriff, Normalisierung, Metriken,
 Redis-Keys und Snapshot-I/O. FastAPI wird als Modul-App betrieben; die drei
 Monitoring-Prozesse halten ihre Laufzeitabhängigkeiten teilweise noch in
 Modulzustand. Systemerfassung und ihr Loop liegen gemeinsam in
-`bin/mediamtx_systeminfo.py`.
+`bin/system_monitor.py`.
 
 Das aktuelle Modell kennt Streams, Publisher und Reader, aber noch keine
 stabile `node_id` und kein Multi-Node-Routing. Preview verwendet im Browser den
@@ -389,9 +389,9 @@ praktischen Nutzen bringt.
 ```text
 bin/
 ├── __init__.py
-├── mediamtx_api.py              # dünner API-Entry-Point
+├── monitoring_api.py            # dünner API-Entry-Point
 ├── mediamtx_collector.py        # dünner Collector-Entry-Point
-├── mediamtx_systeminfo.py       # dünner System-Entry-Point
+├── system_monitor.py            # dünner System-Entry-Point
 ├── monitoring_config.py         # zentrale Laufzeitkonfiguration
 ├── mediamtx_client.py           # Control-API-Adapter, bei Extraktion
 ├── mediamtx_model.py            # fachliche Modelle und reine Helfer
@@ -400,7 +400,7 @@ bin/
 ├── redis_keys.py                # zentrales Key-Schema, falls separat sinnvoll
 ├── bitrate.py                   # Bitratenmetrik
 ├── connection_history.py        # 60-s-History und Fensterstatistiken
-├── srt_health.py                # SRT-Metriken; Bewertung später getrennt
+├── srt_metrics.py               # SRT-Metriken; Bewertung später getrennt
 ├── health.py                    # erst bei konkreter Health-Bewertung
 └── system_metrics.py            # testbare Host-Erfassung, bei Extraktion
 

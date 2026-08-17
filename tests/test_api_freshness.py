@@ -52,8 +52,8 @@ class ApiFreshnessTests(unittest.TestCase):
                 "fastapi.staticfiles": staticfiles_module,
             },
         ):
-            from bin import mediamtx_api
-        cls.api = mediamtx_api
+            from bin import monitoring_api
+        cls.api = monitoring_api
 
     def test_api_exposes_collector_timestamp_next_to_unchanged_streams(self):
         streams = [{"name": "path-x", "readers": []}]

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-mediamtx_api.py – API-Server zur Bereitstellung von MediaMTX-Monitoringdaten
+monitoring_api.py – API-Server zur Bereitstellung von MediaMTX-Monitoringdaten
 
 Stellt eine einfache FastAPI-Schnittstelle zur Anzeige von Streamdaten und 
 eine statische Weboberfläche bereit. 

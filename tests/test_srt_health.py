@@ -7,7 +7,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bin"))
 
-from srt_health import build_srt_health, counter_delta  # noqa: E402
+from srt_metrics import build_srt_health, counter_delta  # noqa: E402
 from redis_store import RedisStore  # noqa: E402
 
 

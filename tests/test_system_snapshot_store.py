@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from bin import mediamtx_systeminfo
+from bin import system_monitor
 from bin.redis_store import RedisStore
 
 
@@ -15,10 +15,10 @@ class FakeRedis:
 
 class SystemSnapshotStoreTests(unittest.TestCase):
     def setUp(self):
-        self.original_store = mediamtx_systeminfo.snapshot_store
+        self.original_store = system_monitor.snapshot_store
 
     def tearDown(self):
-        mediamtx_systeminfo.snapshot_store = self.original_store
+        system_monitor.snapshot_store = self.original_store
 
     def test_get_system_info_reads_through_snapshot_store(self):
         snapshot = {
@@ -38,11 +38,11 @@ class SystemSnapshotStoreTests(unittest.TestCase):
             "temperature": {},
         }
         redis_client = FakeRedis({
-            mediamtx_systeminfo.REDIS_KEY: json.dumps(snapshot),
+            system_monitor.REDIS_KEY: json.dumps(snapshot),
         })
-        mediamtx_systeminfo.snapshot_store = RedisStore(redis_client)
+        system_monitor.snapshot_store = RedisStore(redis_client)
 
-        result = mediamtx_systeminfo.get_system_info()
+        result = system_monitor.get_system_info()
 
         self.assertEqual(result["cpu_percent"], 20.5)
         self.assertEqual(result["host"], "mediamtx-02")
@@ -51,9 +51,9 @@ class SystemSnapshotStoreTests(unittest.TestCase):
         self.assertEqual(result["net_mbit_tx"], 2.5)
 
     def test_missing_system_snapshot_keeps_empty_fallback(self):
-        mediamtx_systeminfo.snapshot_store = RedisStore(FakeRedis())
+        system_monitor.snapshot_store = RedisStore(FakeRedis())
 
-        self.assertEqual(mediamtx_systeminfo.get_system_info(), {})
+        self.assertEqual(system_monitor.get_system_info(), {})
 
 
 if __name__ == "__main__":
