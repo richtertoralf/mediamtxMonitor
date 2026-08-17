@@ -13,6 +13,16 @@ nicht durch externe Messungen gegen Publisher oder Reader ersetzt. Details
 stehen im [MediaMTX-v1.20-Datenmodell](docs/MEDIAMTX_V1_20_DATA.md) und in der
 [Architekturdokumentation](docs/ARCHITECTURE.md).
 
+> **Sicherheitshinweis:** Dashboard und Monitor-API besitzen keine eingebaute
+> Authentifizierung und stellen auf Port 8080 unverschlüsseltes HTTP bereit.
+> Dieser Port darf nicht ungeschützt aus dem öffentlichen Internet erreichbar
+> sein. MediaMTX Monitor ist für die bewusste Integration durch Betreiber in
+> eine von ihnen kontrollierte Server- und Netzwerkarchitektur vorgesehen,
+> beispielsweise in ein internes LAN, ein Management-VLAN, ein separates
+> WireGuard- beziehungsweise Managementnetz oder hinter einen Reverse Proxy mit
+> HTTPS und bei Bedarf Authentifizierung. Firewall, Zugriffsschutz, TLS und
+> öffentliche Erreichbarkeit liegen in der Verantwortung des Betreibers.
+
 Der grundlegende Datenfluss ist:
 
 ```text
@@ -134,8 +144,18 @@ sudo mediamtx-monitor --upgrade
 ```
 
 Das Upgrade aktualisiert Programmcode, Python-Abhängigkeiten im bestehenden
-venv und die drei mit dem Monitor gelieferten systemd-Units. Die lokale
-`config/collector.yaml` und die MediaMTX-Konfiguration bleiben erhalten. Für
+venv, die CLI, die Versionsdatei und die drei systemd-Units der
+Monitoring-Dienste. Die lokale `config/collector.yaml` bleibt absichtlich
+unverändert: Sie ist die betreiberspezifische Laufzeitkonfiguration und gehört
+dem Betreiber. Dieses Kompatibilitätsprinzip orientiert sich am Umgang von
+MediaMTX mit der lokalen `mediamtx.yml`: Ein Upgrade ersetzt die vorhandene
+lokale Konfiguration nicht durch die Konfigurationsvorlage einer neuen Version.
+
+Neue optionale Monitor-Einstellungen müssen deshalb mit rückwärtskompatiblen
+Standardwerten eingeführt werden. Bewusst gesetzter technischer Ausgangspunkt
+des unterstützten MediaMTX-Daten- und Konfigurationsmodells ist MediaMTX
+v1.20.0. Eine automatische Migration oder Ersetzung der `collector.yaml` ist
+im Rahmen dieses Betreiber- und Kompatibilitätsprinzips nicht vorgesehen. Für
 eine Erstinstallation ist weiterhin `install.sh` zu verwenden.
 
 ## Dienste und Benutzer
@@ -147,6 +167,17 @@ eine Erstinstallation ist weiterhin `install.sh` zu verwenden.
 | `mediamtx-collector.service` | `mediamtxmon` | MediaMTX-Control-API abfragen |
 | `mediamtx-system.service` | `mediamtxmon` | Systemmetriken erfassen |
 | `redis-server.service` | Distributionseinstellung | Zwischenspeicher |
+
+Die mitgelieferte `mediamtx.service` enthält bewusst kein `User=` und folgt
+damit der [offiziellen systemd-Anleitung von MediaMTX](https://mediamtx.org/docs/features/start-on-boot),
+deren Vorlage ebenfalls kein `User=` enthält. Ohne diese Angabe läuft der
+Dienst unter systemd standardmäßig als root; MediaMTX Monitor trifft damit
+keine von MediaMTX abweichende Entscheidung über den Dienstbenutzer. Betreiber
+können MediaMTX eigenverantwortlich unter einem eingeschränkten Benutzer
+betreiben. Dabei müssen sie selbst alle benötigten Rechte berücksichtigen,
+unter anderem für Konfiguration, automatisch erzeugte oder verwendete
+Zertifikate, Aufzeichnungen, Logs, Hooks sowie weitere von der jeweiligen
+MediaMTX-Konfiguration verwendete Dateien und Verzeichnisse.
 
 ## Ports
 
@@ -160,8 +191,8 @@ Für die mit MediaMTX v1.20.0 getestete Konfiguration:
 | 8889 | WebRTC und Monitor-Vorschau |
 | 8890 | SRT |
 | 9997 | MediaMTX-Control-API |
-| 8080 | Dashboard und Monitor-API |
-| 6379 | Redis, lokal |
+| 8080/TCP | Dashboard und Monitor-API; HTTP ohne integrierte Authentifizierung, nicht ungeschützt öffentlich freigeben |
+| 6379/TCP | Redis; nur lokal beziehungsweise in einem geschützten Backend-Netz erreichbar machen |
 
 Die vollständige MediaMTX-Konfiguration stammt aus der gewählten Version; deren
 Werte bleiben mit Ausnahme der dokumentierten Monitor-Anpassungen maßgeblich.
@@ -203,3 +234,7 @@ Gemeinsamer lokaler Prüfpfad:
 - [MediaMTX-v1.20-Datenmodell](docs/MEDIAMTX_V1_20_DATA.md)
 - [Betrieb und Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Entwicklungs-Deployment](devtools/README.md)
+
+## Lizenz
+
+MediaMTX Monitor steht unter der [MIT-Lizenz](LICENSE).
