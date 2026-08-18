@@ -17,6 +17,7 @@ SERVICES = (
     "mediamtx-collector.service",
     "mediamtx-system.service",
 )
+LEGACY_SERVICE = "mediamtx-systeminfo.service"
 
 
 class MediaMTXMonitorCliTests(unittest.TestCase):
@@ -45,10 +46,18 @@ cp -a "$FAKE_REPOSITORY" "$destination"
             """#!/usr/bin/env bash
 set -euo pipefail
 printf 'systemctl %s\n' "$*" >> "$FAKE_LOG"
+if [[ "$1" == "list-unit-files" ]]; then
+  legacy_unit="${MEDIAMTX_MONITOR_SERVICE_DIR:?}/$2"
+  [[ ! -e "$legacy_unit" && ! -L "$legacy_unit" ]] || printf '%s enabled\n' "$2"
+  exit 0
+fi
 if [[ "$1" == "daemon-reload" && "${FAIL_DAEMON_RELOAD:-}" == "yes" ]]; then
   exit 1
 fi
 if [[ "$1" == "restart" && "${FAIL_RESTART:-}" == "yes" ]]; then
+  exit 1
+fi
+if [[ "$1" == "disable" && "${FAIL_LEGACY_DISABLE:-}" == "yes" ]]; then
   exit 1
 fi
 if [[ "$1" == "is-active" && "${FAIL_SERVICE:-}" == "$2" ]]; then
@@ -149,7 +158,9 @@ fi
         self.assertIn("already up to date: 0.1.0", result.stdout)
         log = self.log_file.read_text(encoding="utf-8")
         self.assertNotIn("python -m pip install", log)
-        self.assertNotIn("systemctl", log)
+        self.assertNotIn("systemctl disable", log)
+        self.assertNotIn("systemctl daemon-reload", log)
+        self.assertNotIn("systemctl restart", log)
 
     def test_upgrade_updates_program_dependencies_version_and_services(self) -> None:
         self._create_installation()
@@ -175,6 +186,87 @@ fi
         for service in SERVICES:
             self.assertIn(f"systemctl is-active {service}", log)
         self.assertIn("Upgrade complete: 0.1.0 -> 0.1.1", result.stdout)
+
+    def test_upgrade_removes_active_legacy_system_monitor(self) -> None:
+        self._create_installation()
+        self._create_source()
+        legacy_unit = self.service_dir / LEGACY_SERVICE
+        legacy_file = self.install_dir / "bin/mediamtx_systeminfo.py"
+        legacy_unit.write_text("legacy unit\n", encoding="utf-8")
+        legacy_file.write_text("legacy writer\n", encoding="utf-8")
+
+        result = self._run("--upgrade")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(legacy_unit.exists())
+        self.assertFalse(legacy_file.exists())
+        self.assertFalse((self.install_dir / "bin/old.py").exists())
+        self.assertIn(f"Removing legacy service {LEGACY_SERVICE}", result.stdout)
+        self.assertIn("Removing legacy file bin/mediamtx_systeminfo.py", result.stdout)
+        log = self.log_file.read_text(encoding="utf-8")
+        self.assertIn(f"systemctl disable --now {LEGACY_SERVICE}", log)
+        self.assertLess(
+            log.index(f"systemctl disable --now {LEGACY_SERVICE}"),
+            log.index("systemctl daemon-reload"),
+        )
+        self.assertIn(f"systemctl restart {' '.join(SERVICES)}", log)
+        for service in SERVICES:
+            self.assertTrue((self.service_dir / service).is_file())
+
+    def test_upgrade_without_legacy_artifacts_is_quiet_and_idempotent(self) -> None:
+        self._create_installation()
+        self._create_source()
+
+        first_result = self._run("--upgrade")
+        second_result = self._run("--upgrade")
+
+        self.assertEqual(first_result.returncode, 0, first_result.stderr)
+        self.assertEqual(second_result.returncode, 0, second_result.stderr)
+        self.assertNotIn("Removing legacy", first_result.stdout)
+        self.assertNotIn("Removing legacy", second_result.stdout)
+        self.assertFalse((self.install_dir / "bin/old.py").exists())
+
+    def test_upgrade_removes_legacy_file_when_service_is_absent(self) -> None:
+        self._create_installation()
+        self._create_source()
+        legacy_file = self.install_dir / "bin/mediamtx_systeminfo.py"
+        legacy_file.write_text("legacy writer\n", encoding="utf-8")
+
+        result = self._run("--upgrade")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(legacy_file.exists())
+        log = self.log_file.read_text(encoding="utf-8")
+        self.assertNotIn(f"systemctl disable --now {LEGACY_SERVICE}", log)
+
+    def test_inactive_disabled_legacy_service_cleanup_is_idempotent(self) -> None:
+        self._create_installation()
+        self._create_source()
+        legacy_unit = self.service_dir / LEGACY_SERVICE
+        legacy_unit.write_text("legacy unit\n", encoding="utf-8")
+
+        first_result = self._run("--upgrade")
+        legacy_unit.write_text("legacy unit returned\n", encoding="utf-8")
+        second_result = self._run("--upgrade")
+
+        self.assertEqual(first_result.returncode, 0, first_result.stderr)
+        self.assertEqual(second_result.returncode, 0, second_result.stderr)
+        log = self.log_file.read_text(encoding="utf-8")
+        self.assertEqual(log.count(f"systemctl disable --now {LEGACY_SERVICE}\n"), 2)
+        self.assertEqual(log.count("systemctl daemon-reload\n"), 2)
+
+    def test_legacy_service_disable_failure_aborts_before_application_update(self) -> None:
+        self._create_installation()
+        self._create_source()
+        (self.service_dir / LEGACY_SERVICE).write_text("legacy unit\n", encoding="utf-8")
+        self.env["FAIL_LEGACY_DISABLE"] = "yes"
+
+        result = self._run("--upgrade")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Failed to stop and disable legacy service", result.stderr)
+        self.assertFalse((self.install_dir / "bin/new.py").exists())
+        self.assertNotIn("Upgrade complete", result.stdout)
 
     def test_upgrade_migrates_monitor_units_without_touching_local_configuration(self) -> None:
         self._create_installation()

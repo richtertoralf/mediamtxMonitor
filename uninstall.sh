@@ -8,12 +8,14 @@ readonly MEDIAMTX_CONFIG="/usr/local/etc/mediamtx.yml"
 readonly SERVICE_DIR="/etc/systemd/system"
 readonly SERVICE_USER="mediamtxmon"
 readonly SERVICE_GROUP="mediamtxmon"
+readonly LEGACY_PROGRAM_FILE="$INSTALL_DIR/bin/mediamtx_systeminfo.py"
 
 SERVICES=(
   mediamtx.service
   mediamtx-api.service
   mediamtx-collector.service
   mediamtx-system.service
+  mediamtx-systeminfo.service
 )
 
 # Root-Rechte prüfen.
@@ -58,6 +60,12 @@ done
 # systemd aktualisieren.
 systemctl daemon-reload
 systemctl reset-failed
+
+# Bekannte Legacy-Datei alter Monitor-Installationen gezielt entfernen.
+if [ -e "$LEGACY_PROGRAM_FILE" ] || [ -L "$LEGACY_PROGRAM_FILE" ]; then
+  printf 'Entferne Legacy-Programmdatei: %s\n' "$LEGACY_PROGRAM_FILE"
+  rm -f -- "$LEGACY_PROGRAM_FILE"
+fi
 
 # MediaMTX-Binary entfernen.
 if [ -e "$MEDIAMTX_BIN" ] || [ -L "$MEDIAMTX_BIN" ]; then
