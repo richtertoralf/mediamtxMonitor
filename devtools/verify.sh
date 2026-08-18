@@ -25,7 +25,7 @@ run_block \
 
 run_block \
     "JavaScript-Renderer-Tests" \
-    node --test tests/test_renderer.mjs tests/test_systeminfo_renderer.mjs
+    node --test tests/test_*.mjs
 
 readonly SHELL_SCRIPTS=(
     install.sh

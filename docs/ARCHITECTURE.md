@@ -407,9 +407,17 @@ bin/
 static/js/
 ├── api.js
 ├── main.js
-├── renderer.js
+├── renderer.js                # stabile Re-Export-Fassade
+├── format-utils.js             # reine Formatierung und sichere Strings
+├── connection-metrics.js       # gemeinsame Auswahl von Verbindungsmetriken
+├── metric-grid.js              # generisches Metrikraster
+├── telemetry-store.js          # browserlokale Historien und Skalierung
+├── sparkline-charts.js         # SVG-Trenddarstellung
+├── srt-metrics.js              # SRT-spezifische Präsentation
+├── protocol-metrics.js         # übrige Protokollmetriken
+├── media-tracks.js             # Medienzusammenfassungen
+├── stream-card.js              # Kartenkomposition und DOM-Update
 ├── systeminfo.js
-├── formatters.js                # erst bei tatsächlicher gemeinsamer Nutzung
 └── preview.js                   # erst bei tatsächlicher Extraktion
 ```
 
