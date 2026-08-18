@@ -158,6 +158,41 @@ v1.20.0. Eine automatische Migration oder Ersetzung der `collector.yaml` ist
 im Rahmen dieses Betreiber- und Kompatibilitätsprinzips nicht vorgesehen. Für
 eine Erstinstallation ist weiterhin `install.sh` zu verwenden.
 
+Das gilt auch für `redis.namespace` und `node.id`: Alte lokale Konfigurationen
+bleiben beim Upgrade unverändert und erhalten zur Laufzeit automatisch die
+Defaults `mediamtx-monitor:` beziehungsweise `local`. Die Vorlage für neue
+Installationen enthält beide Werte explizit.
+Die zwei bekannten alten Snapshot-Werte `mediamtx:streams:latest` und
+`mediamtx:system:latest` werden bei der Konfigurationsauflösung ausschließlich
+in ihre neuen fachlichen Namen übersetzt; alte Redis-Keys werden weder gelesen
+noch migriert.
+
+## Redis-Namespace und Node-ID
+
+Der Monitor verwendet weiterhin Redis DB 0. Sie darf gemeinsam mit anderen
+Anwendungen genutzt werden, weil die Zustände durch Anwendungs-Namespaces
+getrennt sind:
+
+```text
+Redis DB 0
+├── gfx:*                                  GFX Engine
+└── mediamtx-monitor:node:<node-id>:*      MediaMTX Monitor
+```
+
+`redis.namespace` legt den zentralen Anwendungs-Namespace fest und ist
+standardmäßig `mediamtx-monitor:`. `node.id` identifiziert die überwachte
+MediaMTX-Instanz; der Single-Node-Default ist `local`. Eine abweichende stabile
+ID wie `node-a` erzeugt beispielsweise
+`mediamtx-monitor:node:node-a:streams:latest`. Fachmodule erzeugen nur den Teil
+ab `streams:latest`; der vollständige Prefix wird zentral beim Redis-Zugriff
+ergänzt.
+
+Der Namespace wird getrimmt und intern auf genau einen abschließenden
+Doppelpunkt normalisiert. `node.id` wird ebenfalls getrimmt und muss dem Muster
+`[A-Za-z0-9._-]+` entsprechen. Fehlende Werte verwenden die Defaults; explizit
+leere oder ungültige Werte sind Konfigurationsfehler und verhindern den
+Dienststart.
+
 ## Dienste und Benutzer
 
 | Dienst | Benutzer | Aufgabe |

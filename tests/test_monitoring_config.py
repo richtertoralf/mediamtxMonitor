@@ -14,6 +14,7 @@ from monitoring_config import (  # noqa: E402
     FRONTEND_DEFAULTS,
     LOGGING_DEFAULTS,
     MONITORING_DEFAULTS,
+    NODE_DEFAULTS,
     REDIS_DEFAULTS,
     SYSTEM_MONITOR_DEFAULTS,
     load_monitoring_config,
@@ -23,6 +24,7 @@ from monitoring_config import (  # noqa: E402
     resolve_frontend_config,
     resolve_logging_config,
     resolve_monitoring_config,
+    resolve_node_config,
     resolve_redis_config,
     resolve_system_monitor_config,
 )
@@ -33,6 +35,7 @@ class MonitoringConfigTests(unittest.TestCase):
         self.assertEqual(resolve_monitoring_config({}), {
             "api_base_url": MONITORING_DEFAULTS["api_base_url"],
             "redis": REDIS_DEFAULTS,
+            "node": NODE_DEFAULTS,
             "collector": COLLECTOR_DEFAULTS,
             "bitrate": BITRATE_DEFAULTS,
             "system_monitor": SYSTEM_MONITOR_DEFAULTS,
@@ -53,8 +56,10 @@ class MonitoringConfigTests(unittest.TestCase):
         self.assertEqual(resolved["redis"], {
             "host": "redis.example",
             "port": 6379,
-            "key": "mediamtx:streams:latest",
+            "namespace": "mediamtx-monitor:",
+            "key": "streams:latest",
         })
+        self.assertEqual(resolved["node"], {"id": "local"})
         self.assertEqual(resolved["collector"]["interval_seconds"], 7)
         self.assertEqual(
             resolved["collector"]["output_json_path"],
@@ -62,6 +67,36 @@ class MonitoringConfigTests(unittest.TestCase):
         )
         self.assertEqual(resolved["api_server"]["listen_port"], 9090)
         self.assertEqual(resolved["api_server"]["listen_host"], "127.0.0.1")
+
+    def test_legacy_snapshot_config_is_normalized_without_mutating_input(self):
+        raw = {
+            "redis": {"key": "mediamtx:streams:latest"},
+            "system_monitor": {"redis_key": "mediamtx:system:latest"},
+        }
+
+        resolved = resolve_monitoring_config(raw)
+
+        self.assertEqual(resolved["redis"]["key"], "streams:latest")
+        self.assertEqual(resolved["system_monitor"]["redis_key"], "system:latest")
+        self.assertEqual(raw["redis"]["key"], "mediamtx:streams:latest")
+        self.assertEqual(
+            raw["system_monitor"]["redis_key"], "mediamtx:system:latest"
+        )
+
+    def test_current_snapshot_config_remains_functional(self):
+        resolved = resolve_monitoring_config({
+            "redis": {
+                "namespace": "mediamtx-monitor:",
+                "key": "streams:latest",
+            },
+            "node": {"id": "node-a"},
+            "system_monitor": {"redis_key": "system:latest"},
+        })
+
+        self.assertEqual(resolved["redis"]["namespace"], "mediamtx-monitor:")
+        self.assertEqual(resolved["redis"]["key"], "streams:latest")
+        self.assertEqual(resolved["node"]["id"], "node-a")
+        self.assertEqual(resolved["system_monitor"]["redis_key"], "system:latest")
 
     def test_component_resolvers_normalize_values(self):
         config = {
@@ -86,6 +121,7 @@ class MonitoringConfigTests(unittest.TestCase):
         }
 
         self.assertEqual(resolve_redis_config(config)["port"], 6380)
+        self.assertEqual(resolve_node_config(config), {"id": "local"})
         self.assertEqual(resolve_collector_config(config)["interval_seconds"], 12)
         self.assertEqual(resolve_bitrate_config(config), {
             "min_dt": 1.25,
@@ -103,6 +139,48 @@ class MonitoringConfigTests(unittest.TestCase):
             "streamlist_refresh_ms": 3000,
         })
         self.assertEqual(resolve_logging_config(config)["level"], "DEBUG")
+
+    def test_namespace_is_trimmed_and_has_exactly_one_trailing_colon(self):
+        cases = {
+            " mediamtx-monitor ": "mediamtx-monitor:",
+            "mediamtx-monitor:": "mediamtx-monitor:",
+            "mediamtx-monitor::::": "mediamtx-monitor:",
+        }
+        for configured, expected in cases.items():
+            with self.subTest(configured=configured):
+                resolved = resolve_redis_config({
+                    "redis": {"namespace": configured}
+                })
+                self.assertEqual(resolved["namespace"], expected)
+
+    def test_explicit_invalid_namespace_is_rejected(self):
+        for namespace in ("", "   ", ":", ":::", None, 42):
+            with self.subTest(namespace=namespace):
+                with self.assertRaisesRegex(ValueError, "redis.namespace"):
+                    resolve_redis_config({"redis": {"namespace": namespace}})
+
+    def test_node_id_default_validation_and_normalization(self):
+        self.assertEqual(resolve_node_config({}), {"id": "local"})
+        self.assertEqual(resolve_node_config({"node": {}}), {"id": "local"})
+        for node_id in (
+            "local",
+            "node-a",
+            "mediamtx18",
+            "cloud01",
+            "backup_01",
+            "node.example",
+        ):
+            with self.subTest(node_id=node_id):
+                self.assertEqual(
+                    resolve_node_config({"node": {"id": f" {node_id} "}}),
+                    {"id": node_id},
+                )
+
+    def test_explicit_invalid_node_id_is_rejected(self):
+        for node_id in ("", "   ", "node:a", "node a", "node/a", None, 42):
+            with self.subTest(node_id=node_id):
+                with self.assertRaisesRegex(ValueError, "node.id"):
+                    resolve_node_config({"node": {"id": node_id}})
 
     def test_invalid_optional_blocks_fall_back_to_defaults(self):
         config = {
@@ -152,15 +230,19 @@ class MonitoringConfigTests(unittest.TestCase):
             "redis": {
                 "host": "shared-cache",
                 "port": 6390,
+                "namespace": "custom-monitor:",
                 "key": "shared:streams",
-            }
+            },
+            "node": {"id": "node-a"},
         }
         normalized = resolve_monitoring_config(config)
 
         self.assertEqual(normalized["redis"], resolve_redis_config(config))
         self.assertEqual(normalized["redis"]["host"], "shared-cache")
         self.assertEqual(normalized["redis"]["port"], 6390)
+        self.assertEqual(normalized["redis"]["namespace"], "custom-monitor:")
         self.assertEqual(normalized["redis"]["key"], "shared:streams")
+        self.assertEqual(normalized["node"]["id"], "node-a")
 
 
 class SystemMonitorConfigTests(unittest.TestCase):

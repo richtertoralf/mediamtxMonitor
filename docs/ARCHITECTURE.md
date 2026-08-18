@@ -279,6 +279,21 @@ Suffixe, Rollen, TTL-Verwendung und Node-Zuordnung dürfen nicht frei über
 Fachmodule verteilt werden. Zustands-Keys für Publisher und Reader bleiben
 getrennt.
 
+Alle fachlichen Keys werden erst an der zentralen Redis-I/O-Grenze mit
+`<redis.namespace>node:<node.id>:` versehen. Der Default lautet damit
+`mediamtx-monitor:node:local:`. `redis.namespace` ist der einmalig
+konfigurierte Anwendungs-Namespace; `node.id` ist die stabile Identität der
+überwachten MediaMTX-Instanz und hat für die aktuelle Single-Node-Laufzeit den
+Default `local`. Die Builder dieses Abschnitts enthalten diesen Prefix nicht.
+
+Redis DB 0 darf mit der getrennten GFX Engine geteilt werden:
+
+```text
+Redis DB 0
+├── gfx:*                                  GFX Engine
+└── mediamtx-monitor:node:<node-id>:*      MediaMTX Monitor
+```
+
 Nicht-SRT-Verbindungen verwenden für kumulative MediaMTX-Zähler den
 verbindungsbezogenen Zustandszweig
 `{pub|rd}:<path>:<type>:<connection-id>:counters:<native-field>`. Path-Zähler

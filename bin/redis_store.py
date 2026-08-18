@@ -12,6 +12,72 @@ import json
 from typing import Any
 
 
+def redis_key_prefix(namespace: str, node_id: str) -> str:
+    """Build the application and node prefix used at the Redis I/O boundary."""
+    return f"{namespace}node:{node_id}:"
+
+
+class NamespacedRedis:
+    """Apply the configured application/node prefix to every Redis key access."""
+
+    def __init__(self, redis_client: Any, namespace: str, node_id: str) -> None:
+        self._redis = redis_client
+        self.prefix = redis_key_prefix(namespace, node_id)
+
+    def _key(self, key: str) -> str:
+        return f"{self.prefix}{key}"
+
+    def ping(self) -> Any:
+        return self._redis.ping()
+
+    def get(self, key: str) -> Any:
+        return self._redis.get(self._key(key))
+
+    def set(self, key: str, value: Any, **kwargs: Any) -> Any:
+        return self._redis.set(self._key(key), value, **kwargs)
+
+    def delete(self, *keys: str) -> Any:
+        return self._redis.delete(*(self._key(key) for key in keys))
+
+    def zadd(self, key: str, mapping: Any, **kwargs: Any) -> Any:
+        return self._redis.zadd(self._key(key), mapping, **kwargs)
+
+    def zremrangebyscore(
+        self, key: str, minimum: Any, maximum: Any, **kwargs: Any
+    ) -> Any:
+        return self._redis.zremrangebyscore(
+            self._key(key), minimum, maximum, **kwargs
+        )
+
+    def expire(self, key: str, ttl_seconds: int, **kwargs: Any) -> Any:
+        return self._redis.expire(self._key(key), ttl_seconds, **kwargs)
+
+    def zrangebyscore(
+        self, key: str, minimum: Any, maximum: Any, **kwargs: Any
+    ) -> Any:
+        return self._redis.zrangebyscore(
+            self._key(key), minimum, maximum, **kwargs
+        )
+
+    def pipeline(self) -> "NamespacedRedisPipeline":
+        return NamespacedRedisPipeline(self._redis.pipeline(), self.prefix)
+
+
+class NamespacedRedisPipeline:
+    """Namespace key-bearing commands queued on a Redis pipeline."""
+
+    def __init__(self, pipeline: Any, prefix: str) -> None:
+        self._pipeline = pipeline
+        self._prefix = prefix
+
+    def set(self, key: str, value: Any, **kwargs: Any) -> "NamespacedRedisPipeline":
+        self._pipeline.set(f"{self._prefix}{key}", value, **kwargs)
+        return self
+
+    def execute(self) -> Any:
+        return self._pipeline.execute()
+
+
 class SnapshotDecodeError(ValueError):
     """Raised when a stored snapshot is not valid JSON."""
 

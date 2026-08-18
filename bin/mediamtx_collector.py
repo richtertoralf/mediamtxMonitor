@@ -70,7 +70,7 @@ try:
         rtmp_frame_discard_key,
         stream_snapshot_freshness_key,
     )
-    from .redis_store import RedisStore
+    from .redis_store import NamespacedRedis, RedisStore
     from .protocol_metrics import (
         RTMP_CONNECTION_TYPES,
         build_common_metrics,
@@ -119,7 +119,7 @@ except ImportError:
         rtmp_frame_discard_key,
         stream_snapshot_freshness_key,
     )
-    from redis_store import RedisStore
+    from redis_store import NamespacedRedis, RedisStore
     from protocol_metrics import (
         RTMP_CONNECTION_TYPES,
         build_common_metrics,
@@ -215,7 +215,10 @@ def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
         print(f"❌ Fehler beim Laden der Konfigurationsdatei {config_path}: {exc}")
         sys.exit(1)
     try:
-        r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+        raw_redis = redis.Redis(
+            host=REDIS_HOST, port=REDIS_PORT, decode_responses=True
+        )
+        r = NamespacedRedis(raw_redis, REDIS_CFG["namespace"], config["node"]["id"])
         r.ping()
         snapshot_store = RedisStore(r)
         logging.info("🔌 Verbindung zu Redis hergestellt.")

@@ -8,6 +8,7 @@ collector, API, and system monitor without initializing services or connections.
 from __future__ import annotations
 
 from pathlib import Path
+import re
 from typing import Any, Dict, Mapping, Optional
 
 import yaml
@@ -29,8 +30,17 @@ MONITORING_DEFAULTS: Dict[str, Any] = {
 REDIS_DEFAULTS: Dict[str, Any] = {
     "host": "localhost",
     "port": 6379,
+    "namespace": "mediamtx-monitor:",
     "key": DEFAULT_STREAM_SNAPSHOT_KEY,
 }
+
+NODE_DEFAULTS: Dict[str, Any] = {
+    "id": "local",
+}
+
+LEGACY_STREAM_SNAPSHOT_KEY = "mediamtx:streams:latest"
+LEGACY_SYSTEM_SNAPSHOT_KEY = "mediamtx:system:latest"
+NODE_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 
 COLLECTOR_DEFAULTS: Dict[str, Any] = {
     "output_json_path": "/tmp/mediamtx_streams.json",
@@ -96,7 +106,37 @@ def resolve_redis_config(config: Mapping[str, Any]) -> Dict[str, Any]:
     """Resolve the shared Redis connection and stream snapshot settings."""
     resolved = _component_config(config, "redis", REDIS_DEFAULTS)
     resolved["port"] = int(resolved["port"])
+    namespace = resolved["namespace"]
+    if not isinstance(namespace, str):
+        raise ValueError("redis.namespace muss eine nicht leere Zeichenkette sein.")
+    namespace = namespace.strip().rstrip(":")
+    if not namespace:
+        raise ValueError("redis.namespace darf nicht leer sein.")
+    resolved["namespace"] = f"{namespace}:"
+    if resolved["key"] == LEGACY_STREAM_SNAPSHOT_KEY:
+        resolved["key"] = DEFAULT_STREAM_SNAPSHOT_KEY
     return resolved
+
+
+def resolve_node_config(config: Mapping[str, Any]) -> Dict[str, Any]:
+    """Resolve the monitored node identity with a single-node default."""
+    node_block = config.get("node")
+    if node_block is None:
+        return dict(NODE_DEFAULTS)
+    if not isinstance(node_block, Mapping):
+        raise ValueError("node muss ein YAML-Mapping mit einer gültigen id sein.")
+    if "id" not in node_block:
+        return dict(NODE_DEFAULTS)
+    node_id = node_block["id"]
+    if not isinstance(node_id, str) or not node_id.strip():
+        raise ValueError("node.id darf nicht leer sein.")
+    node_id = node_id.strip()
+    if NODE_ID_PATTERN.fullmatch(node_id) is None:
+        raise ValueError(
+            "node.id darf nur Buchstaben, Ziffern, Punkt, Unterstrich und "
+            "Bindestrich enthalten."
+        )
+    return {"id": node_id}
 
 
 def resolve_collector_config(config: Mapping[str, Any]) -> Dict[str, Any]:
@@ -128,6 +168,8 @@ def resolve_system_monitor_config(config: Mapping[str, Any]) -> Dict[str, Any]:
     """Resolve system-monitor settings with compatible defaults."""
     resolved = _component_config(config, "system_monitor", SYSTEM_MONITOR_DEFAULTS)
     resolved["interval_seconds"] = int(resolved["interval_seconds"])
+    if resolved["redis_key"] == LEGACY_SYSTEM_SNAPSHOT_KEY:
+        resolved["redis_key"] = DEFAULT_SYSTEM_SNAPSHOT_KEY
     return resolved
 
 
@@ -158,6 +200,7 @@ def resolve_monitoring_config(config: Mapping[str, Any]) -> Dict[str, Any]:
             "api_base_url", MONITORING_DEFAULTS["api_base_url"]
         ),
         "redis": resolve_redis_config(config),
+        "node": resolve_node_config(config),
         "collector": resolve_collector_config(config),
         "bitrate": resolve_bitrate_config(config),
         "system_monitor": resolve_system_monitor_config(config),

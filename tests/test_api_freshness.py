@@ -129,6 +129,16 @@ class ApiFreshnessTests(unittest.TestCase):
         self.assertIsNone(payload["monitor_version"])
         self.assertEqual(payload["streams"], streams)
 
+    def test_explicit_invalid_namespace_is_not_silently_defaulted(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "collector.yaml"
+            config_path.write_text(
+                "redis:\n  namespace: '   '\n", encoding="utf-8"
+            )
+
+            with self.assertRaisesRegex(ValueError, "redis.namespace"):
+                self.api.load_runtime_config(config_path)
+
 
 if __name__ == "__main__":
     unittest.main()

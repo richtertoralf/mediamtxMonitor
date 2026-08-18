@@ -9,8 +9,8 @@ metric calculation.
 from __future__ import annotations
 
 
-DEFAULT_STREAM_SNAPSHOT_KEY = "mediamtx:streams:latest"
-DEFAULT_SYSTEM_SNAPSHOT_KEY = "mediamtx:system:latest"
+DEFAULT_STREAM_SNAPSHOT_KEY = "streams:latest"
+DEFAULT_SYSTEM_SNAPSHOT_KEY = "system:latest"
 
 _PUBLISHER_PREFIX = "pub"
 _READER_PREFIX = "rd"

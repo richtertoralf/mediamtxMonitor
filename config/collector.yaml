@@ -9,7 +9,11 @@ api_base_url: "http://localhost:9997"
 redis:
   host: "localhost"
   port: 6379
-  key: "mediamtx:streams:latest"
+  namespace: "mediamtx-monitor:"
+  key: "streams:latest"
+
+node:
+  id: "local"
 
 logging:
   level: "INFO"
@@ -28,7 +32,7 @@ bitrate:
   smooth_reference_seconds: 5
 
 system_monitor:
-  redis_key: "mediamtx:system:latest"
+  redis_key: "system:latest"
   output_json_path: "/tmp/mediamtx_system.json"
   interval_seconds: 10
 

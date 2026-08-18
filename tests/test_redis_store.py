@@ -2,7 +2,12 @@ import copy
 import json
 import unittest
 
-from bin.redis_store import RedisStore, SnapshotDecodeError
+from bin.redis_store import (
+    NamespacedRedis,
+    RedisStore,
+    SnapshotDecodeError,
+    redis_key_prefix,
+)
 
 
 class FakeRedis:
@@ -54,23 +59,35 @@ class RedisStoreTests(unittest.TestCase):
         self.redis = FakeRedis()
         self.store = RedisStore(self.redis)
 
+    def test_application_and_node_namespace_is_applied_at_io_boundary(self):
+        raw = FakeRedis()
+        store = RedisStore(NamespacedRedis(raw, "mediamtx-monitor:", "local"))
+
+        store.write_snapshot("streams:latest", {"ok": True})
+
+        self.assertIn("mediamtx-monitor:node:local:streams:latest", raw.values)
+        self.assertEqual(
+            redis_key_prefix("mediamtx-monitor:", "node-a"),
+            "mediamtx-monitor:node:node-a:",
+        )
+
     def test_write_serializes_snapshot_to_supplied_key_without_ttl(self):
         snapshot = {"streams": [{"name": "camera/main"}]}
 
-        self.store.write_snapshot("mediamtx:streams:latest", snapshot)
+        self.store.write_snapshot("streams:latest", snapshot)
 
         self.assertEqual(self.redis.set_calls, [(
-            "mediamtx:streams:latest",
+            "streams:latest",
             json.dumps(snapshot),
         )])
 
     def test_read_decodes_snapshot(self):
-        self.redis.values["mediamtx:system:latest"] = json.dumps({
+        self.redis.values["system:latest"] = json.dumps({
             "cpu_percent": 12.5,
         })
 
         self.assertEqual(
-            self.store.read_snapshot("mediamtx:system:latest"),
+            self.store.read_snapshot("system:latest"),
             {"cpu_percent": 12.5},
         )
 

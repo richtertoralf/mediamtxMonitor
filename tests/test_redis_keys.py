@@ -20,14 +20,14 @@ from bin.redis_keys import (
 
 
 class SnapshotKeyTests(unittest.TestCase):
-    def test_existing_snapshot_defaults_are_unchanged(self):
-        self.assertEqual(DEFAULT_STREAM_SNAPSHOT_KEY, "mediamtx:streams:latest")
-        self.assertEqual(DEFAULT_SYSTEM_SNAPSHOT_KEY, "mediamtx:system:latest")
+    def test_snapshot_defaults_are_functional_keys(self):
+        self.assertEqual(DEFAULT_STREAM_SNAPSHOT_KEY, "streams:latest")
+        self.assertEqual(DEFAULT_SYSTEM_SNAPSHOT_KEY, "system:latest")
 
     def test_stream_freshness_is_a_snapshot_sidecar(self):
         self.assertEqual(
-            stream_snapshot_freshness_key("mediamtx:streams:latest"),
-            "mediamtx:streams:latest:collected_at",
+            stream_snapshot_freshness_key("streams:latest"),
+            "streams:latest:collected_at",
         )
 
 

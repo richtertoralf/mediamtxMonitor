@@ -24,7 +24,7 @@ try:
         load_monitoring_config,
         resolve_monitoring_config,
     )
-    from .redis_store import RedisStore, SnapshotDecodeError
+    from .redis_store import NamespacedRedis, RedisStore, SnapshotDecodeError
     from .redis_keys import stream_snapshot_freshness_key
 except ImportError:
     from monitoring_config import (
@@ -32,7 +32,7 @@ except ImportError:
         load_monitoring_config,
         resolve_monitoring_config,
     )
-    from redis_store import RedisStore, SnapshotDecodeError
+    from redis_store import NamespacedRedis, RedisStore, SnapshotDecodeError
     from redis_keys import stream_snapshot_freshness_key
 
 config = resolve_monitoring_config({})
@@ -48,10 +48,10 @@ snapshot_store = None
 
 
 def load_runtime_config(path: Path | str = DEFAULT_CONFIG_PATH) -> dict:
-    """Load normalized runtime settings, falling back to compatible defaults."""
+    """Load normalized settings, defaulting only when the file is unavailable."""
     try:
         return resolve_monitoring_config(load_monitoring_config(path))
-    except Exception as exc:
+    except OSError as exc:
         print(f"⚠️ Fehler beim Laden der Konfiguration: {exc}")
         return resolve_monitoring_config({})
 
@@ -87,7 +87,10 @@ def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
         logging.warning("Monitor version file could not be read: %s", VERSION_PATH)
 
     try:
-        r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+        raw_redis = redis.Redis(
+            host=REDIS_HOST, port=REDIS_PORT, decode_responses=True
+        )
+        r = NamespacedRedis(raw_redis, redis_cfg["namespace"], config["node"]["id"])
         r.ping()
         snapshot_store = RedisStore(r)
         logging.info("🔌 Verbindung zu Redis hergestellt.")

@@ -25,14 +25,14 @@ try:
         load_monitoring_config,
         resolve_monitoring_config,
     )
-    from .redis_store import RedisStore
+    from .redis_store import NamespacedRedis, RedisStore
 except ImportError:
     from monitoring_config import (
         DEFAULT_CONFIG_PATH,
         load_monitoring_config,
         resolve_monitoring_config,
     )
-    from redis_store import RedisStore
+    from redis_store import NamespacedRedis, RedisStore
 
 config = resolve_monitoring_config({})
 redis_cfg = config["redis"]
@@ -90,7 +90,10 @@ def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
         print(f"❌ Fehler beim Laden der Konfigurationsdatei: {exc}")
         sys.exit(1)
     try:
-        r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+        raw_redis = redis.Redis(
+            host=REDIS_HOST, port=REDIS_PORT, decode_responses=True
+        )
+        r = NamespacedRedis(raw_redis, redis_cfg["namespace"], config["node"]["id"])
         r.ping()
         snapshot_store = RedisStore(r)
         logging.info("🔌 Verbindung zu Redis hergestellt.")
