@@ -163,19 +163,6 @@ export function renderNonSrtMetrics(connection, direction, totalBytes) {
   return renderMetrics(metrics);
 }
 
-function renderConnectionMetrics(connection, direction, stream = null) {
-  const totalBytes = connectionTotal(connection, direction, stream);
-  const historyKey = connectionTelemetryKey(
-    stream?.name,
-    direction === "in" ? "publisher" : "reader",
-    connection,
-  );
-  return connection?.type === "srtConn"
-    ? renderSrtMetrics(connection, direction, totalBytes, historyKey)
-    : renderNonSrtMetrics(connection, direction, totalBytes)
-      + (direction === "in" ? renderPathMetrics(stream) : "");
-}
-
 export function renderPathMetrics(stream) {
   const windows = stream?.path_metrics?.window_metrics?.protocol_counters || {};
   const item = renderCounterWindows("Path Frame Error", windows, "frame_error");
