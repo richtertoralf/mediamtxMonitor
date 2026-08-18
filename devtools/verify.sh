@@ -32,7 +32,7 @@ readonly SHELL_SCRIPTS=(
     uninstall.sh
     mediamtx-monitor
     cli-tools/mediamtx_paths.sh
-    cli-tools/showActivePhats_table.sh
+    cli-tools/showActivePaths_table.sh
     cli-tools/srt-data_table.sh
     devtools/deploy-dev.sh
     devtools/verify.sh

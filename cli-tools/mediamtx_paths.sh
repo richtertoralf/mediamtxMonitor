@@ -15,7 +15,7 @@
 # - Empfangene und gesendete Bytes (in Megabyte)
 # - Aktive Leser (readers) wie HLS, WebRTC etc.
 #
-# Nur "ready == true"-Streams werden gelistet. Die Ausgabe ist kompakt und 
+# Nur "online == true"-Streams werden gelistet. Die Ausgabe ist kompakt und
 # übersichtlich strukturiert – optimiert für schmale Displays.
 # ============================================================================
 

@@ -16,8 +16,12 @@ echo "$json_data" | jq -r '
 select(.online == true) |
 [.name, .source.type, ([.tracks2[].codec] | join(", ")), .inboundBytes, .outboundBytes, ([.readers[].type] | join(", "))] |
 @tsv' | while IFS=$'\t' read -r name type tracks bytes_rx bytes_tx readers; do
-    status="✅"  # nur grüner Status, weil .online bereits true ist
-    [ -z "$readers" ] && readers="-"
+    if [ -z "$readers" ]; then
+        status="⚠️ "   # Stream läuft, aber aktuell kein Reader verbunden
+        readers="-"
+    else
+        status="✅ "
+    fi
     printf " %-3s %-24s %-12s %-24s %-15s %-15s %-10s\n" \
            "$status" "$name" "$type" "$tracks" "$bytes_rx" "$bytes_tx" "$readers"
 done
