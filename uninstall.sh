@@ -2,16 +2,13 @@
 set -Eeuo pipefail
 
 readonly INSTALL_DIR="/opt/mediamtx-monitoring-backend"
-readonly MEDIAMTX_BIN="/usr/local/bin/mediamtx"
 readonly MONITOR_CLI="/usr/local/bin/mediamtx-monitor"
-readonly MEDIAMTX_CONFIG="/usr/local/etc/mediamtx.yml"
 readonly SERVICE_DIR="/etc/systemd/system"
 readonly SERVICE_USER="mediamtxmon"
 readonly SERVICE_GROUP="mediamtxmon"
 readonly LEGACY_PROGRAM_FILE="$INSTALL_DIR/bin/mediamtx_systeminfo.py"
 
 SERVICES=(
-  mediamtx.service
   mediamtx-api.service
   mediamtx-collector.service
   mediamtx-system.service
@@ -26,12 +23,8 @@ fi
 
 printf 'Deinstalliere MediaMTX Monitor.\n\n'
 
-printf 'WARNUNG:\n'
-printf 'Dieses Skript entfernt auch MediaMTX selbst sowie die komplette\n'
-printf 'MediaMTX-Konfiguration unter:\n'
-printf '  %s\n' "$MEDIAMTX_CONFIG"
-printf 'Eine dort vorhandene individuelle oder manuell angepasste\n'
-printf 'MediaMTX-Konfiguration wird dabei unwiderruflich gelöscht.\n\n'
+printf 'Shared Infrastructure bleibt erhalten:\n'
+printf '  MediaMTX-Unit, Binary und Konfiguration werden nicht entfernt.\n\n'
 
 # Dienste stoppen und deaktivieren.
 for service in "${SERVICES[@]}"; do
@@ -67,22 +60,10 @@ if [ -e "$LEGACY_PROGRAM_FILE" ] || [ -L "$LEGACY_PROGRAM_FILE" ]; then
   rm -f -- "$LEGACY_PROGRAM_FILE"
 fi
 
-# MediaMTX-Binary entfernen.
-if [ -e "$MEDIAMTX_BIN" ] || [ -L "$MEDIAMTX_BIN" ]; then
-  printf 'Entferne MediaMTX: %s\n' "$MEDIAMTX_BIN"
-  rm -f -- "$MEDIAMTX_BIN"
-fi
-
 # Monitor-Kommando entfernen.
 if [ -e "$MONITOR_CLI" ] || [ -L "$MONITOR_CLI" ]; then
   printf 'Entferne Monitor-Kommando: %s\n' "$MONITOR_CLI"
   rm -f -- "$MONITOR_CLI"
-fi
-
-# MediaMTX-Konfiguration entfernen.
-if [ -e "$MEDIAMTX_CONFIG" ] || [ -L "$MEDIAMTX_CONFIG" ]; then
-  printf 'Entferne MediaMTX-Konfiguration: %s\n' "$MEDIAMTX_CONFIG"
-  rm -f -- "$MEDIAMTX_CONFIG"
 fi
 
 # Monitoring-Backend einschließlich Python-Venv entfernen.
@@ -104,5 +85,5 @@ if getent group "$SERVICE_GROUP" >/dev/null 2>&1; then
 fi
 
 printf '\nDeinstallation abgeschlossen.\n'
-printf 'MediaMTX einschließlich der MediaMTX-Konfiguration wurde entfernt.\n'
+printf 'MediaMTX einschließlich Unit, Binary und Konfiguration blieb erhalten.\n'
 printf 'Systempakete wie Redis, FFmpeg und Python wurden nicht entfernt.\n'

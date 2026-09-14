@@ -86,20 +86,23 @@ Nicht Debian-basierte Linux-Distributionen werden vom Installer abgelehnt.
 32-Bit-x86-Systeme mit i386-/i686-Architektur werden ebenfalls abgelehnt, da
 dafür kein vorgesehenes MediaMTX-Archiv existiert.
 
-**Der Installer ist nur für frische Installationen vorgesehen. Existierende oder 
-angepasste MediaMTX- oder Monitor-Installationen werden nicht überschrieben oder
-aktualisiert.**
+`sudo ./install.sh` wählt automatisch zwischen Fresh-Installation und der
+Wiederverwendung einer vollständig vorhandenen MediaMTX-Installation. Bei
+Wiederverwendung werden MediaMTX-Binary, Unit und globale Konfiguration nur
+geprüft und nicht verändert. Ein unvollständiger MediaMTX-Zustand bricht vor
+jeder Änderung ab.
 
 ## Installation
 
 ```bash
-sudo ./install.sh 1.20.0
+sudo ./install.sh
 ```
 
-Die vollständige Neuinstallation wurde mit MediaMTX v1.20.0 auf Ubuntu Server
-24.04 LTS amd64 getestet. Die gewünschte MediaMTX-Version wird vom Benutzer
-gewählt und muss mindestens v1.20.0 sein; ein optionales führendes `v` ist
-erlaubt. Der Installer sucht nicht automatisch nach der neuesten Version.
+Die Fresh-Installation wurde mit MediaMTX v1.20.0 auf Ubuntu Server 24.04 LTS
+amd64 getestet. Diese Version ist als getesteter Repository-Default festgelegt.
+Für einen ausdrücklich gewünschten Fresh-Stand kann optional
+`--mediamtx-version VERSION` angegeben werden; bei vorhandener MediaMTX-
+Infrastruktur wird diese Angabe nicht angewendet.
 
 Der Installer ermittelt:
 
@@ -213,6 +216,11 @@ betreiben. Dabei müssen sie selbst alle benötigten Rechte berücksichtigen,
 unter anderem für Konfiguration, automatisch erzeugte oder verwendete
 Zertifikate, Aufzeichnungen, Logs, Hooks sowie weitere von der jeweiligen
 MediaMTX-Konfiguration verwendete Dateien und Verzeichnisse.
+
+Die Deinstallation der Monitor-Anwendung entfernt ausschließlich deren
+eigene Ressourcen. `mediamtx.service`, das MediaMTX-Binary und die globale
+`mediamtx.yml` bleiben erhalten; eine Entfernung gemeinsamer Infrastruktur ist
+eine separate Betreiberoperation.
 
 ## Ports
 

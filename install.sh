@@ -9,6 +9,8 @@ readonly SERVICE_DIR="/etc/systemd/system"
 readonly SERVICE_USER="mediamtxmon"
 readonly SERVICE_GROUP="mediamtxmon"
 readonly MINIMUM_MEDIAMTX_VERSION="1.20.0"
+readonly DEFAULT_MEDIAMTX_VERSION="1.20.0"
+INSTALL_MODE=""
 
 fail() {
   printf 'Fehler: %s\n' "$*" >&2
@@ -20,22 +22,25 @@ warn() {
 }
 
 usage() {
-  printf 'Verwendung: sudo ./install.sh <MediaMTX-Version>\n' >&2
-  printf 'Beispiel:   sudo ./install.sh 1.2.3\n' >&2
+  printf 'Verwendung: sudo ./install.sh [--mediamtx-version VERSION]\n' >&2
 }
 
-if [ "$#" -ne 1 ]; then
+MEDIAMTX_VERSION="$DEFAULT_MEDIAMTX_VERSION"
+if [ "$#" -eq 0 ]; then
+  :
+elif [ "$#" -eq 2 ] && [ "$1" = "--mediamtx-version" ]; then
+  MEDIAMTX_VERSION="${2#v}"
+else
   usage
   exit 2
 fi
 
-VERSION_INPUT=$1
-if [[ ! "$VERSION_INPUT" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  printf 'Fehler: Ungültige MediaMTX-Version: %s\n' "$VERSION_INPUT" >&2
+if [[ ! "$MEDIAMTX_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  printf 'Fehler: Ungültige MediaMTX-Version: %s\n' "$MEDIAMTX_VERSION" >&2
   usage
   exit 2
 fi
-readonly MEDIAMTX_VERSION="${VERSION_INPUT#v}"
+readonly MEDIAMTX_VERSION
 version_is_at_least() {
   local current_major current_minor current_patch minimum_major minimum_minor minimum_patch
   IFS=. read -r current_major current_minor current_patch <<< "$1"
@@ -46,7 +51,7 @@ version_is_at_least() {
 }
 version_is_at_least "$MEDIAMTX_VERSION" "$MINIMUM_MEDIAMTX_VERSION" || \
   fail "MediaMTX v$MEDIAMTX_VERSION wird nicht unterstützt; erforderlich ist v$MINIMUM_MEDIAMTX_VERSION oder neuer."
-printf 'Gewählte MediaMTX-Version: v%s\n' "$MEDIAMTX_VERSION"
+printf 'Verwendete MediaMTX-Version für den Fresh-Pfad: v%s\n' "$MEDIAMTX_VERSION"
 printf 'Die automatische Ergänzung der offiziellen MediaMTX-Konfiguration wurde mit MediaMTX v1.20.0 getestet.\n'
 
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
@@ -165,23 +170,75 @@ for source_glob in "$SCRIPT_DIR"/bin/*.py "$SCRIPT_DIR"/static/css/*.css "$SCRIP
   [ -f "$source_glob" ] || fail "Erforderliche Repository-Datei fehlt: $source_glob"
 done
 
-existing_targets=(
-  "$INSTALL_DIR"
-  "$MEDIAMTX_BIN"
-  "$MONITOR_CLI"
-  "$MEDIAMTX_CONFIG"
-  "$SERVICE_DIR/mediamtx.service"
-  "$SERVICE_DIR/mediamtx-api.service"
-  "$SERVICE_DIR/mediamtx-collector.service"
-  "$SERVICE_DIR/mediamtx-system.service"
-)
+binary_present=false
+config_present=false
+unit_present=false
+path_mediamtx="$(command -v mediamtx 2>/dev/null || true)"
+foreign_path=false
+if [ -n "$path_mediamtx" ] && [ "$path_mediamtx" != "$MEDIAMTX_BIN" ]; then
+  foreign_path=true
+fi
+[ -e "$MEDIAMTX_BIN" ] || [ -L "$MEDIAMTX_BIN" ] && binary_present=true
+[ -e "$MEDIAMTX_CONFIG" ] || [ -L "$MEDIAMTX_CONFIG" ] && config_present=true
+unit_load_state="$(systemctl show mediamtx.service --property=LoadState --value 2>/dev/null || true)"
+case "$unit_load_state" in
+  loaded|masked)
+    unit_present=true
+    ;;
+esac
+
+if [ "$foreign_path" = true ]; then
+  printf 'Konflikt: Eine andere MediaMTX-Binary ist im PATH sichtbar: %s\n' "$path_mediamtx" >&2
+  printf 'Die Installation wurde nicht verändert.\n' >&2
+  exit 1
+elif [ "$binary_present" = false ] && [ "$config_present" = false ] && [ "$unit_present" = false ] && [ -z "$path_mediamtx" ]; then
+  INSTALL_MODE=fresh
+  printf 'Keine vorhandene MediaMTX-Installation erkannt.\n'
+elif [ "$binary_present" = true ] && [ "$config_present" = true ] && [ "$unit_present" = true ]; then
+  if [ ! -x "$MEDIAMTX_BIN" ] || [ ! -r "$MEDIAMTX_CONFIG" ] || ! systemctl is-active --quiet mediamtx.service; then
+    printf 'Unvollständige MediaMTX-Installation erkannt.\n\n' >&2
+    printf 'Binary:        %s\n' "$([ -x "$MEDIAMTX_BIN" ] && printf vorhanden || printf fehlt)" >&2
+    printf 'Konfiguration: %s\n' "$([ -r "$MEDIAMTX_CONFIG" ] && printf vorhanden || printf fehlt)" >&2
+    printf 'systemd Unit:  bekannt, Dienst nicht verwendbar\n' >&2
+    printf '\nDie Installation wurde nicht verändert.\nBitte bestehende MediaMTX-Installation prüfen.\n' >&2
+    exit 1
+  fi
+  INSTALL_MODE=reuse
+  printf 'Vorhandene MediaMTX-Installation erkannt.\n'
+  printf 'MediaMTX wird unverändert weiterverwendet.\n\n'
+else
+  printf 'Unvollständige MediaMTX-Installation erkannt.\n\n' >&2
+  printf 'Binary:        %s\n' "$([ "$binary_present" = true ] && printf vorhanden || printf fehlt)" >&2
+  printf 'Konfiguration: %s\n' "$([ "$config_present" = true ] && printf vorhanden || printf fehlt)" >&2
+  printf 'systemd Unit:  %s\n' "$([ "$unit_present" = true ] && printf bekannt || printf fehlt)" >&2
+  printf '\nDie Installation wurde nicht verändert.\nBitte bestehende MediaMTX-Installation prüfen.\n' >&2
+  exit 1
+fi
+
+if [ "$INSTALL_MODE" = reuse ]; then
+  existing_targets=(
+    "$INSTALL_DIR"
+    "$MONITOR_CLI"
+    "$SERVICE_DIR/mediamtx-api.service"
+    "$SERVICE_DIR/mediamtx-collector.service"
+    "$SERVICE_DIR/mediamtx-system.service"
+  )
+else
+  existing_targets=(
+    "$INSTALL_DIR"
+    "$MEDIAMTX_BIN"
+    "$MONITOR_CLI"
+    "$MEDIAMTX_CONFIG"
+    "$SERVICE_DIR/mediamtx.service"
+    "$SERVICE_DIR/mediamtx-api.service"
+    "$SERVICE_DIR/mediamtx-collector.service"
+    "$SERVICE_DIR/mediamtx-system.service"
+  )
+fi
 for target in "${existing_targets[@]}"; do
   [ ! -e "$target" ] || fail "Ziel existiert bereits; es wird nichts überschrieben: $target"
 done
 
-if command -v mediamtx >/dev/null 2>&1; then
-  fail "Eine MediaMTX-Installation ist bereits im PATH vorhanden; es wird nichts verändert."
-fi
 if getent passwd "$SERVICE_USER" >/dev/null 2>&1 || getent group "$SERVICE_GROUP" >/dev/null 2>&1; then
   fail "Benutzer oder Gruppe $SERVICE_USER existiert bereits; dieser Installer ist nur für frische Installationen."
 fi
@@ -205,6 +262,7 @@ apt-get install -y --no-install-recommends \
   tar \
   util-linux
 
+if [ "$INSTALL_MODE" = fresh ]; then
 TEMP_DIR=$(mktemp -d)
 trap 'rm -rf -- "$TEMP_DIR"' EXIT
 
@@ -296,6 +354,7 @@ if len(re.findall(r"__preview__", text)) != 1:
 
 output_path.write_text(text, encoding="utf-8")
 PY
+fi
 
 groupadd --system "$SERVICE_GROUP"
 useradd \
@@ -307,9 +366,13 @@ useradd \
   "$SERVICE_USER"
 
 install -d -m 0755 /usr/local/bin /usr/local/etc
-install -o root -g root -m 0755 "$TEMP_DIR/extract/mediamtx" "$MEDIAMTX_BIN"
+if [ "$INSTALL_MODE" = fresh ]; then
+  install -o root -g root -m 0755 "$TEMP_DIR/extract/mediamtx" "$MEDIAMTX_BIN"
+fi
 install -o root -g root -m 0755 "$SCRIPT_DIR/mediamtx-monitor" "$MONITOR_CLI"
-install -o root -g root -m 0644 "$TEMP_DIR/mediamtx.yml" "$MEDIAMTX_CONFIG"
+if [ "$INSTALL_MODE" = fresh ]; then
+  install -o root -g root -m 0644 "$TEMP_DIR/mediamtx.yml" "$MEDIAMTX_CONFIG"
+fi
 
 install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 0755 "$INSTALL_DIR"
 install -d -m 0755 \
@@ -332,13 +395,18 @@ runuser -u "$SERVICE_USER" -- env HOME="$INSTALL_DIR" "$INSTALL_DIR/venv/bin/pyt
   --disable-pip-version-check \
   -r "$INSTALL_DIR/requirements.txt"
 
-for unit in mediamtx.service mediamtx-api.service mediamtx-collector.service mediamtx-system.service; do
+for unit in mediamtx-api.service mediamtx-collector.service mediamtx-system.service; do
   install -m 0644 "$SCRIPT_DIR/systemd/$unit" "$SERVICE_DIR/$unit"
 done
+if [ "$INSTALL_MODE" = fresh ]; then
+  install -m 0644 "$SCRIPT_DIR/systemd/mediamtx.service" "$SERVICE_DIR/mediamtx.service"
+fi
 
 systemctl daemon-reload
 systemctl enable --now redis-server.service
-systemctl enable --now mediamtx.service
+if [ "$INSTALL_MODE" = fresh ]; then
+  systemctl enable --now mediamtx.service
+fi
 systemctl enable --now \
   mediamtx-api.service \
   mediamtx-collector.service \
@@ -346,11 +414,13 @@ systemctl enable --now \
 
 services=(
   redis-server.service
-  mediamtx.service
   mediamtx-api.service
   mediamtx-collector.service
   mediamtx-system.service
 )
+if [ "$INSTALL_MODE" = fresh ]; then
+  services=(redis-server.service mediamtx.service mediamtx-api.service mediamtx-collector.service mediamtx-system.service)
+fi
 for service in "${services[@]}"; do
   if systemctl is-active --quiet "$service"; then
     printf 'Dienst aktiv: %s\n' "$service"
@@ -366,5 +436,9 @@ printf '\nInstallation abgeschlossen.\n'
 printf 'Betriebssystem: %s\n' "$OS_NAME"
 printf 'Architektur: dpkg=%s, uname=%s, MediaMTX=linux_%s\n' \
   "$DEB_ARCH" "$MACHINE_ARCH" "$MEDIAMTX_ARCH"
-printf 'MediaMTX: v%s\n' "$MEDIAMTX_VERSION"
+if [ "$INSTALL_MODE" = fresh ]; then
+  printf 'MediaMTX: v%s\n' "$MEDIAMTX_VERSION"
+else
+  printf 'MediaMTX: vorhandene Installation wiederverwendet\n'
+fi
 printf 'Monitor: http://%s:8080/\n' "$MONITOR_IP"
