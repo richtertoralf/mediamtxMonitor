@@ -62,6 +62,7 @@ try:
         connection_lifecycle_key,
         connection_history_key,
         hls_muxer_metric_key,
+        mediamtx_version_key,
         path_metric_key,
         publisher_connection_key,
         publisher_srt_health_key,
@@ -111,6 +112,7 @@ except ImportError:
         connection_lifecycle_key,
         connection_history_key,
         hls_muxer_metric_key,
+        mediamtx_version_key,
         path_metric_key,
         publisher_connection_key,
         publisher_srt_health_key,
@@ -509,6 +511,12 @@ def collect_and_store() -> Dict[str, float]:
             return metrics
         poll_cache.mediamtx_version = str(mediamtx_version)
         poll_cache.next_version_refresh = now + version_refresh
+        try:
+            snapshot_store.write_snapshot(
+                mediamtx_version_key(REDIS_KEY), poll_cache.mediamtx_version
+            )
+        except Exception as exc:
+            logging.warning("MediaMTX-Version konnte nicht gespeichert werden: %s", exc)
     mediamtx_version = poll_cache.mediamtx_version
     if not is_supported_version(mediamtx_version):
         required = ".".join(str(part) for part in MINIMUM_MEDIAMTX_VERSION)

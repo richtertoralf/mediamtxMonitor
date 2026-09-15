@@ -5,7 +5,7 @@ from unittest import mock
 
 from bin import mediamtx_collector
 from bin.mediamtx_client import MediaMTXRequestError
-from bin.redis_keys import stream_snapshot_freshness_key
+from bin.redis_keys import mediamtx_version_key, stream_snapshot_freshness_key
 from bin.redis_store import RedisStore
 from tests.test_srt_health import FakeRedis
 
@@ -171,6 +171,10 @@ class ConnectionLifecycleTests(unittest.TestCase):
         self.assertEqual(second_metrics["api_request_count"], 2)
         freshness_key = stream_snapshot_freshness_key(mediamtx_collector.REDIS_KEY)
         self.assertEqual(json.loads(self.redis.values[freshness_key]), 4001.0)
+        self.assertEqual(
+            json.loads(self.redis.values[mediamtx_version_key(mediamtx_collector.REDIS_KEY)]),
+            "1.20.0",
+        )
 
     def test_failed_paths_poll_preserves_last_successful_snapshot_and_freshness(self):
         active = LifecycleMediaMTXClient([self.reader("UUID-A", 51001)])

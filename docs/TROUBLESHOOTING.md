@@ -92,6 +92,7 @@ Die Antwort von `GET /api/streams` enthält folgende Top-Level-Felder:
 |---|---|
 | `streams` | Liste des aktuellen normalisierten Stream-Snapshots; leer, wenn kein lesbarer Snapshot vorliegt |
 | `collected_at` | Unix-Zeitpunkt des letzten erfolgreichen Collector-Snapshots oder `null` |
+| `mediamtx_version` | zuletzt erfolgreich über `/v3/info` beobachtete MediaMTX-Version; unabhängig von der Streamliste, bei fehlender Beobachtung `null` |
 | `snapshot_refresh_ms` | konfiguriertes Aktualisierungsintervall für Snapshot-Daten in Millisekunden |
 | `streamlist_refresh_ms` | konfiguriertes HTTP-Pollingintervall der Streamliste in Millisekunden |
 | `systeminfo` | aktueller System-Snapshot; leeres Objekt, wenn keiner lesbar ist |

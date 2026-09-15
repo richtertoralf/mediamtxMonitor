@@ -6,7 +6,7 @@ import types
 import unittest
 from unittest import mock
 
-from bin.redis_keys import stream_snapshot_freshness_key
+from bin.redis_keys import mediamtx_version_key, stream_snapshot_freshness_key
 from bin.redis_store import RedisStore
 
 
@@ -71,6 +71,20 @@ class ApiFreshnessTests(unittest.TestCase):
 
         self.assertEqual(payload["streams"], streams)
         self.assertEqual(payload["collected_at"], 1234.5)
+
+    def test_api_exposes_mediamtx_version_without_streams(self):
+        values = {
+            self.api.REDIS_KEY: json.dumps([]),
+            mediamtx_version_key(self.api.REDIS_KEY): json.dumps("1.20.0"),
+            self.api.SYSTEM_REDIS_KEY: json.dumps({}),
+        }
+        self.api.snapshot_store = RedisStore(FakeRedis(values))
+
+        response = self.api.get_streams()
+        payload = json.loads(response.body)
+
+        self.assertEqual(payload["streams"], [])
+        self.assertEqual(payload["mediamtx_version"], "1.20.0")
 
     def test_api_preserves_system_hostname_and_ipv4_addresses(self):
         systeminfo = {

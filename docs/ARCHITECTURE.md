@@ -255,7 +255,9 @@ diesem schnellen Pfad nur die Detaillisten der dort tatsächlich referenzierten
 Verbindungstypen ab. Der Current Snapshot wird nach jedem erfolgreichen
 Path-Poll vollständig ersetzt. Ein separater Redis-Wert `collected_at` zum
 Snapshot-Key macht den Zeitpunkt des letzten erfolgreichen Schreibens in der
-API sichtbar.
+API sichtbar. Die zuletzt erfolgreich über `/v3/info` beobachtete
+MediaMTX-Version wird zusätzlich als eigener Sidecar-Wert gespeichert und von
+der API unabhängig von einer eventuell leeren Streamliste bereitgestellt.
 
 Langsamer wechselnde bzw. diagnostische Daten bleiben im seriellen Collector,
 werden aber seltener aktualisiert: die MediaMTX-Version alle 60 Sekunden,

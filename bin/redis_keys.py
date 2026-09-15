@@ -50,6 +50,11 @@ def stream_snapshot_freshness_key(snapshot_key: str) -> str:
     return f"{snapshot_key}:collected_at"
 
 
+def mediamtx_version_key(snapshot_key: str) -> str:
+    """Build the last successfully observed MediaMTX-version sidecar."""
+    return f"{snapshot_key}:mediamtx_version"
+
+
 def bitrate_state_keys(base_key: str) -> tuple[str, str, str]:
     """Return previous-byte, timestamp, and EWMA keys for a connection."""
     return (

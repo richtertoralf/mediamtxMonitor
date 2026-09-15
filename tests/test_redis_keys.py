@@ -8,6 +8,7 @@ from bin.redis_keys import (
     connection_lifecycle_key,
     connection_history_key,
     hls_muxer_metric_key,
+    mediamtx_version_key,
     path_metric_key,
     publisher_connection_key,
     publisher_srt_health_key,
@@ -28,6 +29,12 @@ class SnapshotKeyTests(unittest.TestCase):
         self.assertEqual(
             stream_snapshot_freshness_key("streams:latest"),
             "streams:latest:collected_at",
+        )
+
+    def test_mediamtx_version_is_a_snapshot_sidecar(self):
+        self.assertEqual(
+            mediamtx_version_key("streams:latest"),
+            "streams:latest:mediamtx_version",
         )
 
 
