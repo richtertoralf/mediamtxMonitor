@@ -5,6 +5,8 @@ api_server:
   listen_port: 8080
 
 api_base_url: "http://localhost:9997"
+# Browser-reachable HTTP(S) base; set explicitly. Empty disables previews.
+webrtc_base_url: ""
 
 redis:
   host: "localhost"

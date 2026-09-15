@@ -34,6 +34,7 @@ class MonitoringConfigTests(unittest.TestCase):
     def test_complete_default_resolution(self):
         self.assertEqual(resolve_monitoring_config({}), {
             "api_base_url": MONITORING_DEFAULTS["api_base_url"],
+            "webrtc_base_url": "",
             "redis": REDIS_DEFAULTS,
             "node": NODE_DEFAULTS,
             "collector": COLLECTOR_DEFAULTS,

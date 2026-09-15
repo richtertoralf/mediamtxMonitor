@@ -129,7 +129,7 @@ assert.equal((noReaderCard.innerHTML.match(/H\.264 · 1920×1080/g) || []).lengt
 
 const offlineCard = renderStreamCard({name: "offline", available: false, readers: []});
 assert.equal(offlineCard.iframe.attributes.has("src"), false);
-updateStreamCard(offlineCard, {name: "offline", available: true, readers: []});
+updateStreamCard(offlineCard, {name: "offline", available: true, readers: []}, "http://monitor.example:8889");
 assert.equal(
   offlineCard.iframe.attributes.get("src"),
   "http://monitor.example:8889/__preview__/offline?controls=false&muted=true&autoplay=true&playsInline=true",
@@ -200,7 +200,7 @@ const injectionCard = renderStreamCard({
   source: {type: "rtmpConn", details: {}},
   media: {other: [{displayCodec: previewPayload}]},
   readers: [],
-});
+}, "http://monitor.example:8889");
 assert.doesNotMatch(injectionCard.innerHTML, /<svg\b/i);
 assert.doesNotMatch(injectionCard.innerHTML, /<[^>]*\sonload\s*=/i);
 assert.equal(injectionCard.iframe.attributes.get("title"), `Preview: ${previewPayload}`);
@@ -208,3 +208,13 @@ assert.equal(
   injectionCard.iframe.attributes.get("src"),
   "http://monitor.example:8889/__preview__/%22%3E%3Csvg%20onload%3Dalert(1)%3E?controls=false&muted=true&autoplay=true&playsInline=true",
 );
+
+for (const base of ["http://media.example:8899", "https://media.example:9443/preview-proxy/"]) {
+  const card = renderStreamCard({name: "camera/main", available: true}, base);
+  assert.equal(card.iframe.attributes.get("src"),
+    `${base.replace(/\/$/, "")}/__preview__/camera/main?controls=false&muted=true&autoplay=true&playsInline=true`);
+}
+for (const base of ["", "javascript:alert(1)", "https://user:secret@example.test", "https://example.test?token=secret"]) {
+  const card = renderStreamCard({name: "camera", available: true}, base);
+  assert.equal(card.iframe.attributes.has("src"), false);
+}

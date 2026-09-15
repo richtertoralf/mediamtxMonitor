@@ -4,7 +4,7 @@ set -Eeuo pipefail
 readonly INSTALL_DIR="/opt/mediamtx-monitoring-backend"
 readonly MEDIAMTX_BIN="/usr/local/bin/mediamtx"
 readonly MONITOR_CLI="/usr/local/bin/mediamtx-monitor"
-readonly MEDIAMTX_CONFIG="/usr/local/etc/mediamtx.yml"
+MEDIAMTX_CONFIG="/usr/local/etc/mediamtx.yml"
 readonly SERVICE_DIR="/etc/systemd/system"
 readonly SERVICE_USER="mediamtxmon"
 readonly SERVICE_GROUP="mediamtxmon"
@@ -22,18 +22,33 @@ warn() {
 }
 
 usage() {
-  printf 'Verwendung: sudo ./install.sh [--mediamtx-version VERSION]\n' >&2
+  printf 'Verwendung: sudo ./install.sh [--mediamtx-version VERSION] [--mediamtx-api-url URL --mediamtx-webrtc-url URL] [--mediamtx-config DATEI] [--mediamtx-api-port PORT] [--mediamtx-webrtc-port PORT]\n' >&2
 }
 
 MEDIAMTX_VERSION="$DEFAULT_MEDIAMTX_VERSION"
-if [ "$#" -eq 0 ]; then
-  :
-elif [ "$#" -eq 2 ] && [ "$1" = "--mediamtx-version" ]; then
-  MEDIAMTX_VERSION="${2#v}"
-else
-  usage
-  exit 2
-fi
+MEDIAMTX_API_URL=""
+MEDIAMTX_WEBRTC_URL=""
+MEDIAMTX_API_PORT=9997
+MEDIAMTX_WEBRTC_PORT=8889
+PORTS_EXPLICIT=false
+while [ "$#" -gt 0 ]; do
+  [ "$#" -ge 2 ] || { usage; exit 2; }
+  case "$1" in
+    --mediamtx-version) MEDIAMTX_VERSION="${2#v}" ;;
+    --mediamtx-api-url) MEDIAMTX_API_URL="$2" ;;
+    --mediamtx-webrtc-url) MEDIAMTX_WEBRTC_URL="$2" ;;
+    --mediamtx-config) MEDIAMTX_CONFIG="$2" ;;
+    --mediamtx-api-port) MEDIAMTX_API_PORT="$2"; PORTS_EXPLICIT=true ;;
+    --mediamtx-webrtc-port) MEDIAMTX_WEBRTC_PORT="$2"; PORTS_EXPLICIT=true ;;
+    *) usage; exit 2 ;;
+  esac
+  shift 2
+done
+for port in "$MEDIAMTX_API_PORT" "$MEDIAMTX_WEBRTC_PORT"; do
+  if [[ ! "$port" =~ ^[1-9][0-9]{0,4}$ ]] || (( port > 65535 )); then
+    fail "Ungültiger Port."
+  fi
+done
 
 if [[ ! "$MEDIAMTX_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   printf 'Fehler: Ungültige MediaMTX-Version: %s\n' "$MEDIAMTX_VERSION" >&2
@@ -54,23 +69,20 @@ version_is_at_least "$MEDIAMTX_VERSION" "$MINIMUM_MEDIAMTX_VERSION" || \
 printf 'Verwendete MediaMTX-Version für den Fresh-Pfad: v%s\n' "$MEDIAMTX_VERSION"
 printf 'Die automatische Ergänzung der offiziellen MediaMTX-Konfiguration nutzt die MediaMTX-v1.21-Konfiguration.\n'
 
-monitor_config_is_complete() {
-  local config_file="$1"
-  grep -Eq '^[[:space:]]*api:[[:space:]]*true([[:space:]]*#.*)?$' "$config_file" &&
-    grep -Eq '^[[:space:]]*webrtc:[[:space:]]*true([[:space:]]*#.*)?$' "$config_file" &&
-    grep -Eq '^[[:space:]]*"~\^__preview__/\(\.\+\)\$"[[:space:]]*:' "$config_file"
-}
-
 read_runtime_version() {
   local info_json="$1"
   printf '%s' "$info_json" | python3 -c '
 import json
+import re
 import sys
+from datetime import datetime
 try:
-    value = json.load(sys.stdin).get("version")
-except (ValueError, AttributeError):
+    info = json.load(sys.stdin)
+    datetime.fromisoformat(info["started"].replace("Z", "+00:00"))
+    value = info.get("version")
+except (ValueError, AttributeError, KeyError, TypeError):
     value = None
-if isinstance(value, str):
+if isinstance(value, str) and re.fullmatch(r"v?[0-9]+\.[0-9]+\.[0-9]+", value):
     print(value.removeprefix("v"))
 '
 }
@@ -173,6 +185,7 @@ printf 'Architektur: dpkg=%s, uname=%s -> MediaMTX linux_%s\n' \
 
 required_sources=(
   "$SCRIPT_DIR/requirements.txt"
+  "$SCRIPT_DIR/bin/check_reuse_config.py"
   "$SCRIPT_DIR/VERSION"
   "$SCRIPT_DIR/mediamtx-monitor"
   "$SCRIPT_DIR/config/collector.yaml"
@@ -237,32 +250,40 @@ else
 fi
 
 if [ "$INSTALL_MODE" = reuse ]; then
+  [ "$PORTS_EXPLICIT" = false ] || fail "Port-Optionen gelten nur für Fresh Install; Reuse benötigt vollständige URLs."
+  if [ -z "$MEDIAMTX_WEBRTC_URL" ]; then
+    fail "Reuse benötigt --mediamtx-webrtc-url als vom Browser erreichbare Adresse."
+  fi
   existing_version_output=$("$MEDIAMTX_BIN" --version 2>/dev/null || true)
   existing_version=$(printf '%s\n' "$existing_version_output" | grep -Eo 'v?[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 | sed 's/^v//')
   if [ -z "$existing_version" ]; then
-    fail "Die laufende MediaMTX-Version konnte nicht bestimmt werden; erforderlich ist v$MINIMUM_MEDIAMTX_VERSION oder neuer."
+    fail "Die installierte MediaMTX-Version konnte nicht bestimmt werden; erforderlich ist v$MINIMUM_MEDIAMTX_VERSION oder neuer."
   fi
   version_is_at_least "$existing_version" "$MINIMUM_MEDIAMTX_VERSION" || \
     fail "MediaMTX v$existing_version wird nicht unterstützt; erforderlich ist v$MINIMUM_MEDIAMTX_VERSION oder neuer."
   printf 'Installierte MediaMTX-Binary v%s erfüllt die Mindestanforderung.\n' "$existing_version"
-  if ! monitor_config_is_complete "$MEDIAMTX_CONFIG"; then
-    fail "Die vorhandene MediaMTX-Konfiguration enthält nicht die erforderliche Monitor-Integration (Control API, WebRTC und __preview__). Die Installation wurde nicht verändert."
-  fi
   command -v curl >/dev/null 2>&1 || \
     fail "Die erforderliche Control API-Prüfung ist nicht möglich: curl fehlt. Die Installation wurde nicht verändert."
   command -v python3 >/dev/null 2>&1 || \
     fail "Die erforderliche Control API-Prüfung ist nicht möglich: python3 fehlt. Die Installation wurde nicht verändert."
+  if [ -z "$MEDIAMTX_API_URL" ]; then
+    MEDIAMTX_API_URL=$(python3 "$SCRIPT_DIR/bin/check_reuse_config.py" --discover-api "$MEDIAMTX_CONFIG" "$MEDIAMTX_BIN") || \
+      fail "API-Bootstrap abgebrochen. Die Installation wurde nicht verändert."
+  fi
+  python3 "$SCRIPT_DIR/bin/check_reuse_config.py" --validate-urls "$MEDIAMTX_API_URL" "$MEDIAMTX_WEBRTC_URL" || fail "Ungültige Endpoint-Konfiguration."
   runtime_info=$(curl --fail --silent --show-error --max-time 3 \
-    http://127.0.0.1:9997/v3/info 2>/dev/null) || \
-    fail "Die erforderliche Monitor-Integration ist nicht erreichbar: /v3/info konnte nicht gelesen werden. Die Installation wurde nicht verändert."
+    "${MEDIAMTX_API_URL%/}/v3/info" 2>/dev/null) || \
+    fail "Der konfigurierte MediaMTX-Control-API-Endpunkt konnte nicht erreicht werden. Adresse, TLS, Zugriff und Dienstzustand prüfen. Die Installation wurde nicht verändert."
   runtime_version=$(read_runtime_version "$runtime_info")
   if [ -z "$runtime_version" ]; then
-    fail "Die erforderliche Monitor-Integration ist nicht verwendbar: /v3/info enthält keine gültige Runtime-Version. Die Installation wurde nicht verändert."
+    fail "Die erforderliche Monitor-Integration ist nicht verwendbar: /v3/info enthält keine gültige Runtime-Version oder Startzeit. Die Installation wurde nicht verändert."
   fi
   if ! version_is_at_least "$runtime_version" "$MINIMUM_MEDIAMTX_VERSION"; then
     fail "Installierte MediaMTX-Binary v$existing_version erfüllt die Mindestversion, aber der laufende Prozess verwendet noch v$runtime_version. MediaMTX muss kontrolliert neu gestartet werden. Die Installation wurde nicht verändert."
   fi
   printf 'Laufende MediaMTX-Runtime v%s erfüllt die Mindestanforderung.\n' "$runtime_version"
+  python3 "$SCRIPT_DIR/bin/check_reuse_config.py" "$MEDIAMTX_API_URL" || \
+    fail "Die laufende MediaMTX-Konfiguration erfüllt die Monitor-Voraussetzungen nicht. Die Installation wurde nicht verändert."
   "$MEDIAMTX_BIN" "--validate-conf=$MEDIAMTX_CONFIG" >/dev/null || \
     fail "Die vorhandene MediaMTX-Konfiguration wurde von MediaMTX abgelehnt. Die Installation wurde nicht verändert."
   existing_targets=(
@@ -273,6 +294,17 @@ if [ "$INSTALL_MODE" = reuse ]; then
     "$SERVICE_DIR/mediamtx-system.service"
   )
 else
+  [ "$MEDIAMTX_CONFIG" = /usr/local/etc/mediamtx.yml ] || fail "--mediamtx-config gilt nur für Reuse; Fresh verwendet die mitgelieferte Unit. "
+  expected_api_url="http://127.0.0.1:$MEDIAMTX_API_PORT"
+  [ -z "$MEDIAMTX_API_URL" ] || [ "${MEDIAMTX_API_URL%/}" = "$expected_api_url" ] || \
+    fail "Fresh Install erzeugt HTTP auf Loopback; API-Port mit --mediamtx-api-port wählen."
+  MEDIAMTX_API_URL="$expected_api_url"
+  if [ -z "$MEDIAMTX_WEBRTC_URL" ]; then
+    preview_host=$(hostname -I | awk '{print $1}')
+    [ -n "$preview_host" ] || fail "Browser-Adresse fehlt; --mediamtx-webrtc-url angeben."
+    [[ "$preview_host" != *:* ]] || preview_host="[$preview_host]"
+    MEDIAMTX_WEBRTC_URL="http://$preview_host:$MEDIAMTX_WEBRTC_PORT"
+  fi
   existing_targets=(
     "$INSTALL_DIR"
     "$MEDIAMTX_BIN"
@@ -348,7 +380,7 @@ tar -xzf "$TEMP_DIR/$ARCHIVE" -C "$TEMP_DIR/extract" mediamtx mediamtx.yml || \
 python3 - \
   "$TEMP_DIR/extract/mediamtx.yml" \
   "$SCRIPT_DIR/config/monitor-preview-path.yml" \
-  "$TEMP_DIR/mediamtx.yml" <<'PY' || \
+  "$TEMP_DIR/mediamtx.yml" "$MEDIAMTX_API_PORT" "$MEDIAMTX_WEBRTC_PORT" <<'PY' || \
   fail "Die gewählte MediaMTX-Version konnte nicht sicher automatisch ergänzt werden."
 from pathlib import Path
 import re
@@ -366,7 +398,10 @@ if re.search(r"(?m)^paths\s*:", preview) or "all_others:" in preview:
 if "__preview__" not in preview:
     raise SystemExit("Der Preview-Ausschnitt enthält keine __preview__-Regel.")
 
-for key in ("api", "rtsp", "webrtc"):
+settings = {"api": "true", "rtsp": "true", "webrtc": "true",
+            "apiAddress": f'"127.0.0.1:{sys.argv[4]}"', "apiEncryption": "false",
+            "webrtcAddress": f'":{sys.argv[5]}"', "webrtcEncryption": "false"}
+for key, value in settings.items():
     matches = list(re.finditer(rf"(?m)^{key}\s*:[^\n]*$", text))
     if len(matches) != 1:
         raise SystemExit(f"Erwartet wurde genau ein globaler Parameter {key}, gefunden: {len(matches)}")
@@ -376,7 +411,7 @@ for key in ("api", "rtsp", "webrtc"):
     if "#" in line:
         comment = " " + line.split("#", 1)[1].strip()
         comment = " #" + comment.lstrip()
-    text = text[:match.start()] + f"{key}: true{comment}" + text[match.end():]
+    text = text[:match.start()] + f"{key}: {value}{comment}" + text[match.end():]
 
 paths_matches = list(re.finditer(r"(?m)^paths\s*:[^\n]*$", text))
 all_others_matches = list(re.finditer(r"(?m)^  all_others\s*:[^\n]*$", text))
@@ -411,6 +446,8 @@ if [ "$INSTALL_MODE" = fresh ]; then
   printf 'MediaMTX-Konfigurationsvalidierung erfolgreich.\n'
 fi
 
+python3 "$SCRIPT_DIR/bin/check_reuse_config.py" --validate-urls "$MEDIAMTX_API_URL" "$MEDIAMTX_WEBRTC_URL" || fail "Ungültige Endpoint-Konfiguration."
+
 groupadd --system "$SERVICE_GROUP"
 useradd \
   --system \
@@ -438,6 +475,21 @@ install -d -m 0755 \
   "$INSTALL_DIR/static/js"
 install -m 0644 "$SCRIPT_DIR"/bin/*.py "$INSTALL_DIR/bin/"
 install -m 0644 "$SCRIPT_DIR/config/collector.yaml" "$INSTALL_DIR/config/collector.yaml"
+python3 - "$INSTALL_DIR/config/collector.yaml" "$MEDIAMTX_API_URL" "$MEDIAMTX_WEBRTC_URL" <<'PY'
+from pathlib import Path
+import json
+import re
+import sys
+path = Path(sys.argv[1])
+text = path.read_text()
+text, count = re.subn(r'(?m)^api_base_url:.*$', lambda _: 'api_base_url: ' + json.dumps(sys.argv[2].rstrip('/')), text)
+if count != 1:
+    raise SystemExit("Monitor-Vorlage enthält keinen eindeutigen api_base_url.")
+text, count = re.subn(r'(?m)^webrtc_base_url:.*$', lambda _: 'webrtc_base_url: ' + json.dumps(sys.argv[3].rstrip('/')), text)
+if count != 1:
+    raise SystemExit("Monitor-Vorlage enthält keinen eindeutigen webrtc_base_url.")
+path.write_text(text)
+PY
 install -m 0644 "$SCRIPT_DIR/requirements.txt" "$INSTALL_DIR/requirements.txt"
 install -m 0644 "$SCRIPT_DIR/VERSION" "$INSTALL_DIR/VERSION"
 install -m 0644 "$SCRIPT_DIR/static/index.html" "$INSTALL_DIR/static/index.html"

@@ -173,6 +173,7 @@ def get_streams():
     return JSONResponse(content={
         "streams": streams,
         "collected_at": collected_at,
+        "webrtc_base_url": config["webrtc_base_url"],
         "snapshot_refresh_ms": frontend_cfg["snapshot_refresh_ms"],
         "streamlist_refresh_ms": frontend_cfg["streamlist_refresh_ms"],
         "monitor_version": monitor_version,

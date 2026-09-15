@@ -197,6 +197,7 @@ def resolve_monitoring_config(config: Mapping[str, Any]) -> Dict[str, Any]:
         "api_base_url": config.get(
             "api_base_url", MONITORING_DEFAULTS["api_base_url"]
         ),
+        "webrtc_base_url": config.get("webrtc_base_url", ""),
         "redis": resolve_redis_config(config),
         "node": resolve_node_config(config),
         "collector": resolve_collector_config(config),

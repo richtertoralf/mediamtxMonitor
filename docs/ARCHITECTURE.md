@@ -59,9 +59,9 @@ Modulzustand. Systemerfassung und ihr Loop liegen gemeinsam in
 `bin/system_monitor.py`.
 
 Das aktuelle Modell kennt Streams, Publisher und Reader, aber noch keine
-stabile `node_id` und kein Multi-Node-Routing. Preview verwendet im Browser den
-aktuellen Host mit festem HTTP-Schema und WebRTC-Port 8889. Eine
-Node-spezifische Preview-Konfiguration ist noch nicht implementiert.
+stabile `node_id` und kein Multi-Node-Routing. Preview verwendet die explizite `webrtc_base_url` aus der Monitor-Konfiguration.
+Der Collector verwendet `api_base_url`. Schema, Host und Port sind konfigurierbar;
+Multi-Node-Routing ist damit nicht implementiert.
 
 Die vorhandenen Modulgrenzen sind bewusst schrittweise entstanden. Ein dünner
 Collector-Entry-Point, eine FastAPI-App-Factory, vollständig injizierbare Stores

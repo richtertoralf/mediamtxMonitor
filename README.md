@@ -96,6 +96,60 @@ verändert. Dabei müssen Control API, WebRTC und die monitor-eigene
 `__preview__`-Regel bereits vorhanden und `/v3/info` erreichbar sein; andernfalls
 bricht der Reuse-Pfad mit einer verständlichen Meldung vor jeder Änderung ab.
 
+### MediaMTX-Endpoints
+
+`api_base_url` in `config/collector.yaml` ist die Control-API-Basis für den
+Collector. `webrtc_base_url` ist die vom **Browser** erreichbare HTTP(S)-Basis
+für die Vorschau; leer bedeutet keine Preview-Verbindung. Die Monitor-API
+liefert nur die WebRTC-Adresse an das Frontend, nicht die Control-API-Adresse.
+
+Bei Reuse ist die browserseitige WebRTC-URL ausdrücklich erforderlich. Die API-URL
+kann ebenfalls vorgegeben werden, beispielsweise:
+
+```bash
+sudo ./install.sh --mediamtx-api-url http://127.0.0.1:9998 \
+  --mediamtx-webrtc-url https://media.example:9443
+```
+
+Der Betreiber wählt die effektiven Endpoints unter Berücksichtigung der vom
+Dienst verwendeten Datei, `MTX_*`-Overrides, TLS und gegebenenfalls Reverse Proxy.
+Ohne explizite API-URL liest der Installer mit System-PyYAML ausschließlich
+`api`, `apiAddress` und `apiEncryption` aus der MediaMTX-Datei. PyYAML ist zu
+diesem Zeitpunkt nicht durch die spätere Monitor-venv garantiert: Fehlt es,
+endet die Ermittlung mit einem Hinweis auf `python3-yaml` oder die explizite URL.
+Es werden dafür keine Pakete vor den lesenden Vorprüfungen installiert.
+
+Automatischer Bootstrap ist nur beim direkten Dienstaufruf mit genau dieser
+Binary und Datei möglich. Environment-Dateien, `PassEnvironment`, abweichende
+Prozessargumente oder `MTX_API`/`MTX_APIADDRESS`/`MTX_APIENCRYPTION` im laufenden
+Prozess erfordern eine explizite URL. Nicht lesbare Dienst-/Prozessinformationen
+führen ebenfalls zum Abbruch, nicht zum Raten. Wildcard-Bind-Adressen werden
+für den lokalen Zugriff in Loopback übersetzt; TLS-Prüfung bleibt aktiv.
+YAML liefert nur den erwarteten Endpoint, keinen Beweis der laufenden Version.
+`--mediamtx-config DATEI` wählt bei Reuse die zu validierende Datei (Default:
+`/usr/local/etc/mediamtx.yml`); deren Werte sind kein Beweis des Runtime-Zustands.
+Erst `/v3/info` prüft Erreichbarkeit, Runtime-Version und Startzeit. Danach prüfen
+`/v3/config/global/get` und `/v3/config/paths/list` WebRTC und Preview-Hook.
+Bei Fehlern erfolgt ein Abbruch ohne Änderung der bestehenden Installation.
+`--validate-conf` prüft zusätzlich die Datei. Es erfolgen keine YAML-Textprüfungen
+im Reuse-Pfad und kein automatischer Neustart.
+
+Fresh erzeugt HTTP-API auf Loopback (Default 9997) und HTTP-WebRTC auf allen
+Interfaces (Default 8889). `--mediamtx-api-port` und `--mediamtx-webrtc-port`
+ändern diese erzeugten Einstellungen und die Monitor-Konfiguration gemeinsam.
+Die Browser-Adresse wird standardmäßig aus der ersten Host-IP gebildet;
+`--mediamtx-webrtc-url` kann sie explizit setzen, etwa bei einem vorhandenen Proxy.
+Der Installer richtet dafür weder TLS-Zertifikate noch einen Proxy ein.
+HTTPS-URLs bei Reuse benötigen vertrauenswürdige Zertifikate; TLS-Prüfung wird
+nicht umgangen. URLs dürfen keine Zugangsdaten, Query-Parameter oder Fragmente
+enthalten. API-Authentisierung wird durch diese Änderung nicht eingerichtet.
+Browser-Erreichbarkeit, NAT und ICE müssen weiterhin betrieblich geprüft werden.
+
+Bei bestehenden Monitor-Installationen muss `webrtc_base_url` vor dem Einsatz
+dieser Änderung gesetzt werden; es gibt keinen stillen Port-8889-Fallback.
+Die Diagnosewerkzeuge unter `cli-tools/` akzeptieren `MEDIAMTX_API_URL`
+(Default `http://localhost:9997`). Beispiele mit Standardports entsprechend anpassen.
+
 ## Installation
 
 ```bash

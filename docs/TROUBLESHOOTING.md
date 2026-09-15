@@ -125,7 +125,7 @@ Encoder müssen Zielport und MediaMTX-Stream-ID entsprechend gesetzt sein.
 
 ## Vorschaufehler
 
-Die Vorschau verwendet WebRTC auf Port 8889. Beim Öffnen erzeugt MediaMTX den
+Die Vorschau verwendet die konfigurierte `webrtc_base_url` (Fresh-Default: HTTP, Port 8889). Beim Öffnen erzeugt MediaMTX den
 Pfad `__preview__/<stream>` und startet FFmpeg on demand. Prüfen:
 
 ```bash
@@ -138,13 +138,14 @@ sudo journalctl -u mediamtx -n 100 --no-pager
 Der Originalstream muss per lokalem RTSP erreichbar sein. Firewall-, NAT- oder
 ICE-Probleme können die Browser-Vorschau verhindern, obwohl die Control API läuft.
 
-Die aktuelle Weboberfläche bildet die Preview-URL fest als
-`http://<Browser-Host>:8889/__preview__/<Stream>` und setzt damit voraus, dass
-Dashboard und MediaMTX unter demselben Hostnamen erreichbar sind. HTTPS am
-Dashboard, ein Reverse Proxy, ein abweichender MediaMTX-Host oder ein anderer
-WebRTC-Port werden von dieser URL-Bildung derzeit nicht automatisch
-berücksichtigt. Eine konfigurierbare, Node-bezogene Preview-Adresse gehört zum
-späteren Multi-Node-Zielbild.
+Die Weboberfläche verwendet `webrtc_base_url` aus `collector.yaml` und hängt
+`/__preview__/<Stream>` an. Die URL muss vom Browser erreichbar sein und bei
+einem HTTPS-Dashboard Mixed-Content-Regeln berücksichtigen. Ohne gesetzte URL
+wird keine Preview angefordert. Reuse verlangt die WebRTC-URL explizit; die API-URL kann bei eindeutigem
+Dienstaufruf ohne Overrides aus YAML ermittelt oder ausdrücklich gesetzt werden.
+YAML-Datei, Dienstkonfiguration und `MTX_*`-Overrides sind bei ihrer Wahl zu
+berücksichtigen. Ein API-Verbindungsfehler beweist nicht `api: false`.
+
 
 ## `auto.crt: permission denied`
 

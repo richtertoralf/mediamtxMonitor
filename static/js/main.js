@@ -60,11 +60,11 @@ async function updateUI() {
     const existingCard = streamCards.get(stream.name);
 
     if (!existingCard) {
-      const newCard = renderStreamCard(stream);
+      const newCard = renderStreamCard(stream, result.webrtc_base_url);
       container.appendChild(newCard);
       streamCards.set(stream.name, newCard);
     } else {
-      updateStreamCard(existingCard, stream);
+      updateStreamCard(existingCard, stream, result.webrtc_base_url);
     }
   }
 

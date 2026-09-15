@@ -72,6 +72,16 @@ class ApiFreshnessTests(unittest.TestCase):
         self.assertEqual(payload["streams"], streams)
         self.assertEqual(payload["collected_at"], 1234.5)
 
+    def test_api_exposes_only_browser_endpoint(self):
+        self.api.snapshot_store = RedisStore(FakeRedis({}))
+        with mock.patch.dict(self.api.config, {
+            "webrtc_base_url": "https://preview.example:9443",
+            "api_base_url": "http://internal.example:9998",
+        }):
+            payload = json.loads(self.api.get_streams().body)
+        self.assertEqual(payload["webrtc_base_url"], "https://preview.example:9443")
+        self.assertNotIn("api_base_url", payload)
+
     def test_api_exposes_mediamtx_version_without_streams(self):
         values = {
             self.api.REDIS_KEY: json.dumps([]),

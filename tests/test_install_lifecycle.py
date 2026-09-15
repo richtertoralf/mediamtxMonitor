@@ -13,7 +13,7 @@ class InstallLifecycleTests(unittest.TestCase):
         cls.source = (ROOT / "install.sh").read_text(encoding="utf-8")
 
     def test_default_install_is_valid_and_has_tested_version(self):
-        self.assertIn('if [ "$#" -eq 0 ]; then', self.source)
+        self.assertIn('while [ "$#" -gt 0 ]; do', self.source)
         self.assertIn('readonly DEFAULT_MEDIAMTX_VERSION="1.21.0"', self.source)
         self.assertIn('readonly MINIMUM_MEDIAMTX_VERSION="1.21.0"', self.source)
         self.assertIn('MEDIAMTX_VERSION="$DEFAULT_MEDIAMTX_VERSION"', self.source)
@@ -32,9 +32,9 @@ class InstallLifecycleTests(unittest.TestCase):
         self.assertIn('"$TEMP_DIR/extract/mediamtx" "--validate-conf=$TEMP_DIR/mediamtx.yml"', self.source)
 
     def test_reuse_requires_monitor_owned_configuration_and_runtime_api(self):
-        self.assertIn("monitor_config_is_complete", self.source)
-        self.assertIn("Control API, WebRTC und __preview__", self.source)
-        self.assertIn("http://127.0.0.1:9997/v3/info", self.source)
+        self.assertNotIn("monitor_config_is_complete", self.source)
+        self.assertIn("check_reuse_config.py", self.source)
+        self.assertIn('"${MEDIAMTX_API_URL%/}/v3/info"', self.source)
         self.assertIn("read_runtime_version", self.source)
         self.assertIn("python3 fehlt", self.source)
         self.assertIn("Laufende MediaMTX-Runtime", self.source)

@@ -83,22 +83,32 @@ export function renderStreamLeft(stream) {
   `;
 }
 
-function buildPreviewIframeSrc(streamName) {
+function buildPreviewIframeSrc(streamName, webrtcBaseUrl) {
   const encodedPath = String(streamName || "")
     .split("/")
     .map(segment => encodeURIComponent(segment))
     .join("/");
-  return `http://${window.location.hostname}:8889/__preview__/${encodedPath}?controls=false&muted=true&autoplay=true&playsInline=true`;
+  let base;
+  try {
+    base = new URL(webrtcBaseUrl);
+    if (!["http:", "https:"].includes(base.protocol) || base.username || base.password
+        || base.search || base.hash) return null;
+  } catch {
+    return null;
+  }
+  return `${base.href.replace(/\/$/, "")}/__preview__/${encodedPath}?controls=false&muted=true&autoplay=true&playsInline=true`;
 }
 
-function updatePreview(preview, stream) {
+function updatePreview(preview, stream, webrtcBaseUrl) {
   if (!preview) return;
   preview.setAttribute("title", `Preview: ${stream?.name || ""}`);
   if (stream?.available === false) {
     preview.removeAttribute("src");
     return;
   }
-  preview.setAttribute("src", buildPreviewIframeSrc(stream?.name));
+  const src = buildPreviewIframeSrc(stream?.name, webrtcBaseUrl);
+  if (src) preview.setAttribute("src", src);
+  else preview.removeAttribute("src");
 }
 
 function sortedReaders(stream) {
@@ -144,7 +154,7 @@ function renderRightContent(stream) {
 }
 
 /** Render a complete stream card with a fixed semantic three-part flow. */
-export function renderStreamCard(stream) {
+export function renderStreamCard(stream, webrtcBaseUrl = "") {
   const card = document.createElement("article");
   card.className = "stream-card";
   card.innerHTML = `
@@ -160,12 +170,12 @@ export function renderStreamCard(stream) {
     </div>
   `;
 
-  updatePreview(card.querySelector(".preview-frame"), stream);
+  updatePreview(card.querySelector(".preview-frame"), stream, webrtcBaseUrl);
   return card;
 }
 
 /** Update changing metrics while preserving the existing preview iframe. */
-export function updateStreamCard(card, stream) {
+export function updateStreamCard(card, stream, webrtcBaseUrl = "") {
   const header = card.querySelector(".stream-header");
   const left = card.querySelector(".stream-left");
   const media = card.querySelector(".media-summary");
@@ -175,5 +185,5 @@ export function updateStreamCard(card, stream) {
   if (left) left.outerHTML = renderStreamLeft(stream);
   if (media) media.innerHTML = renderMedia(stream);
   if (right) right.innerHTML = renderRightContent(stream);
-  updatePreview(card.querySelector(".preview-frame"), stream);
+  updatePreview(card.querySelector(".preview-frame"), stream, webrtcBaseUrl);
 }

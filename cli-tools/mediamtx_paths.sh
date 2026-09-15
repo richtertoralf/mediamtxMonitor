@@ -20,7 +20,7 @@
 # ============================================================================
 
 
-API_URL="http://localhost:9997/v3/paths/list"
+API_URL="${MEDIAMTX_API_URL:-http://localhost:9997}/v3/paths/list"
 
 # Farben (Terminal-freundlich)
 BOLD=$(tput bold)
