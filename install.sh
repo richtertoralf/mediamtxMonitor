@@ -54,6 +54,27 @@ version_is_at_least "$MEDIAMTX_VERSION" "$MINIMUM_MEDIAMTX_VERSION" || \
 printf 'Verwendete MediaMTX-Version für den Fresh-Pfad: v%s\n' "$MEDIAMTX_VERSION"
 printf 'Die automatische Ergänzung der offiziellen MediaMTX-Konfiguration nutzt die MediaMTX-v1.21-Konfiguration.\n'
 
+monitor_config_is_complete() {
+  local config_file="$1"
+  grep -Eq '^[[:space:]]*api:[[:space:]]*true([[:space:]]*#.*)?$' "$config_file" &&
+    grep -Eq '^[[:space:]]*webrtc:[[:space:]]*true([[:space:]]*#.*)?$' "$config_file" &&
+    grep -Eq '^[[:space:]]*"~\^__preview__/\(\.\+\)\$"[[:space:]]*:' "$config_file"
+}
+
+read_runtime_version() {
+  local info_json="$1"
+  printf '%s' "$info_json" | python3 -c '
+import json
+import sys
+try:
+    value = json.load(sys.stdin).get("version")
+except (ValueError, AttributeError):
+    value = None
+if isinstance(value, str):
+    print(value.removeprefix("v"))
+'
+}
+
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
   fail "Root-Rechte sind erforderlich. Aufruf: sudo ./install.sh"
 fi
@@ -223,7 +244,27 @@ if [ "$INSTALL_MODE" = reuse ]; then
   fi
   version_is_at_least "$existing_version" "$MINIMUM_MEDIAMTX_VERSION" || \
     fail "MediaMTX v$existing_version wird nicht unterstützt; erforderlich ist v$MINIMUM_MEDIAMTX_VERSION oder neuer."
-  printf 'Vorhandene MediaMTX-Version v%s erfüllt die Mindestanforderung.\n' "$existing_version"
+  printf 'Installierte MediaMTX-Binary v%s erfüllt die Mindestanforderung.\n' "$existing_version"
+  if ! monitor_config_is_complete "$MEDIAMTX_CONFIG"; then
+    fail "Die vorhandene MediaMTX-Konfiguration enthält nicht die erforderliche Monitor-Integration (Control API, WebRTC und __preview__). Die Installation wurde nicht verändert."
+  fi
+  command -v curl >/dev/null 2>&1 || \
+    fail "Die erforderliche Control API-Prüfung ist nicht möglich: curl fehlt. Die Installation wurde nicht verändert."
+  command -v python3 >/dev/null 2>&1 || \
+    fail "Die erforderliche Control API-Prüfung ist nicht möglich: python3 fehlt. Die Installation wurde nicht verändert."
+  runtime_info=$(curl --fail --silent --show-error --max-time 3 \
+    http://127.0.0.1:9997/v3/info 2>/dev/null) || \
+    fail "Die erforderliche Monitor-Integration ist nicht erreichbar: /v3/info konnte nicht gelesen werden. Die Installation wurde nicht verändert."
+  runtime_version=$(read_runtime_version "$runtime_info")
+  if [ -z "$runtime_version" ]; then
+    fail "Die erforderliche Monitor-Integration ist nicht verwendbar: /v3/info enthält keine gültige Runtime-Version. Die Installation wurde nicht verändert."
+  fi
+  if ! version_is_at_least "$runtime_version" "$MINIMUM_MEDIAMTX_VERSION"; then
+    fail "Installierte MediaMTX-Binary v$existing_version erfüllt die Mindestversion, aber der laufende Prozess verwendet noch v$runtime_version. MediaMTX muss kontrolliert neu gestartet werden. Die Installation wurde nicht verändert."
+  fi
+  printf 'Laufende MediaMTX-Runtime v%s erfüllt die Mindestanforderung.\n' "$runtime_version"
+  "$MEDIAMTX_BIN" "--validate-conf=$MEDIAMTX_CONFIG" >/dev/null || \
+    fail "Die vorhandene MediaMTX-Konfiguration wurde von MediaMTX abgelehnt. Die Installation wurde nicht verändert."
   existing_targets=(
     "$INSTALL_DIR"
     "$MONITOR_CLI"

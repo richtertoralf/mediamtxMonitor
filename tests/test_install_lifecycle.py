@@ -30,6 +30,20 @@ class InstallLifecycleTests(unittest.TestCase):
         self.assertIn('"$MEDIAMTX_BIN" --version', self.source)
         self.assertIn('MediaMTX-Version konnte nicht bestimmt werden', self.source)
         self.assertIn('"$TEMP_DIR/extract/mediamtx" "--validate-conf=$TEMP_DIR/mediamtx.yml"', self.source)
+
+    def test_reuse_requires_monitor_owned_configuration_and_runtime_api(self):
+        self.assertIn("monitor_config_is_complete", self.source)
+        self.assertIn("Control API, WebRTC und __preview__", self.source)
+        self.assertIn("http://127.0.0.1:9997/v3/info", self.source)
+        self.assertIn("read_runtime_version", self.source)
+        self.assertIn("python3 fehlt", self.source)
+        self.assertIn("Laufende MediaMTX-Runtime", self.source)
+
+    def test_reuse_reports_binary_runtime_version_mismatch_without_restart(self):
+        self.assertIn("Installierte MediaMTX-Binary v$existing_version", self.source)
+        self.assertIn("laufende Prozess verwendet noch v$runtime_version", self.source)
+        self.assertIn("kontrolliert neu gestartet werden", self.source)
+        self.assertNotIn("systemctl restart mediamtx", self.source)
         self.assertIn('if [ "$INSTALL_MODE" = fresh ]; then\n  install -o root -g root -m 0755', self.source)
         self.assertIn('if [ "$INSTALL_MODE" = fresh ]; then\n  install -o root -g root -m 0644', self.source)
 

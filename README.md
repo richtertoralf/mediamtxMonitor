@@ -92,7 +92,9 @@ Laufzeit benötigt MediaMTX v1.21.0 oder neuer; bei einer Fresh-Installation
 richtet der Installer diese MediaMTX-Installation zusammen mit Redis, FFmpeg,
 Python-Venv und den Monitor-Diensten ein. Bei Wiederverwendung werden
 MediaMTX-Binary, Unit und globale Konfiguration nur geprüft und nicht
-verändert. Ein unvollständiger MediaMTX-Zustand bricht vor jeder Änderung ab.
+verändert. Dabei müssen Control API, WebRTC und die monitor-eigene
+`__preview__`-Regel bereits vorhanden und `/v3/info` erreichbar sein; andernfalls
+bricht der Reuse-Pfad mit einer verständlichen Meldung vor jeder Änderung ab.
 
 ## Installation
 
