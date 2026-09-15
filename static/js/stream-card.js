@@ -91,6 +91,16 @@ function buildPreviewIframeSrc(streamName) {
   return `http://${window.location.hostname}:8889/__preview__/${encodedPath}?controls=false&muted=true&autoplay=true&playsInline=true`;
 }
 
+function updatePreview(preview, stream) {
+  if (!preview) return;
+  preview.setAttribute("title", `Preview: ${stream?.name || ""}`);
+  if (stream?.ready === false) {
+    preview.removeAttribute("src");
+    return;
+  }
+  preview.setAttribute("src", buildPreviewIframeSrc(stream?.name));
+}
+
 function sortedReaders(stream) {
   const order = {
     srtConn: 1, rtmpConn: 2, rtmpsConn: 3, rtspSession: 4,
@@ -150,9 +160,7 @@ export function renderStreamCard(stream) {
     </div>
   `;
 
-  const preview = card.querySelector(".preview-frame");
-  preview.setAttribute("src", buildPreviewIframeSrc(stream?.name));
-  preview.setAttribute("title", `Preview: ${stream?.name || ""}`);
+  updatePreview(card.querySelector(".preview-frame"), stream);
   return card;
 }
 
@@ -167,4 +175,5 @@ export function updateStreamCard(card, stream) {
   if (left) left.outerHTML = renderStreamLeft(stream);
   if (media) media.innerHTML = renderMedia(stream);
   if (right) right.innerHTML = renderRightContent(stream);
+  updatePreview(card.querySelector(".preview-frame"), stream);
 }

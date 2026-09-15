@@ -72,7 +72,7 @@ def normalize_stream(
     readers = path.get("readers", []) or []
     tracks2 = path.get("tracks2", []) or []
 
-    return {
+    normalized = {
         "name": path.get("name", ""),
         "mediamtxVersion": mediamtx_version,
         "source": normalize_publisher(source, details),
@@ -85,3 +85,9 @@ def normalize_stream(
         "forwardDestinations": forward_destinations,
         "readers": [normalize_reader(reader, details) for reader in readers],
     }
+    # MediaMTX includes ``ready`` for configured paths.  Keep the field
+    # optional for older/test payloads so the existing snapshot fallback
+    # remains backwards compatible.
+    if "ready" in path:
+        normalized["ready"] = bool(path.get("ready"))
+    return normalized

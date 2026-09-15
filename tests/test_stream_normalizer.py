@@ -102,6 +102,7 @@ class StreamNormalizerTests(unittest.TestCase):
         ]
         path = {
             "name": "camera/main",
+            "ready": False,
             "source": {"type": "srtConn", "id": "srt-publisher"},
             "readers": [
                 {"type": "srtConn", "id": "srt-reader"},
@@ -117,6 +118,7 @@ class StreamNormalizerTests(unittest.TestCase):
         stream = normalize_stream(path, self.details, "1.20.0", forwards)
 
         self.assertEqual(stream["name"], "camera/main")
+        self.assertFalse(stream["ready"])
         self.assertEqual(stream["mediamtxVersion"], "1.20.0")
         self.assertEqual(stream["tracks2"], tracks)
         self.assertEqual(stream["tracks"], ["H264", "Opus", "FutureCodec"])

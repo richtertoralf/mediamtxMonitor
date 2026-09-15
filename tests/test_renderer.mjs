@@ -7,6 +7,7 @@ import {
   renderReader,
   renderStreamCard,
   renderStreamLeft,
+  updateStreamCard,
 } from "./renderer-test-helpers.mjs";
 
 assert.deepEqual(rendererExportNames, [
@@ -93,6 +94,10 @@ class FakeIframe {
   setAttribute(name, value) {
     this.attributes.set(name, String(value));
   }
+
+  removeAttribute(name) {
+    this.attributes.delete(name);
+  }
 }
 
 class FakeCard {
@@ -121,6 +126,16 @@ assert.match(noReaderCard.innerHTML, /stream-left/);
 assert.match(noReaderCard.innerHTML, /stream-center/);
 assert.match(noReaderCard.innerHTML, /stream-right/);
 assert.equal((noReaderCard.innerHTML.match(/H\.264 · 1920×1080/g) || []).length, 1);
+
+const offlineCard = renderStreamCard({name: "offline", ready: false, readers: []});
+assert.equal(offlineCard.iframe.attributes.has("src"), false);
+updateStreamCard(offlineCard, {name: "offline", ready: true, readers: []});
+assert.equal(
+  offlineCard.iframe.attributes.get("src"),
+  "http://monitor.example:8889/__preview__/offline?controls=false&muted=true&autoplay=true&playsInline=true",
+);
+updateStreamCard(offlineCard, {name: "offline", ready: false, readers: []});
+assert.equal(offlineCard.iframe.attributes.has("src"), false);
 
 const multiReaderCard = renderStreamCard({
   name: "multi",
