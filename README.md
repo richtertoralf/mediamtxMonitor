@@ -87,10 +87,12 @@ Nicht Debian-basierte Linux-Distributionen werden vom Installer abgelehnt.
 dafür kein vorgesehenes MediaMTX-Archiv existiert.
 
 `sudo ./install.sh` wählt automatisch zwischen Fresh-Installation und der
-Wiederverwendung einer vollständig vorhandenen MediaMTX-Installation. Bei
-Wiederverwendung werden MediaMTX-Binary, Unit und globale Konfiguration nur
-geprüft und nicht verändert. Ein unvollständiger MediaMTX-Zustand bricht vor
-jeder Änderung ab.
+Wiederverwendung einer vollständig vorhandenen MediaMTX-Installation. Die
+Laufzeit benötigt MediaMTX v1.20.0 oder neuer; bei einer Fresh-Installation
+richtet der Installer diese MediaMTX-Installation zusammen mit Redis, FFmpeg,
+Python-Venv und den Monitor-Diensten ein. Bei Wiederverwendung werden
+MediaMTX-Binary, Unit und globale Konfiguration nur geprüft und nicht
+verändert. Ein unvollständiger MediaMTX-Zustand bricht vor jeder Änderung ab.
 
 ## Installation
 
