@@ -1,5 +1,5 @@
 """
-MediaMTX Monitor - MediaMTX v1.20 data model knowledge.
+MediaMTX Monitor - MediaMTX v1.21+ data model knowledge.
 
 Defines supported versions and Control API endpoints, indexes connection
 details referenced by paths, and builds the compact track and media model.
@@ -13,29 +13,29 @@ import re
 from typing import Any, Dict, Mapping, Optional, Tuple
 
 
-MINIMUM_MEDIAMTX_VERSION: Tuple[int, int, int] = (1, 20, 0)
+MINIMUM_MEDIAMTX_VERSION: Tuple[int, int, int] = (1, 21, 0)
 
 DETAIL_ENDPOINTS = {
-    "srtConn": "/v3/srtconns/list",
-    "rtmpConn": "/v3/rtmpconns/list",
-    "rtmpsConn": "/v3/rtmpsconns/list",
-    "rtspConn": "/v3/rtspconns/list",
-    "rtspSession": "/v3/rtspsessions/list",
-    "rtspsConn": "/v3/rtspsconns/list",
-    "rtspsSession": "/v3/rtspssessions/list",
-    "webRTCSession": "/v3/webrtcsessions/list",
-    "hlsSession": "/v3/hlssessions/list",
-    "moqSession": "/v3/moqsessions/list",
+    "srtConn": "/v3/srt/conns/list",
+    "rtmpConn": "/v3/rtmp/conns/list",
+    "rtmpsConn": "/v3/rtmps/conns/list",
+    "rtspConn": "/v3/rtsp/conns/list",
+    "rtspSession": "/v3/rtsp/sessions/list",
+    "rtspsConn": "/v3/rtsps/conns/list",
+    "rtspsSession": "/v3/rtsps/sessions/list",
+    "webRTCSession": "/v3/webrtc/sessions/list",
+    "hlsSession": "/v3/hls/sessions/list",
+    "moqSession": "/v3/moq/sessions/list",
 }
 
-HLS_MUXER_ENDPOINT = "/v3/hlsmuxers/list"
+HLS_MUXER_ENDPOINT = "/v3/hls/muxers/list"
 
 # MediaMTX does not register these routes when the corresponding TLS listener
 # is disabled. In that case, a 404 means an empty protocol list.
 OPTIONAL_SECURE_ENDPOINTS = {
-    "/v3/rtmpsconns/list",
-    "/v3/rtspsconns/list",
-    "/v3/rtspssessions/list",
+    "/v3/rtmps/conns/list",
+    "/v3/rtsps/conns/list",
+    "/v3/rtsps/sessions/list",
 }
 
 VIDEO_CODECS = {

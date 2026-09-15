@@ -10,7 +10,7 @@ tiefste Transport- und Ereignisauswertung; für RTMP/RTMPS und RTSP/RTSPS stellt
 der Monitor jeweils andere passende MediaMTX-Metriken dar, weitere Protokolle
 werden überwiegend generisch dargestellt. Fehlende MediaMTX-Metriken werden
 nicht durch externe Messungen gegen Publisher oder Reader ersetzt. Details
-stehen im [MediaMTX-v1.20-Datenmodell](docs/MEDIAMTX_V1_20_DATA.md) und in der
+stehen im [MediaMTX-v1.21+-Datenmodell](docs/MEDIAMTX_V1_21_DATA.md) und in der
 [Architekturdokumentation](docs/ARCHITECTURE.md).
 
 > **Sicherheitshinweis:** Dashboard und Monitor-API besitzen keine eingebaute
@@ -36,10 +36,10 @@ kurzlebigen Messzustand und eine Kurzzeithistorie für Verbindungsmetriken.
 
 ![MediaMTX Monitor Dashboard](MediamtxMonitor.png)
 
-Voraussetzung ist **MediaMTX v1.20.0 oder neuer**. Der Collector prüft die
+Voraussetzung ist **MediaMTX v1.21.0 oder neuer**. Der Collector prüft die
 laufende Version über `/v3/info` und meldet ältere oder nicht eindeutig
 erkennbare Versionen als nicht unterstützt. Details zum erfassten Datenmodell
-stehen in [docs/MEDIAMTX_V1_20_DATA.md](docs/MEDIAMTX_V1_20_DATA.md).
+stehen in [docs/MEDIAMTX_V1_21_DATA.md](docs/MEDIAMTX_V1_21_DATA.md).
 
 ## Dienste
 
@@ -88,7 +88,7 @@ dafür kein vorgesehenes MediaMTX-Archiv existiert.
 
 `sudo ./install.sh` wählt automatisch zwischen Fresh-Installation und der
 Wiederverwendung einer vollständig vorhandenen MediaMTX-Installation. Die
-Laufzeit benötigt MediaMTX v1.20.0 oder neuer; bei einer Fresh-Installation
+Laufzeit benötigt MediaMTX v1.21.0 oder neuer; bei einer Fresh-Installation
 richtet der Installer diese MediaMTX-Installation zusammen mit Redis, FFmpeg,
 Python-Venv und den Monitor-Diensten ein. Bei Wiederverwendung werden
 MediaMTX-Binary, Unit und globale Konfiguration nur geprüft und nicht
@@ -100,7 +100,7 @@ verändert. Ein unvollständiger MediaMTX-Zustand bricht vor jeder Änderung ab.
 sudo ./install.sh
 ```
 
-Die Fresh-Installation wurde mit MediaMTX v1.20.0 auf Ubuntu Server 24.04 LTS
+Die Fresh-Installation wurde mit MediaMTX v1.21.0 auf Ubuntu Server 24.04 LTS
 amd64 getestet. Diese Version ist als getesteter Repository-Default festgelegt.
 Für einen ausdrücklich gewünschten Fresh-Stand kann optional
 `--mediamtx-version VERSION` angegeben werden; bei vorhandener MediaMTX-
@@ -159,7 +159,7 @@ lokale Konfiguration nicht durch die Konfigurationsvorlage einer neuen Version.
 Neue optionale Monitor-Einstellungen müssen deshalb mit rückwärtskompatiblen
 Standardwerten eingeführt werden. Bewusst gesetzter technischer Ausgangspunkt
 des unterstützten MediaMTX-Daten- und Konfigurationsmodells ist MediaMTX
-v1.20.0. Eine automatische Migration oder Ersetzung der `collector.yaml` ist
+v1.21.0. Eine automatische Migration oder Ersetzung der `collector.yaml` ist
 im Rahmen dieses Betreiber- und Kompatibilitätsprinzips nicht vorgesehen. Für
 eine Erstinstallation ist weiterhin `install.sh` zu verwenden.
 
@@ -226,7 +226,7 @@ eine separate Betreiberoperation.
 
 ## Ports
 
-Für die mit MediaMTX v1.20.0 getestete Konfiguration:
+Für die mit MediaMTX v1.21.0 getestete Konfiguration:
 
 | Port | Funktion |
 |---:|---|
@@ -276,7 +276,7 @@ Gemeinsamer lokaler Prüfpfad:
 
 - [Architektur und schrittweises Zielbild](docs/ARCHITECTURE.md)
 - [Coding- und Dokumentationsstandard](docs/CODING_STYLE.md)
-- [MediaMTX-v1.20-Datenmodell](docs/MEDIAMTX_V1_20_DATA.md)
+- [MediaMTX-v1.21+-Datenmodell](docs/MEDIAMTX_V1_21_DATA.md)
 - [Betrieb und Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Entwicklungs-Deployment](devtools/README.md)
 

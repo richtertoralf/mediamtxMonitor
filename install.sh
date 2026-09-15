@@ -8,8 +8,8 @@ readonly MEDIAMTX_CONFIG="/usr/local/etc/mediamtx.yml"
 readonly SERVICE_DIR="/etc/systemd/system"
 readonly SERVICE_USER="mediamtxmon"
 readonly SERVICE_GROUP="mediamtxmon"
-readonly MINIMUM_MEDIAMTX_VERSION="1.20.0"
-readonly DEFAULT_MEDIAMTX_VERSION="1.20.0"
+readonly MINIMUM_MEDIAMTX_VERSION="1.21.0"
+readonly DEFAULT_MEDIAMTX_VERSION="1.21.0"
 INSTALL_MODE=""
 
 fail() {
@@ -52,7 +52,7 @@ version_is_at_least() {
 version_is_at_least "$MEDIAMTX_VERSION" "$MINIMUM_MEDIAMTX_VERSION" || \
   fail "MediaMTX v$MEDIAMTX_VERSION wird nicht unterstützt; erforderlich ist v$MINIMUM_MEDIAMTX_VERSION oder neuer."
 printf 'Verwendete MediaMTX-Version für den Fresh-Pfad: v%s\n' "$MEDIAMTX_VERSION"
-printf 'Die automatische Ergänzung der offiziellen MediaMTX-Konfiguration wurde mit MediaMTX v1.20.0 getestet.\n'
+printf 'Die automatische Ergänzung der offiziellen MediaMTX-Konfiguration nutzt die MediaMTX-v1.21-Konfiguration.\n'
 
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
   fail "Root-Rechte sind erforderlich. Aufruf: sudo ./install.sh"
@@ -216,6 +216,14 @@ else
 fi
 
 if [ "$INSTALL_MODE" = reuse ]; then
+  existing_version_output=$("$MEDIAMTX_BIN" --version 2>/dev/null || true)
+  existing_version=$(printf '%s\n' "$existing_version_output" | grep -Eo 'v?[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 | sed 's/^v//')
+  if [ -z "$existing_version" ]; then
+    fail "Die laufende MediaMTX-Version konnte nicht bestimmt werden; erforderlich ist v$MINIMUM_MEDIAMTX_VERSION oder neuer."
+  fi
+  version_is_at_least "$existing_version" "$MINIMUM_MEDIAMTX_VERSION" || \
+    fail "MediaMTX v$existing_version wird nicht unterstützt; erforderlich ist v$MINIMUM_MEDIAMTX_VERSION oder neuer."
+  printf 'Vorhandene MediaMTX-Version v%s erfüllt die Mindestanforderung.\n' "$existing_version"
   existing_targets=(
     "$INSTALL_DIR"
     "$MONITOR_CLI"
@@ -354,6 +362,12 @@ if len(re.findall(r"__preview__", text)) != 1:
 
 output_path.write_text(text, encoding="utf-8")
 PY
+fi
+
+if [ "$INSTALL_MODE" = fresh ]; then
+  "$TEMP_DIR/extract/mediamtx" "--validate-conf=$TEMP_DIR/mediamtx.yml" >/dev/null || \
+    fail "Die erzeugte MediaMTX-Konfiguration wurde von MediaMTX abgelehnt."
+  printf 'MediaMTX-Konfigurationsvalidierung erfolgreich.\n'
 fi
 
 groupadd --system "$SERVICE_GROUP"

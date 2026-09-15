@@ -61,6 +61,23 @@ def connection_identity(connection: Mapping[str, Any]) -> Any:
     ) or "n/a"
 
 
+def sanitize_forward_destinations(destinations: Any) -> list[dict[str, Any]]:
+    """Expose only non-sensitive v1.21 forward-destination observations."""
+    if not isinstance(destinations, list):
+        return []
+    safe: list[dict[str, Any]] = []
+    for destination in destinations:
+        if not isinstance(destination, Mapping):
+            continue
+        item: dict[str, Any] = {}
+        for field in ("id", "pos", "type", "state", "outboundBytes", "created"):
+            if field in destination:
+                item[field] = destination[field]
+        if item:
+            safe.append(item)
+    return safe
+
+
 def normalize_stream(
     path: Mapping[str, Any],
     details: Mapping[str, Any],
@@ -82,12 +99,13 @@ def normalize_stream(
         "inboundBytes": int(path.get("inboundBytes") or 0),
         "outboundBytes": int(path.get("outboundBytes") or 0),
         "inboundFramesInError": int(path.get("inboundFramesInError") or 0),
-        "forwardDestinations": forward_destinations,
+        "forwardDestinations": sanitize_forward_destinations(forward_destinations),
         "readers": [normalize_reader(reader, details) for reader in readers],
     }
-    # MediaMTX includes ``ready`` for configured paths.  Keep the field
-    # optional for older/test payloads so the existing snapshot fallback
-    # remains backwards compatible.
-    if "ready" in path:
-        normalized["ready"] = bool(path.get("ready"))
+    # MediaMTX v1.21 exposes the current path state as available/online.
+    # Both fields are optional in fixtures because a missing observation must
+    # remain distinguishable from an explicit false value.
+    for field in ("available", "online"):
+        if field in path:
+            normalized[field] = bool(path.get(field))
     return normalized

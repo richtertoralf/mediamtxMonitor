@@ -18,7 +18,7 @@ class ProtocolClient:
     def __init__(self):
         self.path_errors = {"rtsp": 20, "webrtc": 4, "rtmp-hls": 1}
         self.details = {
-            "/v3/rtspsessions/list": [
+            "/v3/rtsp/sessions/list": [
                 {
                     "id": "rtsp-pub", "remoteAddr": "192.0.2.1:5000",
                     "transport": "udp", "inboundBytes": 0,
@@ -34,7 +34,7 @@ class ProtocolClient:
                     "outboundRTPPacketsDiscarded": 1,
                 },
             ],
-            "/v3/webrtcsessions/list": [
+            "/v3/webrtc/sessions/list": [
                 {
                     "id": "webrtc-pub", "remoteAddr": "192.0.2.3:5002",
                     "inboundBytes": 0, "inboundRTPPacketsLost": 3,
@@ -49,7 +49,7 @@ class ProtocolClient:
                     "peerConnectionEstablished": True, "state": "read",
                 },
             ],
-            "/v3/rtmpconns/list": [
+            "/v3/rtmp/conns/list": [
                 {
                     "id": "rtmp-pub", "remoteAddr": "192.0.2.5:1935",
                     "inboundBytes": 0, "state": "publish",
@@ -60,14 +60,14 @@ class ProtocolClient:
                     "state": "read",
                 },
             ],
-            "/v3/hlssessions/list": [
+            "/v3/hls/sessions/list": [
                 {
                     "id": "hls-reader", "remoteAddr": "192.0.2.7:5004",
                     "outboundBytes": 0, "created": "2026-08-16T00:00:00Z",
                     "userAgent": "Test Player", "isCDN": False,
                 },
             ],
-            "/v3/moqsessions/list": [
+            "/v3/moq/sessions/list": [
                 {
                     "id": "moq-reader", "remoteAddr": "192.0.2.8:5005",
                     "outboundBytes": 0, "state": "read",
@@ -86,7 +86,7 @@ class ProtocolClient:
 
     def get_json(self, endpoint, params=None):
         if endpoint == "/v3/info":
-            return {"version": "1.20.0"}
+            return {"version": "1.21.0"}
         if endpoint == "/v3/paths/list":
             return {"items": [
                 {
@@ -106,13 +106,13 @@ class ProtocolClient:
                         {"type": "rtmpConn", "id": "rtmp-reader"},
                         {
                             "type": "hlsSession",
-                            "id": self.details["/v3/hlssessions/list"][0]["id"],
+                            "id": self.details["/v3/hls/sessions/list"][0]["id"],
                         },
                         {"type": "moqSession", "id": "moq-reader"},
                     ],
                 },
             ]}
-        if endpoint == "/v3/hlsmuxers/list":
+        if endpoint == "/v3/hls/muxers/list":
             return {"items": [self.muxer]}
         return {"items": self.details.get(endpoint, [])}
 
@@ -136,7 +136,7 @@ class ProtocolCollectorTests(unittest.TestCase):
 
     def test_protocol_metrics_share_reset_safe_windows_and_scopes(self):
         self.collect(100.0)
-        rtsp_pub, rtsp_reader = self.client.details["/v3/rtspsessions/list"]
+        rtsp_pub, rtsp_reader = self.client.details["/v3/rtsp/sessions/list"]
         rtsp_pub.update({
             "inboundRTPPacketsLost": 12,
             "inboundRTPPacketsInError": 3,
@@ -147,10 +147,10 @@ class ProtocolCollectorTests(unittest.TestCase):
             "outboundRTPPacketsReportedLost": 7,
             "outboundRTPPacketsDiscarded": 2,
         })
-        webrtc_pub, webrtc_reader = self.client.details["/v3/webrtcsessions/list"]
+        webrtc_pub, webrtc_reader = self.client.details["/v3/webrtc/sessions/list"]
         webrtc_pub["inboundRTPPacketsLost"] = 5
         webrtc_reader["outboundFramesDiscarded"] = 6
-        self.client.details["/v3/rtmpconns/list"][1]["outboundFramesDiscarded"] = 8
+        self.client.details["/v3/rtmp/conns/list"][1]["outboundFramesDiscarded"] = 8
         self.client.muxer["outboundFramesDiscarded"] = 10
         self.client.path_errors["rtsp"] = 22
 
@@ -197,14 +197,14 @@ class ProtocolCollectorTests(unittest.TestCase):
 
     def test_counter_reset_does_not_create_negative_window_value(self):
         self.collect(200.0)
-        rtsp_pub = self.client.details["/v3/rtspsessions/list"][0]
+        rtsp_pub = self.client.details["/v3/rtsp/sessions/list"][0]
         rtsp_pub["inboundRTPPacketsLost"] = 1
         source = self.collect(201.0)[0]["source"]
         counters = source.get("window_metrics", {}).get("protocol_counters", {})
         self.assertNotIn("loss", counters.get("10s", {}))
 
     def test_rtsp_reported_loss_large_native_jump_is_not_filtered(self):
-        reader = self.client.details["/v3/rtspsessions/list"][1]
+        reader = self.client.details["/v3/rtsp/sessions/list"][1]
         reader["outboundRTPPacketsReportedLost"] = 0
         self.collect(250.0)
         reader["outboundRTPPacketsReportedLost"] = 33_554_430
@@ -247,7 +247,7 @@ class ProtocolCollectorTests(unittest.TestCase):
         )
 
     def test_hls_rate_average_reuses_session_history_and_new_id_starts_fresh(self):
-        hls = self.client.details["/v3/hlssessions/list"][0]
+        hls = self.client.details["/v3/hls/sessions/list"][0]
         self.collect(400.0)
         hls["outboundBytes"] = 600_000
         second = self.collect(401.0)[2]["readers"][1]

@@ -127,14 +127,14 @@ assert.match(noReaderCard.innerHTML, /stream-center/);
 assert.match(noReaderCard.innerHTML, /stream-right/);
 assert.equal((noReaderCard.innerHTML.match(/H\.264 · 1920×1080/g) || []).length, 1);
 
-const offlineCard = renderStreamCard({name: "offline", ready: false, readers: []});
+const offlineCard = renderStreamCard({name: "offline", available: false, readers: []});
 assert.equal(offlineCard.iframe.attributes.has("src"), false);
-updateStreamCard(offlineCard, {name: "offline", ready: true, readers: []});
+updateStreamCard(offlineCard, {name: "offline", available: true, readers: []});
 assert.equal(
   offlineCard.iframe.attributes.get("src"),
   "http://monitor.example:8889/__preview__/offline?controls=false&muted=true&autoplay=true&playsInline=true",
 );
-updateStreamCard(offlineCard, {name: "offline", ready: false, readers: []});
+updateStreamCard(offlineCard, {name: "offline", available: false, readers: []});
 assert.equal(offlineCard.iframe.attributes.has("src"), false);
 
 const multiReaderCard = renderStreamCard({

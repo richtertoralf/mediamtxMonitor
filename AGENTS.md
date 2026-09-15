@@ -12,7 +12,7 @@ Vor Änderungen die jeweils relevanten Grundlagen lesen:
   Interpretation und Invarianten; vor Änderungen an Metriksemantik, Datenfluss
   oder Architektur zwingend lesen.
 - `docs/CODING_STYLE.md`: Coding- und Dokumentationskonventionen.
-- `docs/MEDIAMTX_V1_20_DATA.md`: von MediaMTX v1.20 tatsächlich bereitgestellte
+- `docs/MEDIAMTX_V1_21_DATA.md`: von MediaMTX v1.21+ tatsächlich bereitgestellte
   Rohdaten, Felder und Metriken.
 - `.agents/skills/verify-change/SKILL.md`: fachliche Änderungsprüfung und
   gemeinsamer mechanischer Prüfpfad.

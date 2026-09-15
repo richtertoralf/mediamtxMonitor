@@ -257,11 +257,13 @@ Path-Poll vollständig ersetzt. Ein separater Redis-Wert `collected_at` zum
 Snapshot-Key macht den Zeitpunkt des letzten erfolgreichen Schreibens in der
 API sichtbar. Die zuletzt erfolgreich über `/v3/info` beobachtete
 MediaMTX-Version wird zusätzlich als eigener Sidecar-Wert gespeichert und von
-der API unabhängig von einer eventuell leeren Streamliste bereitgestellt.
+der API unabhängig von einer eventuell leeren Streamliste bereitgestellt. Die
+zugehörige `started`-Zeit wird ebenfalls separat gespeichert, damit ein
+MediaMTX-Neustart unmittelbar erkennbar bleibt.
 
-Langsamer wechselnde bzw. diagnostische Daten bleiben im seriellen Collector,
-werden aber seltener aktualisiert: die MediaMTX-Version alle 60 Sekunden,
-Path-Forward-Ziele und die optionale JSON-Diagnosedatei alle 5 Sekunden.
+Path-Forward-Ziele und die optionale JSON-Diagnosedatei bleiben im seriellen
+Collector diagnostische Daten und werden alle 5 Sekunden aktualisiert. Die
+kleine `/v3/info`-Antwort wird in jedem Collector-Zyklus gelesen.
 Für die oben definierte MediaMTX-Datenquellengrenze gilt insbesondere: Externe
 ICMP-Pings werden nicht ausgeführt, und Protokolle ohne von MediaMTX
 bereitgestellte native RTT besitzen keine RTT-Anzeige.

@@ -21,7 +21,6 @@ logging:
 collector:
   output_json_path: "/tmp/mediamtx_streams.json"
   interval_seconds: 1
-  version_refresh_seconds: 60
   forward_refresh_seconds: 5
   output_refresh_seconds: 5
   ignore_path_prefixes:

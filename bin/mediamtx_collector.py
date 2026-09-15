@@ -62,6 +62,7 @@ try:
         connection_lifecycle_key,
         connection_history_key,
         hls_muxer_metric_key,
+        mediamtx_started_key,
         mediamtx_version_key,
         path_metric_key,
         publisher_connection_key,
@@ -112,6 +113,7 @@ except ImportError:
         connection_lifecycle_key,
         connection_history_key,
         hls_muxer_metric_key,
+        mediamtx_started_key,
         mediamtx_version_key,
         path_metric_key,
         publisher_connection_key,
@@ -157,8 +159,6 @@ mediamtx_client = None
 class PollCache:
     """Small in-process cache for data that does not belong in the 1 Hz path."""
 
-    mediamtx_version: Optional[str] = None
-    next_version_refresh: float = 0.0
     next_forward_refresh: float = 0.0
     next_output_write: float = 0.0
     forward_destinations: Dict[str, Any] = field(default_factory=dict)
@@ -486,38 +486,19 @@ def collect_and_store() -> Dict[str, float]:
             metrics["api_request_count"] += 1
 
     now = time.time()
-    version_refresh = COLLECTOR_CFG["version_refresh_seconds"]
-    if poll_cache.mediamtx_version is None or now >= poll_cache.next_version_refresh:
-        try:
-            info = cycle_fetch("/v3/info", required=True)
-        except MediaMTXError as exc:
-            logging.warning("MediaMTX-Version konnte nicht gelesen werden: %s", exc)
-            metrics["cycle_duration_ms"] = (
-                time.perf_counter() - cycle_started
-            ) * 1000
-            return metrics
-        mediamtx_version = info.get("version")
-        if not is_supported_version(mediamtx_version):
-            required = ".".join(str(part) for part in MINIMUM_MEDIAMTX_VERSION)
-            shown_version = mediamtx_version or "unbekannt"
-            logging.error(
-                "❌ MediaMTX %s wird nicht unterstützt; erforderlich ist v%s oder neuer.",
-                shown_version,
-                required,
-            )
-            metrics["cycle_duration_ms"] = (
-                time.perf_counter() - cycle_started
-            ) * 1000
-            return metrics
-        poll_cache.mediamtx_version = str(mediamtx_version)
-        poll_cache.next_version_refresh = now + version_refresh
-        try:
-            snapshot_store.write_snapshot(
-                mediamtx_version_key(REDIS_KEY), poll_cache.mediamtx_version
-            )
-        except Exception as exc:
-            logging.warning("MediaMTX-Version konnte nicht gespeichert werden: %s", exc)
-    mediamtx_version = poll_cache.mediamtx_version
+    try:
+        info = cycle_fetch("/v3/info", required=True)
+    except MediaMTXError as exc:
+        logging.warning("MediaMTX-Servermetadaten konnten nicht gelesen werden: %s", exc)
+        metrics["cycle_duration_ms"] = (time.perf_counter() - cycle_started) * 1000
+        return metrics
+    mediamtx_version = info.get("version")
+    mediamtx_started = info.get("started")
+    try:
+        snapshot_store.write_snapshot(mediamtx_version_key(REDIS_KEY), mediamtx_version)
+        snapshot_store.write_snapshot(mediamtx_started_key(REDIS_KEY), mediamtx_started)
+    except Exception as exc:
+        logging.warning("MediaMTX-Servermetadaten konnten nicht gespeichert werden: %s", exc)
     if not is_supported_version(mediamtx_version):
         required = ".".join(str(part) for part in MINIMUM_MEDIAMTX_VERSION)
         shown_version = mediamtx_version or "unbekannt"
@@ -526,9 +507,7 @@ def collect_and_store() -> Dict[str, float]:
             shown_version,
             required,
         )
-        metrics["cycle_duration_ms"] = (
-            time.perf_counter() - cycle_started
-        ) * 1000
+        metrics["cycle_duration_ms"] = (time.perf_counter() - cycle_started) * 1000
         return metrics
 
     try:
@@ -572,7 +551,7 @@ def collect_and_store() -> Dict[str, float]:
     if now >= poll_cache.next_forward_refresh:
         poll_cache.forward_destinations = {
             str(path.get("name", "")): cycle_fetch(
-                "/v3/paths/forward/list",
+                "/v3/paths/forward-dests/list",
                 params={"path": str(path.get("name", ""))},
             ).get("items", [])
             for path in visible_paths

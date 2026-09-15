@@ -45,7 +45,6 @@ NODE_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 COLLECTOR_DEFAULTS: Dict[str, Any] = {
     "output_json_path": "/tmp/mediamtx_streams.json",
     "interval_seconds": 1,
-    "version_refresh_seconds": 60,
     "forward_refresh_seconds": 5,
     "output_refresh_seconds": 5,
     "ignore_path_prefixes": ["__preview__/"],
@@ -143,7 +142,6 @@ def resolve_collector_config(config: Mapping[str, Any]) -> Dict[str, Any]:
     """Resolve collector scheduling, output, and filtering settings."""
     resolved = _component_config(config, "collector", COLLECTOR_DEFAULTS)
     resolved["interval_seconds"] = int(resolved["interval_seconds"])
-    resolved["version_refresh_seconds"] = int(resolved["version_refresh_seconds"])
     resolved["forward_refresh_seconds"] = int(resolved["forward_refresh_seconds"])
     resolved["output_refresh_seconds"] = int(resolved["output_refresh_seconds"])
     resolved["ignore_path_prefixes"] = list(resolved["ignore_path_prefixes"])

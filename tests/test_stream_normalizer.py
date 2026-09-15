@@ -102,7 +102,8 @@ class StreamNormalizerTests(unittest.TestCase):
         ]
         path = {
             "name": "camera/main",
-            "ready": False,
+            "available": False,
+            "online": False,
             "source": {"type": "srtConn", "id": "srt-publisher"},
             "readers": [
                 {"type": "srtConn", "id": "srt-reader"},
@@ -113,13 +114,14 @@ class StreamNormalizerTests(unittest.TestCase):
             "outboundBytes": 456,
             "inboundFramesInError": 7,
         }
-        forwards = [{"target": "backup"}]
+        forwards = [{"id": "dest-1", "type": "rtmp", "state": "forwarding", "conf": {"dest": "rtmp://secret"}}]
 
-        stream = normalize_stream(path, self.details, "1.20.0", forwards)
+        stream = normalize_stream(path, self.details, "1.21.0", forwards)
 
         self.assertEqual(stream["name"], "camera/main")
-        self.assertFalse(stream["ready"])
-        self.assertEqual(stream["mediamtxVersion"], "1.20.0")
+        self.assertFalse(stream["available"])
+        self.assertFalse(stream["online"])
+        self.assertEqual(stream["mediamtxVersion"], "1.21.0")
         self.assertEqual(stream["tracks2"], tracks)
         self.assertEqual(stream["tracks"], ["H264", "Opus", "FutureCodec"])
         self.assertEqual(stream["media"]["video"][0]["width"], 1920)
@@ -127,7 +129,10 @@ class StreamNormalizerTests(unittest.TestCase):
         self.assertEqual(
             stream["media"]["other"][0]["displayCodec"], "FutureCodec"
         )
-        self.assertEqual(stream["forwardDestinations"], forwards)
+        self.assertEqual(
+            stream["forwardDestinations"],
+            [{"id": "dest-1", "type": "rtmp", "state": "forwarding"}],
+        )
         self.assertEqual(
             [reader["type"] for reader in stream["readers"]],
             ["srtConn", "rtmpConn"],

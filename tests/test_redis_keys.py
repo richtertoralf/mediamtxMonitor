@@ -1,6 +1,7 @@
 import unittest
 
 from bin.redis_keys import (
+    mediamtx_started_key,
     DEFAULT_STREAM_SNAPSHOT_KEY,
     DEFAULT_SYSTEM_SNAPSHOT_KEY,
     bitrate_state_keys,
@@ -35,6 +36,12 @@ class SnapshotKeyTests(unittest.TestCase):
         self.assertEqual(
             mediamtx_version_key("streams:latest"),
             "streams:latest:mediamtx_version",
+        )
+
+    def test_mediamtx_started_is_a_snapshot_sidecar(self):
+        self.assertEqual(
+            mediamtx_started_key("streams:latest"),
+            "streams:latest:mediamtx_started",
         )
 
 

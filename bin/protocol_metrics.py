@@ -1,7 +1,7 @@
 """
 MediaMTX Monitor - protocol-specific metric mapping.
 
-Maps only fields supplied by MediaMTX v1.20 into the normalized connection
+Maps only fields supplied by MediaMTX v1.21+ into the normalized connection
 contract. It does not calculate rates, persist state, or assess health.
 """
 

@@ -14,7 +14,8 @@ class InstallLifecycleTests(unittest.TestCase):
 
     def test_default_install_is_valid_and_has_tested_version(self):
         self.assertIn('if [ "$#" -eq 0 ]; then', self.source)
-        self.assertIn('readonly DEFAULT_MEDIAMTX_VERSION="1.20.0"', self.source)
+        self.assertIn('readonly DEFAULT_MEDIAMTX_VERSION="1.21.0"', self.source)
+        self.assertIn('readonly MINIMUM_MEDIAMTX_VERSION="1.21.0"', self.source)
         self.assertIn('MEDIAMTX_VERSION="$DEFAULT_MEDIAMTX_VERSION"', self.source)
         self.assertNotIn("--app-only", self.source)
 
@@ -26,6 +27,9 @@ class InstallLifecycleTests(unittest.TestCase):
         self.assertIn('[ -x "$MEDIAMTX_BIN" ]', self.source)
         self.assertIn('[ -r "$MEDIAMTX_CONFIG" ]', self.source)
         self.assertIn('systemctl is-active --quiet mediamtx.service', self.source)
+        self.assertIn('"$MEDIAMTX_BIN" --version', self.source)
+        self.assertIn('MediaMTX-Version konnte nicht bestimmt werden', self.source)
+        self.assertIn('"$TEMP_DIR/extract/mediamtx" "--validate-conf=$TEMP_DIR/mediamtx.yml"', self.source)
         self.assertIn('if [ "$INSTALL_MODE" = fresh ]; then\n  install -o root -g root -m 0755', self.source)
         self.assertIn('if [ "$INSTALL_MODE" = fresh ]; then\n  install -o root -g root -m 0644', self.source)
 

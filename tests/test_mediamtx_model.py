@@ -20,9 +20,13 @@ from mediamtx_model import (  # noqa: E402
 
 class VersionTests(unittest.TestCase):
     def test_minimum_and_newer_versions_are_supported(self):
-        self.assertTrue(is_supported_version("v1.20.0"))
+        self.assertFalse(is_supported_version("v1.20.0"))
+        self.assertFalse(is_supported_version("1.20.9"))
         self.assertTrue(is_supported_version("1.21.3"))
         self.assertTrue(is_supported_version("2.0.0"))
+        self.assertTrue(is_supported_version("1.21.0"))
+        self.assertTrue(is_supported_version("1.22.0"))
+        self.assertTrue(is_supported_version("42.0.0"))
 
     def test_older_or_invalid_versions_are_rejected(self):
         self.assertFalse(is_supported_version("1.19.9"))
@@ -32,27 +36,27 @@ class VersionTests(unittest.TestCase):
 
 class ModelTests(unittest.TestCase):
     def test_hls_muxer_endpoint_is_explicitly_named(self):
-        self.assertEqual(HLS_MUXER_ENDPOINT, "/v3/hlsmuxers/list")
+        self.assertEqual(HLS_MUXER_ENDPOINT, "/v3/hls/muxers/list")
 
     def test_all_required_protocol_endpoints_are_present(self):
         self.assertEqual(DETAIL_ENDPOINTS, {
-            "srtConn": "/v3/srtconns/list",
-            "rtmpConn": "/v3/rtmpconns/list",
-            "rtmpsConn": "/v3/rtmpsconns/list",
-            "rtspConn": "/v3/rtspconns/list",
-            "rtspSession": "/v3/rtspsessions/list",
-            "rtspsConn": "/v3/rtspsconns/list",
-            "rtspsSession": "/v3/rtspssessions/list",
-            "webRTCSession": "/v3/webrtcsessions/list",
-            "hlsSession": "/v3/hlssessions/list",
-            "moqSession": "/v3/moqsessions/list",
+            "srtConn": "/v3/srt/conns/list",
+            "rtmpConn": "/v3/rtmp/conns/list",
+            "rtmpsConn": "/v3/rtmps/conns/list",
+            "rtspConn": "/v3/rtsp/conns/list",
+            "rtspSession": "/v3/rtsp/sessions/list",
+            "rtspsConn": "/v3/rtsps/conns/list",
+            "rtspsSession": "/v3/rtsps/sessions/list",
+            "webRTCSession": "/v3/webrtc/sessions/list",
+            "hlsSession": "/v3/hls/sessions/list",
+            "moqSession": "/v3/moq/sessions/list",
         })
 
     def test_disabled_secure_listeners_can_have_absent_routes(self):
         self.assertEqual(OPTIONAL_SECURE_ENDPOINTS, {
-            "/v3/rtmpsconns/list",
-            "/v3/rtspsconns/list",
-            "/v3/rtspssessions/list",
+            "/v3/rtmps/conns/list",
+            "/v3/rtsps/conns/list",
+            "/v3/rtsps/sessions/list",
         })
 
     def test_rtsp_details_are_indexed_by_session_id(self):

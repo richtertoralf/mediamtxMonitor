@@ -111,7 +111,7 @@ wenn relevante Installationsziele bereits vorhanden sind.
 ```bash
 git clone <repository> ~/mediamtxMonitor
 cd ~/mediamtxMonitor
-sudo ./install.sh 1.20.0
+sudo ./install.sh --mediamtx-version 1.21.0
 ```
 
 Danach sollte:

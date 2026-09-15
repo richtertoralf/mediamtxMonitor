@@ -25,7 +25,11 @@ try:
         resolve_monitoring_config,
     )
     from .redis_store import NamespacedRedis, RedisStore, SnapshotDecodeError
-    from .redis_keys import mediamtx_version_key, stream_snapshot_freshness_key
+    from .redis_keys import (
+        mediamtx_started_key,
+        mediamtx_version_key,
+        stream_snapshot_freshness_key,
+    )
 except ImportError:
     from monitoring_config import (
         DEFAULT_CONFIG_PATH,
@@ -33,7 +37,11 @@ except ImportError:
         resolve_monitoring_config,
     )
     from redis_store import NamespacedRedis, RedisStore, SnapshotDecodeError
-    from redis_keys import mediamtx_version_key, stream_snapshot_freshness_key
+    from redis_keys import (
+        mediamtx_started_key,
+        mediamtx_version_key,
+        stream_snapshot_freshness_key,
+    )
 
 config = resolve_monitoring_config({})
 redis_cfg = config["redis"]
@@ -155,6 +163,11 @@ def get_streams():
     except SnapshotDecodeError:
         mediamtx_version = None
 
+    try:
+        mediamtx_started = snapshot_store.read_snapshot(mediamtx_started_key(REDIS_KEY))
+    except SnapshotDecodeError:
+        mediamtx_started = None
+
     frontend_cfg = config["frontend"]
 
     return JSONResponse(content={
@@ -164,6 +177,7 @@ def get_streams():
         "streamlist_refresh_ms": frontend_cfg["streamlist_refresh_ms"],
         "monitor_version": monitor_version,
         "mediamtx_version": mediamtx_version,
+        "mediamtx_started": mediamtx_started,
         "systeminfo": systeminfo
     })
 

@@ -55,6 +55,11 @@ def mediamtx_version_key(snapshot_key: str) -> str:
     return f"{snapshot_key}:mediamtx_version"
 
 
+def mediamtx_started_key(snapshot_key: str) -> str:
+    """Build the last successfully observed MediaMTX-start sidecar."""
+    return f"{snapshot_key}:mediamtx_started"
+
+
 def bitrate_state_keys(base_key: str) -> tuple[str, str, str]:
     """Return previous-byte, timestamp, and EWMA keys for a connection."""
     return (

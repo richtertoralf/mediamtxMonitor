@@ -1,14 +1,11 @@
-# MediaMTX-v1.20-Datenmodell
+# MediaMTX-v1.21+-Datenmodell
 
-Der Monitor unterstützt MediaMTX ab v1.20.0. Grundlage ist die offizielle
-[Control-API-Definition für v1.20.0](https://github.com/bluenviron/mediamtx/blob/v1.20.0/api/openapi.yaml).
-Der Collector fragt `/v3/info` beim ersten Erfassungszyklus und danach
-periodisch erneut ab. Das Intervall wird mit
-`collector.version_refresh_seconds` konfiguriert und beträgt standardmäßig
-60 Sekunden. Zwischen diesen Abfragen verwendet er die zuletzt erfolgreich
-erkannte Version. Bei einer älteren oder unlesbaren Version werden keine
-weiteren v1.20-Abfragen ausgeführt und die bisherige Redis-Messung wird nicht
-überschrieben.
+Der Monitor unterstützt MediaMTX ab v1.21.0. Grundlage ist die offizielle
+[Control-API-Definition für v1.21.0](https://github.com/bluenviron/mediamtx/blob/v1.21.0/api/openapi.yaml).
+Der Collector fragt `/v3/info` in jedem Erfassungszyklus direkt ab. `version`
+und `started` sind die einzige Quelle für die beobachteten Servermetadaten und
+werden unabhängig von vorhandenen Streams als Redis-Sidecars gespeichert. Bei
+einer älteren oder unlesbaren Version werden keine Streamdaten übernommen.
 
 Für Stream-, Verbindungs- und Transportmonitoring verarbeitet der Monitor
 ausschließlich Daten, die MediaMTX selbst über seine APIs beziehungsweise seine
@@ -19,7 +16,7 @@ Begründungen dieser Grenze stehen in `docs/ARCHITECTURE.md`.
 
 ## MediaMTX-Datenoberflächen
 
-MediaMTX v1.20.0 stellt mehrere voneinander getrennte Diagnose- und
+MediaMTX v1.21.0 stellt mehrere voneinander getrennte Diagnose- und
 Telemetrieoberflächen bereit:
 
 - **Control API:** Sie ist mit `api` separat zu aktivieren, standardmäßig
@@ -52,26 +49,28 @@ erzeugt daraus zusätzlich die bisher von der Oberfläche erwartete kompakte
 Codec-Liste `tracks`. Außerdem erfasst er `inboundBytes`, `outboundBytes` und
 `inboundFramesInError`; die geprüfte Version steht als `mediamtxVersion` im
 Path-Modell. Die deprecated Felder `tracks`, `bytesReceived` und
-`bytesSent` des Path-Objekts werden nicht mehr gelesen.
+`bytesSent` des Path-Objekts werden nicht mehr gelesen. Für den Preview-Entscheid
+ist `available` maßgeblich; `online` bleibt ein davon getrennter Zustand. Das
+deprecated Feld `ready` wird nicht verwendet.
 
 Die Details werden über folgende Listen aufgelöst:
 
-| Protokoll | Path-Typ | Control-API | Bereits erfasste v1.20-Daten |
+| Protokoll | Path-Typ | Control-API | Bereits erfasste v1.21+-Daten |
 |---|---|---|---|
-| SRT | `srtConn` | `/v3/srtconns/list` | vollständiges Detailobjekt, native Empfangs-/Senderate, Transport-RTT, native SRT-Zähler |
-| RTMP | `rtmpConn` | `/v3/rtmpconns/list` | vollständiges Detailobjekt, unter anderem `state`, `path`, `remoteAddr`, `userAgent`, `inboundBytes`, `outboundBytes` und `outboundFramesDiscarded` |
-| RTMPS | `rtmpsConn` | `/v3/rtmpsconns/list` | wie RTMP, getrennt nach sicherem Listener |
-| RTSP | `rtspSession` | `/v3/rtspsessions/list` | Session, Bytes sowie RTP-/RTCP-Zähler, Verlust, Fehler und Jitter |
-| RTSPS | `rtspsSession` | `/v3/rtspssessions/list` | wie RTSP, getrennt nach sicherem Listener |
-| WebRTC / WHIP | `webRTCSession` | `/v3/webrtcsessions/list` | Session, Bytes, RTP-/RTCP-Zähler, Verlust, Jitter, ICE-Kandidaten, PeerConnection-Status und verworfene Ausgangsframes |
-| HLS Reader | `hlsSession` | `/v3/hlssessions/list` | Reader-Session, Remote-Adresse, User-Agent, CDN-Kennung und `outboundBytes` |
-| MoQ | `moqSession` | `/v3/moqsessions/list` | Session, Zustand, Version, Transport, Remote-Adresse sowie ein-/ausgehende Bytes |
+| SRT | `srtConn` | `/v3/srt/conns/list` | vollständiges Detailobjekt, native Empfangs-/Senderate, Transport-RTT, native SRT-Zähler |
+| RTMP | `rtmpConn` | `/v3/rtmp/conns/list` | vollständiges Detailobjekt, unter anderem `state`, `path`, `remoteAddr`, `userAgent`, `inboundBytes`, `outboundBytes` und `outboundFramesDiscarded` |
+| RTMPS | `rtmpsConn` | `/v3/rtmps/conns/list` | wie RTMP, getrennt nach sicherem Listener |
+| RTSP | `rtspSession` | `/v3/rtsp/sessions/list` | Session, Bytes sowie RTP-/RTCP-Zähler, Verlust, Fehler und Jitter |
+| RTSPS | `rtspsSession` | `/v3/rtsps/sessions/list` | wie RTSP, getrennt nach sicherem Listener |
+| WebRTC / WHIP | `webRTCSession` | `/v3/webrtc/sessions/list` | Session, Bytes, RTP-/RTCP-Zähler, Verlust, Jitter, ICE-Kandidaten, PeerConnection-Status und verworfene Ausgangsframes |
+| HLS Reader | `hlsSession` | `/v3/hls/sessions/list` | Reader-Session, Remote-Adresse, User-Agent, CDN-Kennung und `outboundBytes` |
+| MoQ | `moqSession` | `/v3/moq/sessions/list` | Session, Zustand, Version, Transport, Remote-Adresse sowie ein-/ausgehende Bytes |
 
 Die Detailobjekte werden im normalisierten Snapshot unter `details` übernommen.
 Das bedeutet nicht automatisch, dass der Browser jedes enthaltene Feld bereits
 protokollspezifisch darstellt.
 
-Das WebRTC-Sessionobjekt enthält im v1.20.0-Schema insbesondere
+Das WebRTC-Sessionobjekt enthält im v1.21.0-Schema insbesondere
 `inboundRTPPackets`, `inboundRTPPacketsJitter`, `inboundRTPPacketsLost`,
 `inboundRTCPPackets`, `outboundRTPPackets`, `outboundRTCPPackets`,
 `outboundFramesDiscarded`, `localCandidate`, `remoteCandidate`, `state` und
@@ -80,7 +79,7 @@ sein; das aktuelle Dashboard wertet WebRTC trotzdem überwiegend nur generisch
 aus und visualisiert die tieferen Felder nicht vollständig.
 
 Neben den vom Monitor verwendeten HLS-Sessions stellt MediaMTX mit
-`GET /v3/hlsmuxers/list` eigene HLS-Muxer-Telemetrie bereit. Ein HLS-Sessionobjekt
+`GET /v3/hls/muxers/list` eigene HLS-Muxer-Telemetrie bereit. Ein HLS-Sessionobjekt
 enthält unter anderem `outboundBytes`, `remoteAddr`, `userAgent` und `isCDN`.
 Ein HLS-Muxerobjekt enthält `created`, `lastRequest`, `outboundBytes`,
 `outboundFramesDiscarded` und `path`. Der Collector lädt diesen Endpunkt,
@@ -148,7 +147,7 @@ Schätzwert als `link_capacity_mbps`; das Dashboard bezeichnet ihn als
 `SRT est. Link`. Der Wert ist weder eine garantierte nutzbare Bandbreite noch
 eine garantierte Reserve oder ein belastbarer Headroom-Wert.
 
-Die von MediaMTX v1.20.0 gelieferten Felder `packetsReceivedRetrans`,
+Die von MediaMTX v1.21.0 gelieferten Felder `packetsReceivedRetrans`,
 `packetsReceivedLoss`, `packetsReceivedDrop`, `packetsReceivedBelated`,
 `packetsReceivedUndecrypt`, `packetsRetrans`, `packetsSendLoss` und
 `packetsSendDrop` sind Gesamtzähler der jeweiligen SRT-Verbindung. Der Monitor
@@ -205,8 +204,19 @@ allgemeine Verbindungs- oder Stream-Gesundheit; Loss, Drop, Belated,
 Retransmissionen sowie RTT-Trend und -Volatilität bleiben davon getrennte
 Messwerte für eine spätere umfassende Bewertung.
 
-Für jeden Path fragt der Collector `/v3/paths/forward/list?path=<name>` ab und
-stellt die nativen Ziele unverändert als `forwardDestinations` bereit. Dazu
-gehören Konfiguration, Protokoll, Zustand, Erstellzeit, letzter Fehler und
-`outboundBytes`. Diese Daten sind damit im Snapshot vorhanden, besitzen derzeit
-aber keine eigene Dashboarddarstellung.
+Für jeden Path fragt der Collector `/v3/paths/forward-dests/list?path=<name>` ab.
+Der Snapshot enthält ausschließlich die nicht sensitiven Beobachtungen `id`,
+`pos`, `type`, `state`, `outboundBytes` und `created`; Konfiguration, URLs,
+Credentials und Fehlertexte werden nicht an API oder Frontend weitergegeben.
+Eine eigene Dashboarddarstellung ist derzeit nicht Teil des Monitors.
+
+Die v1.21-Control-API liefert dafür unter
+`/v3/paths/forward-dests/list?path=<name>` strukturierte Einträge mit `id`,
+`pos`, `type`, `state`, `outboundBytes` und `created`; `conf` und das alte
+`protocol` sind deprecated. MediaMTX definiert für `state` ausschließlich
+`idle`, `forwarding` und `error`. Begriffe wie `reconnecting` oder `inactive`
+werden deshalb nicht aus diesen Daten erfunden. Die Prometheus-Metriken
+`forward_dests` und `forward_dests_outbound_bytes` sind mögliche ergänzende
+Quellen, werden vom Monitor aktuell aber nicht zusätzlich abgefragt. Der
+Endpunkt ist read-only. Ziel-URLs, Userinfo, Tokens, Stream-Keys und
+Fehlertexte bleiben außerhalb des öffentlichen Snapshots.

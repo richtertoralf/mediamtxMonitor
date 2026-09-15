@@ -48,14 +48,14 @@ class MediaMTXClientTests(unittest.TestCase):
         session = FakeSession(FakeResponse({"items": []}))
         client = MediaMTXClient("http://localhost:9997/", session=session)
 
-        result = client.get_json("/v3/paths/forward/list", {"path": "camera/main"})
+        result = client.get_json("/v3/paths/forward-dests/list", {"path": "camera/main"})
 
         self.assertEqual(result, {"items": []})
         self.assertEqual(
             session.calls,
             [
                 (
-                    "http://localhost:9997/v3/paths/forward/list",
+                    "http://localhost:9997/v3/paths/forward-dests/list",
                     {"path": "camera/main"},
                     DEFAULT_TIMEOUT_SECONDS,
                 )
@@ -63,7 +63,7 @@ class MediaMTXClientTests(unittest.TestCase):
         )
 
     def test_custom_timeout_is_applied(self):
-        session = FakeSession(FakeResponse({"version": "1.20.0"}))
+        session = FakeSession(FakeResponse({"version": "1.21.0"}))
         client = MediaMTXClient(
             "http://media.example:9997", timeout=1.5, session=session
         )
@@ -78,12 +78,12 @@ class MediaMTXClientTests(unittest.TestCase):
         )
 
         with self.assertRaises(MediaMTXHTTPError) as raised:
-            client.get_json("/v3/rtspsconns/list")
+            client.get_json("/v3/rtsps/conns/list")
 
         self.assertEqual(raised.exception.status_code, 404)
         self.assertEqual(
             raised.exception.url,
-            "http://localhost:9997/v3/rtspsconns/list",
+            "http://localhost:9997/v3/rtsps/conns/list",
         )
 
     def test_transport_error_is_translated(self):
@@ -111,17 +111,17 @@ class CollectorClientBoundaryTests(unittest.TestCase):
 
         client = mock.Mock()
         client.build_url.return_value = (
-            "http://localhost:9997/v3/rtspsconns/list"
+            "http://localhost:9997/v3/rtsps/conns/list"
         )
         client.get_json.side_effect = MediaMTXHTTPError(
-            "http://localhost:9997/v3/rtspsconns/list", 404
+            "http://localhost:9997/v3/rtsps/conns/list", 404
         )
 
         with (
             mock.patch.object(collector, "mediamtx_client", client),
             mock.patch.object(collector.logging, "warning") as warning,
         ):
-            result = collector.fetch("/v3/rtspsconns/list")
+            result = collector.fetch("/v3/rtsps/conns/list")
 
         self.assertEqual(result, {"items": []})
         warning.assert_not_called()

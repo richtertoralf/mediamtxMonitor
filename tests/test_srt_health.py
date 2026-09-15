@@ -196,7 +196,7 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
 
     def fetch(self, endpoint, params=None):
         if endpoint == "/v3/info":
-            return {"version": "1.20.0"}
+            return {"version": "1.21.0"}
         if endpoint == "/v3/paths/list":
             return {
                 "items": [
@@ -215,9 +215,9 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
                     },
                 ]
             }
-        if endpoint == "/v3/srtconns/list":
+        if endpoint == "/v3/srt/conns/list":
             return {"items": self.srt_details}
-        if endpoint == "/v3/rtmpconns/list":
+        if endpoint == "/v3/rtmp/conns/list":
             return {"items": self.rtmp_details}
         return {"items": []}
 
@@ -233,7 +233,7 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
             snapshot[1],
             {
                 "name": "rtmp-path",
-                "mediamtxVersion": "1.20.0",
+                "mediamtxVersion": "1.21.0",
                 "source": {
                     "type": "rtmpConn",
                     "id": "rtmp-publisher",
@@ -448,7 +448,7 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
 
     def test_rtsp_rtmp_and_hls_keep_missing_rates_null_and_raw_metrics(self):
         protocol_details = {
-            "/v3/rtspsessions/list": [
+            "/v3/rtsp/sessions/list": [
                 {
                     "id": "rtsp-publisher",
                     "remoteAddr": "192.0.2.30:8554",
@@ -461,17 +461,17 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
                     "outboundRTPPacketsDiscarded": 0,
                 },
             ],
-            "/v3/rtmpconns/list": [
+            "/v3/rtmp/conns/list": [
                 {"id": "rtmp-reader", "remoteAddr": "192.0.2.32:1935"},
             ],
-            "/v3/hlssessions/list": [
+            "/v3/hls/sessions/list": [
                 {"id": "hls-reader", "remoteAddr": "192.0.2.33:49152"},
             ],
         }
 
         def fetch(endpoint, params=None):
             if endpoint == "/v3/info":
-                return {"version": "1.20.0"}
+                return {"version": "1.21.0"}
             if endpoint == "/v3/paths/list":
                 return {"items": [{
                     "name": "protocol-path",

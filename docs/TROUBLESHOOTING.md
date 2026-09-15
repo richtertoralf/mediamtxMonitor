@@ -42,7 +42,7 @@ sudo journalctl -u mediamtx-collector -f
 sudo ss -lntup | grep -E ':8554|:1935|:8888|:8889|:8890|:9997|:8080|:6379'
 ```
 
-Bei MediaMTX v1.20.0 wurden RTSP 8554, RTMP 1935, HLS 8888, WebRTC
+Bei MediaMTX v1.21.0 wurden RTSP 8554, RTMP 1935, HLS 8888, WebRTC
 8889, SRT 8890 und Control API 9997 bestätigt. Port 8080 gehört zum Monitor.
 
 ## Control API
@@ -92,7 +92,8 @@ Die Antwort von `GET /api/streams` enthält folgende Top-Level-Felder:
 |---|---|
 | `streams` | Liste des aktuellen normalisierten Stream-Snapshots; leer, wenn kein lesbarer Snapshot vorliegt |
 | `collected_at` | Unix-Zeitpunkt des letzten erfolgreichen Collector-Snapshots oder `null` |
-| `mediamtx_version` | zuletzt erfolgreich über `/v3/info` beobachtete MediaMTX-Version; unabhängig von der Streamliste, bei fehlender Beobachtung `null` |
+| `mediamtx_version` | in jedem Collector-Zyklus über `/v3/info` beobachtete MediaMTX-Version; unabhängig von der Streamliste, bei fehlender Beobachtung `null` |
+| `mediamtx_started` | in jedem Collector-Zyklus über `/v3/info` beobachteter Startzeitpunkt; ändert sich bei einem MediaMTX-Neustart |
 | `snapshot_refresh_ms` | konfiguriertes Aktualisierungsintervall für Snapshot-Daten in Millisekunden |
 | `streamlist_refresh_ms` | konfiguriertes HTTP-Pollingintervall der Streamliste in Millisekunden |
 | `systeminfo` | aktueller System-Snapshot; leeres Objekt, wenn keiner lesbar ist |

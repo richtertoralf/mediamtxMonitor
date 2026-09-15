@@ -5,7 +5,7 @@ from unittest import mock
 
 from bin import mediamtx_collector
 from bin.mediamtx_client import MediaMTXRequestError
-from bin.redis_keys import mediamtx_version_key, stream_snapshot_freshness_key
+from bin.redis_keys import mediamtx_started_key, mediamtx_version_key, stream_snapshot_freshness_key
 from bin.redis_store import RedisStore
 from tests.test_srt_health import FakeRedis
 
@@ -13,6 +13,7 @@ from tests.test_srt_health import FakeRedis
 class LifecycleMediaMTXClient:
     def __init__(self, readers):
         self.readers = readers
+        self.info = {"version": "1.21.0", "started": "2026-09-15T10:00:00Z"}
         self.calls = []
 
     def build_url(self, endpoint):
@@ -21,7 +22,7 @@ class LifecycleMediaMTXClient:
     def get_json(self, endpoint, params=None):
         self.calls.append((endpoint, params))
         if endpoint == "/v3/info":
-            return {"version": "1.20.0"}
+            return self.info
         if endpoint == "/v3/paths/list":
             return {
                 "items": [
@@ -35,7 +36,7 @@ class LifecycleMediaMTXClient:
                     }
                 ]
             }
-        if endpoint == "/v3/srtconns/list":
+        if endpoint == "/v3/srt/conns/list":
             return {
                 "items": [
                     {
@@ -46,7 +47,7 @@ class LifecycleMediaMTXClient:
                     *self.readers,
                 ]
             }
-        if endpoint == "/v3/paths/forward/list":
+        if endpoint == "/v3/paths/forward-dests/list":
             return {"items": []}
         return {"items": []}
 
@@ -159,21 +160,40 @@ class ConnectionLifecycleTests(unittest.TestCase):
             [
                 "/v3/info",
                 "/v3/paths/list",
-                "/v3/srtconns/list",
-                "/v3/paths/forward/list",
+                "/v3/srt/conns/list",
+                "/v3/paths/forward-dests/list",
             ],
         )
         self.assertEqual(
             second_endpoints,
-            ["/v3/paths/list", "/v3/srtconns/list"],
+            ["/v3/info", "/v3/paths/list", "/v3/srt/conns/list"],
         )
         self.assertEqual(first_metrics["api_request_count"], 4)
-        self.assertEqual(second_metrics["api_request_count"], 2)
+        self.assertEqual(second_metrics["api_request_count"], 3)
         freshness_key = stream_snapshot_freshness_key(mediamtx_collector.REDIS_KEY)
         self.assertEqual(json.loads(self.redis.values[freshness_key]), 4001.0)
         self.assertEqual(
             json.loads(self.redis.values[mediamtx_version_key(mediamtx_collector.REDIS_KEY)]),
-            "1.20.0",
+            "1.21.0",
+        )
+        self.assertEqual(
+            json.loads(self.redis.values[mediamtx_started_key(mediamtx_collector.REDIS_KEY)]),
+            "2026-09-15T10:00:00Z",
+        )
+
+    def test_server_metadata_refreshes_after_mediamtx_restart(self):
+        client = LifecycleMediaMTXClient([])
+        self.collect(client, 6000.0)
+        client.info = {"version": "1.22.0", "started": "2026-09-15T10:05:00Z"}
+        self.collect(client, 6001.0)
+
+        self.assertEqual(
+            json.loads(self.redis.values[mediamtx_version_key(mediamtx_collector.REDIS_KEY)]),
+            "1.22.0",
+        )
+        self.assertEqual(
+            json.loads(self.redis.values[mediamtx_started_key(mediamtx_collector.REDIS_KEY)]),
+            "2026-09-15T10:05:00Z",
         )
 
     def test_failed_paths_poll_preserves_last_successful_snapshot_and_freshness(self):

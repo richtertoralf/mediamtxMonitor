@@ -43,7 +43,7 @@ class RTMPPhaseClient:
 
     def get_json(self, endpoint, params=None):
         if endpoint == "/v3/info":
-            return {"version": "1.20.0"}
+            return {"version": "1.21.0"}
         if endpoint == "/v3/paths/list":
             plain_publisher = next(
                 item["id"] for item in self.connections["rtmpConn"]
@@ -69,9 +69,9 @@ class RTMPPhaseClient:
                     "readers": [{"type": "rtmpsConn", "id": "rtmps-reader"}],
                 },
             ]}
-        if endpoint == "/v3/rtmpconns/list":
+        if endpoint == "/v3/rtmp/conns/list":
             return {"items": self.connections["rtmpConn"]}
-        if endpoint == "/v3/rtmpsconns/list":
+        if endpoint == "/v3/rtmps/conns/list":
             return {"items": self.connections["rtmpsConn"]}
         return {"items": []}
 

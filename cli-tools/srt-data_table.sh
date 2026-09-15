@@ -15,7 +15,7 @@ separator_line=$(printf '%*s' "$total_width" '' | tr ' ' '-')
 
 while true; do
   # Abrufen und Formatieren der SRT-Daten
-  json_data=$(curl -s http://localhost:9997/v3/srtconns/list)
+  json_data=$(curl -s http://localhost:9997/v3/srt/conns/list)
 
   clear
 

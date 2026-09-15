@@ -94,7 +94,7 @@ function buildPreviewIframeSrc(streamName) {
 function updatePreview(preview, stream) {
   if (!preview) return;
   preview.setAttribute("title", `Preview: ${stream?.name || ""}`);
-  if (stream?.ready === false) {
+  if (stream?.available === false) {
     preview.removeAttribute("src");
     return;
   }
