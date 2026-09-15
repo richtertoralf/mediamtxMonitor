@@ -81,6 +81,18 @@ Ohne ausdrückliche Freigabe gelten insbesondere:
 `install.sh` dient ausschließlich einer frischen VM-Installation und nicht dem
 Entwicklungsworkflow.
 
+## P2-Scope und Runtime-Koexistenz
+
+- Architektur- und Analyse-Dokumente liefern Kontext, autorisieren aber keine
+  allgemeine Harmonisierung oder Änderungen an anderen Repositories.
+- Eine normale, produktionsfähige Runtime pro Host bleibt die Grundlage.
+  Etablierte Ports, Units, Redis-Namespace, MediaMTX-Ressourcen und Pfade nur
+  bei einem nachgewiesenen heutigen Konflikt und ausdrücklicher Freigabe ändern.
+- Tests verwenden Fakes oder temporäre Ressourcen und verändern keine normale
+  Redis-/MediaMTX-Runtime, Publish-Ziele oder laufenden Dienste.
+- Größere Verbesserungen als Folgeauftrag dokumentieren, nicht nebenbei
+  implementieren.
+
 ## Änderungsabschluss
 
 Für jede Änderung den Skill `verify-change` verwenden. Er trennt die fachliche
