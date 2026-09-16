@@ -1,6 +1,8 @@
-# devtools – Dev-Deployment
+# devtools – Verifikation und Dev-Deployment
 
-Dieses Verzeichnis enthält Hilfsskripte für die Entwicklung des MediaMTX Monitor.
+Dieses Verzeichnis enthält die Hilfsskripte für die Entwicklung des MediaMTX
+Monitor. Dieses Dokument beschreibt den Entwicklungs-, Verifikations- und
+Dev-Deployment-Workflow verbindlich.
 
 ## verify.sh
 
@@ -10,8 +12,30 @@ Der gemeinsame mechanische Prüfpfad für lokale Änderungen ist:
 ./devtools/verify.sh
 ```
 
-Die Verifikation führt kein Deployment aus. Der Deployment-Vergleich und das
-echte Deployment bleiben davon getrennte Schritte.
+Ablauf einer Änderung:
+
+1. Den vollständigen Diff lesen, jede Änderung ihrem Zweck zuordnen und
+   sicherstellen, dass keine unbeabsichtigten Produkt-, Konfigurations- oder
+   Deploymentänderungen enthalten sind.
+2. Die fachlich zuständige Dokumentation der betroffenen Bereiche prüfen; die
+   verbindlichen Grundlagen sind in `README.md` unter „Dokumentation“
+   verlinkt.
+3. Die für die konkrete Änderung relevanten Prüfungen durchführen. Für
+   Änderungen an Anwendung, Konfiguration oder anderen von diesem Prüfpfad
+   abgedeckten Artefakten ist `./devtools/verify.sh` der gemeinsame
+   mechanische Prüfpfad. Bei reinen Dokumentations- oder
+   Agenten-Instruktionsänderungen darf darauf verzichtet werden, wenn der
+   Prüfpfad den geänderten Bereich nicht prüft.
+4. Anschließend den vollständigen `git diff` sowie `git status --short`
+   prüfen.
+5. Nicht ausgeführte, übersprungene oder fehlgeschlagene Prüfungen und
+   verbleibende Risiken im Abschlussbericht nennen; ein bewusst
+   ausgelassener Lauf von `./devtools/verify.sh` wird dort ausdrücklich
+   genannt. Ein erfolgreicher mechanischer Lauf ersetzt die fachliche
+   Bewertung nicht.
+
+Die Verifikation führt kein Deployment, keinen Commit und keinen Push aus. Der
+Deployment-Vergleich und das echte Deployment bleiben davon getrennte Schritte.
 
 Für die JavaScript-Renderer-Tests benötigt `verify.sh` das Kommando `node` und
 damit eine lokale Node.js-Installation. Die Tests verwenden `node` direkt;
@@ -36,7 +60,7 @@ Die laufende Entwicklungsinstallation liegt unter:
 Das Git-Repository ist die **Source of Truth**. Dateien unter `/opt` werden nicht direkt bearbeitet.
 
 ```text
-Codex / VS Code
+Entwicklungsumgebung
       ↓
 ~/mediamtxMonitor
       ↓
@@ -48,6 +72,8 @@ Browser
 ```
 
 ## deploy-dev.sh
+
+Ein Dev-Deployment setzt eine zuvor verifizierte Änderung voraus.
 
 Änderungen zunächst nur anzeigen:
 
@@ -63,6 +89,11 @@ Freigabe ausgeführt werden.
 ```bash
 ./devtools/deploy-dev.sh
 ```
+
+Dieser Schritt verwendet `sudo`, schreibt außerhalb des Repositories und kann
+Dienste neu starten. Er wird ausschließlich nach ausdrücklicher Freigabe
+ausgeführt. Danach den Zustand der laufenden Anwendung beziehungsweise des
+Browsers prüfen und das Ergebnis berichten.
 
 Übertragen werden:
 
@@ -87,7 +118,9 @@ Dev-Deployment nicht verwaltet.
 
 ## Nicht Teil des Dev-Deployments
 
-Diese Dateien werden bewusst nicht über `deploy-dev.sh` ausgerollt:
+Dateien außerhalb des Deploy-Umfangs von `deploy-dev.sh` benötigen einen
+separaten, ausdrücklich freizugebenden Installationsschritt. Diese Dateien
+werden bewusst nicht über `deploy-dev.sh` ausgerollt:
 
 ```text
 config/monitor-preview-path.yml

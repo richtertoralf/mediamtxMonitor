@@ -1,101 +1,68 @@
 # Arbeitsregeln für Coding-Agenten
 
-## Projekt und verbindliche Dokumente
+Diese Datei ist die einzige allgemeine Arbeitsanweisung für Coding-Agenten in
+diesem Repository. Fachliche und technische Projektregeln stehen in der
+Projektdokumentation und werden hier nicht wiederholt.
 
-Dieses Repository enthält den MediaMTX Monitor von Richter Projects. Es erfasst
-und visualisiert Stream-, Connection-, Transport- und Systemmetriken eines
-MediaMTX-Nodes.
+## Projekt und Navigation
 
-Vor Änderungen die jeweils relevanten Grundlagen lesen:
+Dieses Repository enthält den MediaMTX Monitor von Richter Projects. Das
+Git-Repository ist die Source of Truth.
 
-- `docs/ARCHITECTURE.md`: Systemarchitektur, Datenfluss, fachliche
-  Interpretation und Invarianten; vor Änderungen an Metriksemantik, Datenfluss
-  oder Architektur zwingend lesen.
-- `docs/CODING_STYLE.md`: Coding- und Dokumentationskonventionen.
-- `docs/MEDIAMTX_V1_21_DATA.md`: von MediaMTX v1.21+ tatsächlich bereitgestellte
-  Rohdaten, Felder und Metriken.
-- `.agents/skills/verify-change/SKILL.md`: fachliche Änderungsprüfung und
-  gemeinsamer mechanischer Prüfpfad.
-- `.agents/skills/dev-deploy/SKILL.md`: getrennt freizugebender Dev-Deployment-
-  Workflow.
+Die jeweils zuständige Grundlage vor einer Änderung lesen:
 
-## Repository-Landkarte
+- `README.md`: Überblick, Repository-Landkarte, Installation und Betrieb
+- `docs/ARCHITECTURE.md`: verbindliche Architekturgrenzen, Datenfluss und
+  fachliche Invarianten; vor Änderungen an Architektur, Datenfluss oder
+  Metriksemantik zwingend lesen
+- `docs/CODING_STYLE.md`: Coding- und Dokumentationskonventionen
+- `docs/MEDIAMTX_V1_21_DATA.md`: tatsächlich verfügbare MediaMTX-Rohdaten
+- `docs/TROUBLESHOOTING.md`: Betrieb und Fehlersuche
+- `devtools/README.md`: Entwicklungs-, Verifikations- und
+  Dev-Deployment-Workflow
 
-- `bin/`: Python-Backend, Collector, API und Systemerfassung
-- `static/`: Vanilla-JavaScript-Dashboard und CSS
-- `tests/`: Python-Unittests und JavaScript-Renderer-Tests
-- `config/`: Laufzeitkonfiguration und Installationsausschnitt
-- `systemd/`: Service-Units
-- `cli-tools/`: Diagnosewerkzeuge
-- `docs/`: Architektur-, Coding-, Daten- und Betriebsdokumentation
-- `devtools/`: Verifikation und kontrolliertes Dev-Deployment
+## Arbeitsweise
 
-Das Git-Repository ist die Source of Truth. Die laufende Installation unter
-`/opt/mediamtx-monitoring-backend` und die externe MediaMTX-Installation unter
-`/usr/local` beziehungsweise `/etc` sind davon getrennt und werden nicht direkt
-bearbeitet.
+- Vor einer Änderung die fachlich zuständige Dokumentation lesen und ihre
+  Vorgaben einhalten.
+- Änderungen klein, nachvollziehbar, kompatibel und einzeln prüfbar halten.
+- Bestehende Struktur, Muster und Abstraktionen bevorzugen; keine neue Schicht,
+  Abhängigkeit oder Framework ohne konkreten, begründeten Nutzen.
+- Bestehende Benutzeränderungen und Secrets schützen.
+- Unklarheiten und erkannte Folgeaufgaben benennen, statt sie nebenbei
+  umzusetzen.
 
-## Unverletzbare Architekturregeln
+## Auftragsgrenze
 
-- MediaMTX ist die fachliche Grenze für Stream-, Connection- und
-  Transportmonitoring. Metriken stammen ausschließlich aus Daten, die MediaMTX
-  selbst über seine APIs beziehungsweise seine protokollspezifischen
-  Statistiken bereitstellt, oder aus klar definierten Ableitungen dieser
-  MediaMTX-Daten.
-- Der Monitor führt keine unabhängigen Messungen gegen Publisher, Reader oder
-  andere Feldgeräte durch, um fehlende MediaMTX-Metriken zu ersetzen oder zu
-  ergänzen.
-- Protokollspezifische Unterschiede sind beabsichtigt. Fehlende native
-  Protokollmetriken bleiben fehlend; keine Ersatzmetriken aus fachlich
-  unabhängigen Messquellen erfinden.
-- Externer ICMP-Ping gehört nicht zum Stream-Monitoring. SRT-`msRTT`
-  beziehungsweise `transport_rtt_ms` ist eine protokollnative, von MediaMTX
-  bereitgestellte Transportmetrik, kein generischer Netzwerk-Ping.
-- Bestehende Architektur und Abstraktionen bevorzugen. Keine neue Struktur,
-  Schicht, Abhängigkeit oder Framework einführen, wenn der Bestand ausreicht;
-  kein pauschaler Umbau nach `src/`.
-- MediaMTX, Redis, FastAPI, FFmpeg, systemd und Monitoring-Anwendung bleiben
-  getrennte Komponenten. Dashboard und Monitor-API bleiben read-only.
-- Das Frontend bleibt Vanilla JavaScript. Bestehende Funktionen und Verträge
-  bleiben erhalten.
+- Nur den erteilten Auftrag umsetzen; größere Verbesserungen als Folgeauftrag
+  dokumentieren.
+- Im Repository dürfen Dateien analysiert und geändert sowie Tests, Git-Diffs
+  und die Verifikation ausgeführt werden.
+- Ohne ausdrückliche Freigabe nicht: `sudo` verwenden, Dateien außerhalb des
+  Repositories ändern, Systemdienste oder externe Komponenten anpassen, ein
+  Deployment ausführen, Abhängigkeiten installieren sowie committen, pushen
+  oder den Branch wechseln.
+- Ohne ausdrücklichen Auftrag verwenden Tests und Prüfungen Fakes oder
+  temporäre Ressourcen und verändern keine laufende Umgebung. Ausdrücklich
+  beauftragte Integrations- oder Runtime-Tests bleiben davon unberührt.
 
-Details und Begründungen sind verbindlich in `docs/ARCHITECTURE.md` beschrieben
-und werden hier nicht dupliziert.
+## Dokumentationsregel
 
-## Sicherheit und Freigaben
+- Unnötige Duplikation zwischen Dokumentations- und Instruktionsquellen
+  vermeiden. Technische Wahrheit kann je nach Sachverhalt auch in Code, Tests
+  oder Konfiguration liegen.
+- Geändertes Verhalten, geänderte Verträge und geänderte Workflows werden in
+  der zuständigen bestehenden Datei nachgeführt, nicht in dieser Datei
+  dupliziert.
+- Keine agentenspezifischen Kopien von Projekt-, Verifikations- oder
+  Deploymentregeln und keine agentenspezifischen Skill- oder
+  Instruktionsverzeichnisse anlegen.
+- `CLAUDE.md` verweist ausschließlich auf diese Datei.
 
-Im Repository dürfen Dateien analysiert und geändert sowie Tests, Git-Diffs und
-`./devtools/verify.sh` ausgeführt werden. Bestehende Benutzeränderungen und
-Secrets sind zu schützen.
+## Verifikation und Abschluss
 
-Ohne ausdrückliche Freigabe gelten insbesondere:
-
-- kein `sudo`, keine Firewall-, Port-, `/usr/local`-, `/etc`-, MediaMTX- oder
-  systemd-Änderung;
-- keine direkte Änderung unter `/opt/mediamtx-monitoring-backend`;
-- kein echtes `./devtools/deploy-dev.sh` und keine separate Installation von
-  Abhängigkeiten oder nicht deploybaren Konfigurationsdateien;
-- kein Commit, Push oder Branchwechsel.
-
-`./devtools/deploy-dev.sh --dry-run` ist ein erlaubter, rein lesender Vergleich.
-`install.sh` dient ausschließlich einer frischen VM-Installation und nicht dem
-Entwicklungsworkflow.
-
-## P2-Scope und Runtime-Koexistenz
-
-- Architektur- und Analyse-Dokumente liefern Kontext, autorisieren aber keine
-  allgemeine Harmonisierung oder Änderungen an anderen Repositories.
-- Eine normale, produktionsfähige Runtime pro Host bleibt die Grundlage.
-  Etablierte Ports, Units, Redis-Namespace, MediaMTX-Ressourcen und Pfade nur
-  bei einem nachgewiesenen heutigen Konflikt und ausdrücklicher Freigabe ändern.
-- Tests verwenden Fakes oder temporäre Ressourcen und verändern keine normale
-  Redis-/MediaMTX-Runtime, Publish-Ziele oder laufenden Dienste.
-- Größere Verbesserungen als Folgeauftrag dokumentieren, nicht nebenbei
-  implementieren.
-
-## Änderungsabschluss
-
-Für jede Änderung den Skill `verify-change` verwenden. Er trennt die fachliche
-Diff-Prüfung von den mechanischen Prüfungen in `./devtools/verify.sh`. Nicht
-ausgeführte oder fehlgeschlagene Prüfungen und ein nicht erfolgtes Deployment im
-Abschlussbericht transparent nennen.
+- Der kanonische Entwicklungs-, Verifikations- und Dev-Deployment-Workflow
+  steht in `devtools/README.md` und wird von dort befolgt.
+- Im Abschlussbericht wahrheitsgemäß nennen, welche Aktionen und Prüfungen
+  ausgeführt wurden, welche nicht ausgeführt wurden oder fehlgeschlagen sind
+  und welche Risiken verbleiben.
