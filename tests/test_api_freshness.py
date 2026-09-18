@@ -74,13 +74,66 @@ class ApiFreshnessTests(unittest.TestCase):
 
     def test_api_exposes_only_browser_endpoint(self):
         self.api.snapshot_store = RedisStore(FakeRedis({}))
-        with mock.patch.dict(self.api.config, {
-            "webrtc_base_url": "https://preview.example:9443",
+        with mock.patch.object(
+            self.api, "preview_base_url", "https://preview.example:9443"
+        ), mock.patch.dict(self.api.config, {
             "api_base_url": "http://internal.example:9998",
         }):
             payload = json.loads(self.api.get_streams().body)
         self.assertEqual(payload["webrtc_base_url"], "https://preview.example:9443")
         self.assertNotIn("api_base_url", payload)
+
+    def test_configured_preview_base_is_used_without_asking_mediamtx(self):
+        def fail(*_args, **_kwargs):
+            raise AssertionError("MediaMTX darf nicht befragt werden.")
+
+        with mock.patch.object(self.api, "derive_preview_base_url", fail):
+            resolved = self.api.resolve_preview_base_url({
+                "webrtc_base_url": "https://preview.example:9443",
+                "api_base_url": "http://127.0.0.1:9997",
+            })
+        self.assertEqual(resolved, "https://preview.example:9443")
+
+    def test_empty_preview_base_is_derived_from_the_mediamtx_listener(self):
+        class FakeClient:
+            def get_json(self, endpoint):
+                assert endpoint == "/v3/config/global/get"
+                return {
+                    "webrtc": True,
+                    "webrtcAddress": ":8889",
+                    "webrtcEncryption": False,
+                }
+
+        with mock.patch.object(
+            self.api, "primary_host_address", lambda: "10.0.0.5"
+        ):
+            derived = self.api.derive_preview_base_url(
+                "http://127.0.0.1:9997", client=FakeClient()
+            )
+        self.assertEqual(derived, "http://10.0.0.5:8889")
+
+    def test_disabled_webrtc_yields_no_preview_base(self):
+        class FakeClient:
+            def get_json(self, _endpoint):
+                return {"webrtc": False, "webrtcAddress": ":8889"}
+
+        derived = self.api.derive_preview_base_url(
+            "http://127.0.0.1:9997", client=FakeClient()
+        )
+        self.assertEqual(derived, "")
+
+    def test_unreachable_mediamtx_reports_instead_of_failing_the_service(self):
+        def unreachable(*_args, **_kwargs):
+            raise self.api.MediaMTXError("keine Verbindung")
+
+        with mock.patch.object(
+            self.api, "derive_preview_base_url", unreachable
+        ), self.assertLogs(level="ERROR"):
+            resolved = self.api.resolve_preview_base_url({
+                "webrtc_base_url": "",
+                "api_base_url": "http://127.0.0.1:9997",
+            })
+        self.assertEqual(resolved, "")
 
     def test_api_exposes_mediamtx_version_without_streams(self):
         values = {

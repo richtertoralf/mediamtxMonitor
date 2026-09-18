@@ -21,6 +21,8 @@ export const {
   dataAgeStatusClass,
   formatDataAge,
   formatRelativeTime,
+  isStreamActive,
+  renderForwardDestination,
   recordSnapshotTelemetry,
   renderMonitorTitle,
   renderReader,

@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+import socket
 from typing import Any, Dict, Mapping, Optional
+from urllib.parse import urlsplit
 
 import yaml
 
@@ -117,6 +119,79 @@ def resolve_redis_config(config: Mapping[str, Any]) -> Dict[str, Any]:
     return resolved
 
 
+def normalize_preview_base_url(value: Any) -> str:
+    """Validate the optional explicit browser-reachable WebRTC base URL."""
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise ValueError("webrtc_base_url muss eine Zeichenkette sein.")
+    value = value.strip()
+    if not value:
+        return ""
+    parsed = urlsplit(value)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(
+            "webrtc_base_url muss mit http:// oder https:// beginnen."
+        )
+    if not parsed.hostname:
+        raise ValueError("webrtc_base_url benötigt einen Host.")
+    if parsed.username or parsed.password:
+        raise ValueError("webrtc_base_url darf keine Zugangsdaten enthalten.")
+    if parsed.query or parsed.fragment:
+        raise ValueError(
+            "webrtc_base_url darf keine Query-Parameter und kein Fragment "
+            "enthalten."
+        )
+    return value.rstrip("/")
+
+
+def preview_port_from_bind_address(address: Any) -> str:
+    """Return only the port of a MediaMTX listener bind address."""
+    if not isinstance(address, str):
+        return ""
+    _, separator, port = address.strip().rpartition(":")
+    if not separator:
+        return ""
+    port = port.strip()
+    return port if port.isdigit() else ""
+
+
+def _encryption_enabled(value: Any) -> bool:
+    """Interpret the MediaMTX encryption flag without inventing defaults."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"yes", "true", "strict", "optional"}
+    return False
+
+
+def build_preview_base_url(
+    host: Any,
+    webrtc_address: Any,
+    webrtc_encryption: Any,
+) -> str:
+    """Build the preview base from the host and MediaMTX's own WebRTC listener."""
+    host = host.strip() if isinstance(host, str) else ""
+    port = preview_port_from_bind_address(webrtc_address)
+    if not host or not port:
+        return ""
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    scheme = "https" if _encryption_enabled(webrtc_encryption) else "http"
+    return f"{scheme}://{host}:{port}"
+
+
+def primary_host_address() -> str:
+    """Return the monitor host address a browser most likely reaches."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            # TEST-NET-1 target; a UDP connect only selects the outgoing route.
+            probe.connect(("192.0.2.1", 9))
+            return str(probe.getsockname()[0])
+    except OSError:
+        return ""
+
+
 def resolve_node_config(config: Mapping[str, Any]) -> Dict[str, Any]:
     """Resolve the monitored node identity with a single-node default."""
     node_block = config.get("node")
@@ -197,7 +272,9 @@ def resolve_monitoring_config(config: Mapping[str, Any]) -> Dict[str, Any]:
         "api_base_url": config.get(
             "api_base_url", MONITORING_DEFAULTS["api_base_url"]
         ),
-        "webrtc_base_url": config.get("webrtc_base_url", ""),
+        "webrtc_base_url": normalize_preview_base_url(
+            config.get("webrtc_base_url")
+        ),
         "redis": resolve_redis_config(config),
         "node": resolve_node_config(config),
         "collector": resolve_collector_config(config),

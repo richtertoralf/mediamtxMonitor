@@ -59,7 +59,7 @@ Modulzustand. Systemerfassung und ihr Loop liegen gemeinsam in
 `bin/system_monitor.py`.
 
 Das aktuelle Modell kennt Streams, Publisher und Reader, aber noch keine
-stabile `node_id` und kein Multi-Node-Routing. Preview verwendet die explizite `webrtc_base_url` aus der Monitor-Konfiguration.
+stabile `node_id` und kein Multi-Node-Routing. Preview verwendet `webrtc_base_url` aus der Monitor-Konfiguration; ohne expliziten Wert wird die Basis beim Start aus der Hostadresse und dem von MediaMTX gemeldeten WebRTC-Listener abgeleitet.
 Der Collector verwendet `api_base_url`. Schema, Host und Port sind konfigurierbar;
 Multi-Node-Routing ist damit nicht implementiert.
 
@@ -87,6 +87,11 @@ Ein Stream ist ein MediaMTX-Pfad auf genau einem Node. Der Streamname ist nur
 innerhalb seines Nodes eindeutig und darf nicht allein als globale Identität
 verwendet werden.
 
+MediaMTX meldet auch konfigurierte, aber inaktive Pfade. Ein Stream gilt erst
+als laufend, wenn MediaMTX ihn mit `available` und `online` meldet. Collector
+und API liefern weiterhin alle Pfade; die Auswahl der darzustellenden Streams
+und der Zustand des Statusabzeichens gehören in die Darstellung.
+
 ### Publisher
 
 Ein Publisher ist die Quelle eines Streams. Er besitzt eine eigene fachliche
@@ -99,6 +104,15 @@ Ein Reader konsumiert einen Stream. Reader und Publisher dürfen gemeinsame
 Hilfsstrukturen verwenden, bleiben aber fachlich getrennte Konzepte. Richtung,
 Metriken, Zustands-Keys und Health-Bewertung müssen ihre jeweilige Rolle
 erkennen lassen.
+
+### Forward-Destination
+
+Eine Forward-Destination ist ein von MediaMTX selbst aufgebautes Ausgangsziel
+eines Pfades. Sie ist kein Reader: Sie besitzt keine Client-Verbindung und keine
+Reader-Metriken, sondern nur die von MediaMTX gemeldeten Beobachtungswerte.
+Beide sind Ausgänge desselben Streams und werden gemeinsam unter OUT dargestellt.
+Es werden ausschließlich die sanitisierten Felder verwendet; Ziel-URLs,
+Streamkeys und Zugangsdaten gehören nicht in die Darstellung.
 
 ## Datenfluss
 

@@ -151,6 +151,10 @@ body > h1 {
   white-space: nowrap;
 }
 
+.stream-status-idle {
+  color: var(--text-muted);
+}
+
 .live-dot {
   display: inline-block;
   width: 0.65em;
@@ -158,6 +162,10 @@ body > h1 {
   margin-right: 0.4em;
   background: var(--live);
   border-radius: 50%;
+}
+
+.stream-status-idle .live-dot {
+  background: var(--text-muted);
 }
 
 .stream-flow {
@@ -575,6 +583,14 @@ body > h1 {
 
 .reader-block .connection-heading {
   margin-bottom: 6px;
+}
+
+.forward-state {
+  min-width: 0;
+  margin-left: 0.3em;
+  color: var(--text-muted);
+  font-weight: 500;
+  overflow-wrap: anywhere;
 }
 
 .connection-notes {

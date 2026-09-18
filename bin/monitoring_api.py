@@ -21,9 +21,12 @@ from fastapi.staticfiles import StaticFiles
 try:
     from .monitoring_config import (
         DEFAULT_CONFIG_PATH,
+        build_preview_base_url,
         load_monitoring_config,
+        primary_host_address,
         resolve_monitoring_config,
     )
+    from .mediamtx_client import MediaMTXClient, MediaMTXError
     from .redis_store import NamespacedRedis, RedisStore, SnapshotDecodeError
     from .redis_keys import (
         mediamtx_started_key,
@@ -33,9 +36,12 @@ try:
 except ImportError:
     from monitoring_config import (
         DEFAULT_CONFIG_PATH,
+        build_preview_base_url,
         load_monitoring_config,
+        primary_host_address,
         resolve_monitoring_config,
     )
+    from mediamtx_client import MediaMTXClient, MediaMTXError
     from redis_store import NamespacedRedis, RedisStore, SnapshotDecodeError
     from redis_keys import (
         mediamtx_started_key,
@@ -50,6 +56,7 @@ REDIS_PORT = redis_cfg["port"]
 REDIS_KEY = redis_cfg["key"]
 SYSTEM_REDIS_KEY = config["system_monitor"]["redis_key"]
 VERSION_PATH = Path(__file__).resolve().parents[1] / "VERSION"
+preview_base_url = config["webrtc_base_url"]
 monitor_version = None
 r = None
 snapshot_store = None
@@ -64,6 +71,42 @@ def load_runtime_config(path: Path | str = DEFAULT_CONFIG_PATH) -> dict:
         return resolve_monitoring_config({})
 
 
+def derive_preview_base_url(api_base_url: str, client=None) -> str:
+    """Derive the preview base from the WebRTC listener MediaMTX reports."""
+    client = client if client is not None else MediaMTXClient(api_base_url)
+    global_config = client.get_json("/v3/config/global/get")
+    if not isinstance(global_config, dict) or not global_config.get("webrtc"):
+        return ""
+    return build_preview_base_url(
+        primary_host_address(),
+        global_config.get("webrtcAddress"),
+        global_config.get("webrtcEncryption"),
+    )
+
+
+def resolve_preview_base_url(config: dict) -> str:
+    """Return the configured preview base or derive it once from MediaMTX."""
+    configured = config["webrtc_base_url"]
+    if configured:
+        logging.info("Preview-Basis (konfiguriert): %s", configured)
+        return configured
+    try:
+        derived = derive_preview_base_url(config["api_base_url"])
+    except MediaMTXError as exc:
+        logging.warning(
+            "Preview-Basis konnte nicht aus MediaMTX abgeleitet werden: %s", exc
+        )
+        derived = ""
+    if derived:
+        logging.info("Preview-Basis (aus MediaMTX abgeleitet): %s", derived)
+        return derived
+    logging.error(
+        "Keine Preview-Basis verfügbar; webrtc_base_url in der Monitor-"
+        "Konfiguration setzen."
+    )
+    return ""
+
+
 def load_monitor_version(path: Path = VERSION_PATH) -> str | None:
     """Return the version file content without surrounding whitespace."""
     try:
@@ -75,7 +118,7 @@ def load_monitor_version(path: Path = VERSION_PATH) -> str | None:
 def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
     """Configure logging and initialize the API snapshot store."""
     global config, redis_cfg, REDIS_HOST, REDIS_PORT, REDIS_KEY
-    global SYSTEM_REDIS_KEY, monitor_version, r, snapshot_store
+    global SYSTEM_REDIS_KEY, monitor_version, preview_base_url, r, snapshot_store
 
     config = load_runtime_config(config_path)
     redis_cfg = config["redis"]
@@ -90,6 +133,7 @@ def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
         level=log_level,
         format="%(asctime)s [%(levelname)s] %(message)s",
     )
+    preview_base_url = resolve_preview_base_url(config)
     monitor_version = load_monitor_version()
     if monitor_version is None:
         logging.warning("Monitor version file could not be read: %s", VERSION_PATH)
@@ -173,7 +217,7 @@ def get_streams():
     return JSONResponse(content={
         "streams": streams,
         "collected_at": collected_at,
-        "webrtc_base_url": config["webrtc_base_url"],
+        "webrtc_base_url": preview_base_url,
         "snapshot_refresh_ms": frontend_cfg["snapshot_refresh_ms"],
         "streamlist_refresh_ms": frontend_cfg["streamlist_refresh_ms"],
         "monitor_version": monitor_version,

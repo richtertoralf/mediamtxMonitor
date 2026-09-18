@@ -5,12 +5,17 @@
  */
 
 import {connectionTotal} from "./connection-metrics.js";
-import {escapeHtml} from "./format-utils.js";
-import {renderConnectionHeading} from "./metric-grid.js";
+import {escapeHtml, formatBytes, formatRelativeTime} from "./format-utils.js";
+import {metric, renderConnectionHeading, renderMetrics} from "./metric-grid.js";
 import {renderMedia} from "./media-tracks.js";
 import {renderHlsMuxer, renderNonSrtMetrics, renderPathMetrics} from "./protocol-metrics.js";
 import {renderSrtMetrics} from "./srt-metrics.js";
 import {connectionTelemetryKey} from "./telemetry-store.js";
+
+/** Report whether MediaMTX currently serves this path as a running stream. */
+export function isStreamActive(stream) {
+  return stream?.available === true && stream?.online === true;
+}
 
 /** Render the monitor version in the page heading and browser tab. */
 export function renderMonitorTitle(titleElement, monitorVersion) {
@@ -119,6 +124,32 @@ function updatePreview(preview, stream, webrtcBaseUrl) {
   if (currentSrc !== wantedSrc) preview.setAttribute("src", wantedSrc);
 }
 
+/** Render one MediaMTX forward destination as a permanent OUT block. */
+export function renderForwardDestination(destination, index = 0) {
+  const type = destination?.type;
+  const state = destination?.state;
+  return `
+    <section class="reader-block forward-block">
+      <h3>Forward ${index + 1}</h3>
+      <div class="connection-heading">
+        <span>${escapeHtml(type ? String(type).toUpperCase() : "—")}</span>
+        <span class="forward-state">· ${escapeHtml(state || "—")}</span>
+      </div>
+      ${renderMetrics([
+        metric("Total", formatBytes(destination?.outboundBytes)),
+        metric(
+          "Aufgebaut",
+          formatRelativeTime(destination?.created),
+          null,
+          null,
+          null,
+          destination?.created,
+        ),
+      ])}
+    </section>
+  `;
+}
+
 function sortedReaders(stream) {
   const order = {
     srtConn: 1, rtmpConn: 2, rtmpsConn: 3, rtspSession: 4,
@@ -129,10 +160,14 @@ function sortedReaders(stream) {
 }
 
 function renderHeaderContent(stream) {
-  const outCount = stream?.readers?.length || 0;
+  const outCount = (stream?.readers?.length || 0)
+    + (stream?.forwardDestinations?.length || 0);
+  const active = isStreamActive(stream);
   return `
     <div class="stream-name">${escapeHtml(stream?.name || "—")}</div>
-    <div class="stream-status"><span class="live-dot"></span>LIVE · ${outCount} OUT</div>
+    <div class="stream-status${active ? "" : " stream-status-idle"}">
+      <span class="live-dot"></span>${active ? "LIVE" : "INAKTIV"} · ${outCount} OUT
+    </div>
   `;
 }
 
@@ -152,11 +187,16 @@ function renderCenterContent(stream) {
 
 function renderRightContent(stream) {
   const readers = sortedReaders(stream);
+  const forwards = stream?.forwardDestinations || [];
   return `
     <h2 class="panel-title">OUT</h2>
     ${renderHlsMuxer(stream)}
-    ${readers.length
-      ? readers.map((reader, index) => renderReader(reader, index, stream?.name, stream)).join("")
+    ${readers.map((reader, index) =>
+      renderReader(reader, index, stream?.name, stream)).join("")}
+    ${forwards.map((destination, index) =>
+      renderForwardDestination(destination, index)).join("")}
+    ${readers.length || forwards.length
+      ? ""
       : '<div class="no-readers">Keine OUT-Verbindung</div>'}
   `;
 }

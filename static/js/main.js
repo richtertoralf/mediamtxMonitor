@@ -22,6 +22,7 @@ import { fetchStreamsFromApi } from "./api.js";
 import {
   dataAgeStatusClass,
   formatDataAge,
+  isStreamActive,
   recordSnapshotTelemetry,
   renderMonitorTitle,
   renderStreamCard,
@@ -53,9 +54,11 @@ async function updateUI() {
 
   const streams = result.streams || [];
   recordSnapshotTelemetry(streams, result.collected_at);
+  // MediaMTX lists configured but inactive paths; only running streams get a card.
+  const activeStreams = streams.filter(isStreamActive);
   const seen = new Set();
 
-  for (const stream of streams) {
+  for (const stream of activeStreams) {
     seen.add(stream.name);
     const existingCard = streamCards.get(stream.name);
 
@@ -77,7 +80,7 @@ async function updateUI() {
   }
 
   // 🔘 Sichtbarkeit "Keine Streams"
-  noStreams.style.display = streams.length === 0 ? "block" : "none";
+  noStreams.style.display = activeStreams.length === 0 ? "block" : "none";
 
   // ⏱ Intervall bei Bedarf neu setzen
   if (newInterval !== refreshIntervalMs) {

@@ -5,7 +5,10 @@ api_server:
   listen_port: 8080
 
 api_base_url: "http://localhost:9997"
-# Browser-reachable HTTP(S) base; set explicitly. Empty disables previews.
+# Optional override of the browser-reachable HTTP(S) preview base.
+# Empty derives it at startup from the host address and the WebRTC listener
+# MediaMTX reports; set it explicitly for a reverse proxy, TLS, or a remote
+# MediaMTX instance.
 webrtc_base_url: ""
 
 redis:

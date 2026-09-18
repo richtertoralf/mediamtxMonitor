@@ -100,8 +100,16 @@ bricht der Reuse-Pfad mit einer verständlichen Meldung vor jeder Änderung ab.
 
 `api_base_url` in `config/collector.yaml` ist die Control-API-Basis für den
 Collector. `webrtc_base_url` ist die vom **Browser** erreichbare HTTP(S)-Basis
-für die Vorschau; leer bedeutet keine Preview-Verbindung. Die Monitor-API
-liefert nur die WebRTC-Adresse an das Frontend, nicht die Control-API-Adresse.
+für die Vorschau und ein optionaler Override. Ist der Wert leer oder fehlt er,
+leitet der API-Dienst die Basis beim Start einmalig ab: Host aus der primären
+Adresse des Monitor-Hosts, Port und Verschlüsselung aus dem WebRTC-Listener,
+den MediaMTX über `/v3/config/global/get` meldet. Eine Bind-Adresse wie `:8889`,
+`0.0.0.0:8889` oder `[::]:8889` liefert dabei ausschließlich den Port und nie
+den Browser-Host. Die effektive Preview-Basis wird beim Start protokolliert.
+Ein explizit gesetzter, syntaktisch ungültiger Wert ist ein Konfigurationsfehler
+und verhindert den Dienststart; es gibt dafür keinen stillen Rückfall auf die
+Ableitung. Die Monitor-API liefert nur die WebRTC-Adresse an das Frontend, nicht
+die Control-API-Adresse.
 
 Bei Reuse ist die browserseitige WebRTC-URL ausdrücklich erforderlich. Die API-URL
 kann ebenfalls vorgegeben werden, beispielsweise:
@@ -145,8 +153,9 @@ nicht umgangen. URLs dürfen keine Zugangsdaten, Query-Parameter oder Fragmente
 enthalten. API-Authentisierung wird durch diese Änderung nicht eingerichtet.
 Browser-Erreichbarkeit, NAT und ICE müssen weiterhin betrieblich geprüft werden.
 
-Bei bestehenden Monitor-Installationen muss `webrtc_base_url` vor dem Einsatz
-dieser Änderung gesetzt werden; es gibt keinen stillen Port-8889-Fallback.
+Bestehende Monitor-Installationen ohne `webrtc_base_url` erhalten die Basis
+über die beschriebene Ableitung. Ein expliziter Wert bleibt für Reverse Proxy,
+TLS, abweichende Ports und eine entfernte MediaMTX-Instanz erforderlich.
 Die Diagnosewerkzeuge unter `cli-tools/` akzeptieren `MEDIAMTX_API_URL`
 (Default `http://localhost:9997`). Beispiele mit Standardports entsprechend anpassen.
 

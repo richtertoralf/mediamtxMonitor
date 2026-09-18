@@ -17,7 +17,10 @@ from monitoring_config import (  # noqa: E402
     NODE_DEFAULTS,
     REDIS_DEFAULTS,
     SYSTEM_MONITOR_DEFAULTS,
+    build_preview_base_url,
     load_monitoring_config,
+    normalize_preview_base_url,
+    preview_port_from_bind_address,
     resolve_api_config,
     resolve_bitrate_config,
     resolve_collector_config,
@@ -266,6 +269,67 @@ class SystemMonitorConfigTests(unittest.TestCase):
         system_monitor_key = resolve_system_monitor_config(config)["redis_key"]
         api_key = resolve_system_monitor_config(config)["redis_key"]
         self.assertEqual(system_monitor_key, api_key)
+
+
+class PreviewBaseUrlTests(unittest.TestCase):
+    def test_explicit_value_is_kept_without_trailing_slash(self):
+        for value, expected in (
+            ("http://media.example:8889", "http://media.example:8889"),
+            ("https://media.example:9443/preview/", "https://media.example:9443/preview"),
+            ("  http://10.0.0.5:8889  ", "http://10.0.0.5:8889"),
+        ):
+            self.assertEqual(normalize_preview_base_url(value), expected)
+
+    def test_missing_or_empty_value_stays_empty_for_later_derivation(self):
+        for value in (None, "", "   "):
+            self.assertEqual(normalize_preview_base_url(value), "")
+
+    def test_invalid_value_is_a_configuration_error_without_fallback(self):
+        for value in (
+            "javascript:alert(1)",
+            "media.example:8889",
+            "https://user:secret@media.example",
+            "https://media.example?token=secret",
+            "https://media.example#fragment",
+            8889,
+        ):
+            with self.assertRaises(ValueError):
+                normalize_preview_base_url(value)
+
+    def test_resolved_config_rejects_an_invalid_explicit_value(self):
+        with self.assertRaises(ValueError):
+            resolve_monitoring_config({"webrtc_base_url": "ftp://media.example"})
+
+    def test_bind_addresses_contribute_only_their_port(self):
+        for address, expected in (
+            (":8889", "8889"),
+            ("0.0.0.0:8889", "8889"),
+            ("[::]:8889", "8889"),
+            ("192.0.2.5:8899", "8899"),
+            ("", ""),
+            ("8889", ""),
+            (None, ""),
+        ):
+            self.assertEqual(preview_port_from_bind_address(address), expected)
+
+    def test_derived_base_uses_host_with_mediamtx_port_and_encryption(self):
+        self.assertEqual(
+            build_preview_base_url("10.0.0.5", ":8889", False),
+            "http://10.0.0.5:8889",
+        )
+        self.assertEqual(
+            build_preview_base_url("10.0.0.5", "0.0.0.0:9443", True),
+            "https://10.0.0.5:9443",
+        )
+        self.assertEqual(
+            build_preview_base_url("fd00::5", "[::]:8889", False),
+            "http://[fd00::5]:8889",
+        )
+
+    def test_derivation_never_uses_a_bind_address_as_browser_host(self):
+        for host in ("", "   ", None):
+            self.assertEqual(build_preview_base_url(host, ":8889", False), "")
+        self.assertEqual(build_preview_base_url("10.0.0.5", "", False), "")
 
 
 if __name__ == "__main__":

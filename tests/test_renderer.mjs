@@ -1,8 +1,10 @@
 import {
   assert,
+  isStreamActive,
   rendererExportNames,
   rendererSource,
   rendererStyles,
+  renderForwardDestination,
   renderMonitorTitle,
   renderReader,
   renderStreamCard,
@@ -14,7 +16,9 @@ assert.deepEqual(rendererExportNames, [
   "dataAgeStatusClass",
   "formatDataAge",
   "formatRelativeTime",
+  "isStreamActive",
   "recordSnapshotTelemetry",
+  "renderForwardDestination",
   "renderMonitorTitle",
   "renderReader",
   "renderSrtHealth",
@@ -136,6 +140,8 @@ globalThis.window = {location: {hostname: "monitor.example"}};
 
 const noReaderCard = renderStreamCard({
   name: "camera/main",
+  available: true,
+  online: true,
   source: {type: "rtmpConn", bitrate_mbps: null, details: {}},
   media: {video: [{displayCodec: "H.264", width: 1920, height: 1080}]},
   readers: [],
@@ -207,8 +213,131 @@ updateStreamCard(lifecycleCard, activeStream({name: "camera/backup"}), previewBa
 assert.equal(lifecycleIframe.srcWrites, 3);
 assert.equal(lifecycleIframe.srcRemovals, 1);
 
+// main.js rendert ausschliesslich die aktiven Streams und raeumt den Rest ab.
+// Die Schleife ist ohne DOM nicht importierbar, deshalb wird ihr Vertrag hier
+// an der Quelle festgehalten.
+assert.match(rendererSource, /const activeStreams = streams\.filter\(isStreamActive\);/);
+assert.match(rendererSource, /for \(const stream of activeStreams\) \{\s*\n\s*seen\.add\(stream\.name\);/);
+assert.match(rendererSource, /if \(!seen\.has\(name\)\) \{\s*\n\s*card\.remove\(\);\s*\n\s*streamCards\.delete\(name\);/);
+assert.match(rendererSource, /noStreams\.style\.display = activeStreams\.length === 0/);
+
+// Sichtbarkeitsvertrag: nur tatsaechlich laufende Pfade sind Streams.
+assert.equal(isStreamActive({available: true, online: true}), true);
+for (const state of [
+  {available: false, online: false},
+  {available: false, online: true},
+  {available: true, online: false},
+  {},
+  null,
+]) {
+  assert.equal(isStreamActive(state), false);
+}
+
+// Das LIVE-Badge spiegelt den realen Zustand und zaehlt Reader plus Forwards.
+const activeHeader = renderStreamCard(
+  {name: "aktiv", available: true, online: true, readers: [], forwardDestinations: []},
+  previewBase,
+).innerHTML;
+assert.match(activeHeader, /<span class="live-dot"><\/span>LIVE · 0 OUT/);
+assert.doesNotMatch(activeHeader, /stream-status-idle/);
+
+const idleHeader = renderStreamCard(
+  {name: "inaktiv", available: false, online: false, readers: []},
+  previewBase,
+).innerHTML;
+assert.match(idleHeader, /stream-status-idle/);
+assert.match(idleHeader, /<span class="live-dot"><\/span>INAKTIV · 0 OUT/);
+assert.doesNotMatch(idleHeader, /LIVE ·/);
+assert.match(rendererStyles, /\.stream-status-idle \.live-dot\s*\{[^}]*background:\s*var\(--text-muted\);/s);
+
+// Forward-/Push-Ziele erscheinen zusaetzlich zu den Readern unter OUT.
+const forwardOnly = renderStreamCard({
+  name: "forward-only",
+  available: true,
+  online: true,
+  readers: [],
+  forwardDestinations: [
+    {id: "fw-1", pos: 0, type: "rtmp", state: "forwarding",
+      outboundBytes: 2048, created: "2026-08-16T20:08:22Z"},
+  ],
+}, previewBase);
+assert.match(forwardOnly.innerHTML, /<h3>Forward 1<\/h3>/);
+assert.match(forwardOnly.innerHTML, /<span>RTMP<\/span>/);
+assert.match(forwardOnly.innerHTML, /class="forward-state">· forwarding</);
+assert.doesNotMatch(forwardOnly.innerHTML, /Keine OUT-Verbindung/);
+assert.match(forwardOnly.innerHTML, /LIVE · 1 OUT/);
+
+const readersAndForwards = renderStreamCard({
+  name: "beides",
+  available: true,
+  online: true,
+  source: {type: "srtConn", bitrate_mbps: 1, details: {}},
+  readers: [{type: "rtmpConn", bitrate_mbps: 1, details: {}}],
+  forwardDestinations: [
+    {id: "fw-1", pos: 0, type: "rtmp", state: "forwarding", outboundBytes: 1024},
+    {id: "fw-2", pos: 1, type: "srt", state: "error", outboundBytes: 0},
+  ],
+}, previewBase);
+assert.equal((readersAndForwards.innerHTML.match(/<h3>Reader 1<\/h3>/g) || []).length, 1);
+assert.equal((readersAndForwards.innerHTML.match(/<h3>Forward [12]<\/h3>/g) || []).length, 2);
+assert.match(readersAndForwards.innerHTML, /class="forward-state">· error</);
+assert.match(readersAndForwards.innerHTML, /LIVE · 3 OUT/);
+assert.ok(
+  readersAndForwards.innerHTML.indexOf("Reader 1")
+    < readersAndForwards.innerHTML.indexOf("Forward 1"),
+);
+
+// Ein leeres Forward-Array laesst die bisherige Reader-Anzeige unveraendert.
+const readersOnly = renderStreamCard({
+  name: "nur-reader",
+  available: true,
+  online: true,
+  readers: [{type: "rtmpConn", bitrate_mbps: 1, details: {}}],
+  forwardDestinations: [],
+}, previewBase);
+assert.match(readersOnly.innerHTML, /<h3>Reader 1<\/h3>/);
+assert.doesNotMatch(readersOnly.innerHTML, /Forward/);
+assert.doesNotMatch(readersOnly.innerHTML, /Keine OUT-Verbindung/);
+assert.match(readersOnly.innerHTML, /LIVE · 1 OUT/);
+assert.match(
+  renderStreamCard({name: "leer", available: true, online: true, readers: []}, previewBase).innerHTML,
+  /Keine OUT-Verbindung/,
+);
+
+// Nur sanitisierte Felder erreichen das HTML; Secrets sind nicht Teil des Vertrags.
+const forwardHtml = renderForwardDestination({
+  id: "fw-secret",
+  pos: 0,
+  type: "rtmps",
+  state: "forwarding",
+  outboundBytes: 4096,
+  created: "2026-08-16T20:08:22Z",
+  url: "rtmps://live.example/app/SUPERSECRETKEY?token=abc",
+  streamKey: "SUPERSECRETKEY",
+  password: "hunter2",
+});
+for (const secret of ["SUPERSECRETKEY", "hunter2", "token=abc", "rtmps://live.example"]) {
+  assert.ok(!forwardHtml.includes(secret), `Secret im HTML: ${secret}`);
+}
+assert.match(forwardHtml, /<span>RTMPS<\/span>/);
+
+const forwardInjection = renderForwardDestination({
+  type: '"><svg onload=alert(1)>',
+  state: '"><img src=x onerror=alert(1)>',
+  outboundBytes: 1,
+});
+assert.doesNotMatch(forwardInjection, /<(?:script|img|svg)\b/i);
+assert.doesNotMatch(forwardInjection, /<[^>]*\son(?:error|load)\s*=/i);
+
+// Fehlende Felder erfinden keine Zustaende.
+const sparseForward = renderForwardDestination({id: "fw-3"});
+assert.match(sparseForward, /<span>—<\/span>/);
+assert.match(sparseForward, /class="forward-state">· —</);
+
 const multiReaderCard = renderStreamCard({
   name: "multi",
+  available: true,
+  online: true,
   source: {type: "srtConn", bitrate_mbps: 1, details: {}},
   media: {audio: [{displayCodec: "AAC", sampleRate: 48000, channelCount: 2}]},
   readers: [
@@ -229,6 +358,8 @@ const originalDateNow = Date.now;
 Date.now = () => Date.parse("2026-08-16T20:08:23Z");
 const twoHlsReadersCard = renderStreamCard({
   name: "hls-multi",
+  available: true,
+  online: true,
   source: {type: "rtmpConn", details: {}},
   hls_muxer: {
     scope: "hls_muxer",
@@ -267,6 +398,8 @@ assert.match(twoHlsReadersCard.innerHTML, /192\.0\.2\.51:5001/);
 const previewPayload = '"><svg onload=alert(1)>';
 const injectionCard = renderStreamCard({
   name: previewPayload,
+  available: true,
+  online: true,
   source: {type: "rtmpConn", details: {}},
   media: {other: [{displayCodec: previewPayload}]},
   readers: [],
