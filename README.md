@@ -161,9 +161,33 @@ Die Diagnosewerkzeuge unter `cli-tools/` akzeptieren `MEDIAMTX_API_URL`
 
 ## Installation
 
+Auf einem neuen Server vom leeren Benutzerverzeichnis bis zum laufenden
+Dashboard:
+
 ```bash
+cd ~
+git clone https://github.com/richtertoralf/mediamtxMonitor.git
+cd mediamtxMonitor
 sudo ./install.sh
 ```
+
+Einzige Voraussetzung ist `git`, das auch `mediamtx-monitor --upgrade`
+benötigt; falls es fehlt, mit `sudo apt install git` nachinstallieren. Alle
+übrigen Pakete richtet `install.sh` selbst ein: Der Installer führt sein
+eigenes `apt-get update` aus und installiert Curl, FFmpeg, Redis, Python-Venv
+und die weiteren benötigten Pakete. Ein manuelles `apt update` vorab ist
+deshalb nicht erforderlich.
+
+Nach der Installation prüfen, ob beide Komponenten laufen und welche Versionen
+installiert sind:
+
+```bash
+mediamtx --version
+mediamtx-monitor --version
+```
+
+Anschließend das Dashboard unter `http://<server-ip>:8080/` öffnen; der
+ausführliche Funktionstest steht weiter unten.
 
 Die Fresh-Installation wurde mit MediaMTX v1.21.0 auf Ubuntu Server 24.04 LTS
 amd64 getestet. Diese Version ist als getesteter Repository-Default festgelegt.
@@ -204,6 +228,22 @@ Zusätzlich installiert der Installer FFmpeg, Redis und eine Python-Venv mit den
 Monitor-Abhängigkeiten.
 
 ## Version und Upgrade
+
+MediaMTX und der MediaMTX Monitor sind getrennte Komponenten mit getrennten
+Versionen und getrennten Upgrade-Wegen. Die beiden Wege werden nicht
+vermischt:
+
+| Komponente | Version prüfen | Aktualisieren | Wirkung |
+|---|---|---|---|
+| MediaMTX | `mediamtx --version` | `sudo mediamtx --upgrade` | aktualisiert **MediaMTX** |
+| MediaMTX Monitor | `mediamtx-monitor --version` | `sudo mediamtx-monitor --upgrade` | aktualisiert **mediamtxMonitor** |
+
+`sudo mediamtx --upgrade` ist ein Kommando von MediaMTX selbst und ersetzt
+dessen Programmdatei; der Monitor ist daran nicht beteiligt. Umgekehrt fasst
+`sudo mediamtx-monitor --upgrade` ausschließlich die Monitor-Installation an
+und verändert weder MediaMTX noch dessen Konfiguration. Nach einem
+MediaMTX-Upgrade muss MediaMTX kontrolliert neu gestartet werden, damit die
+laufende Runtime der installierten Programmdatei entspricht.
 
 Die installierte Monitor-Version und ein Produktions-Upgrade werden über das
 mitinstallierte Kommando verwaltet:
