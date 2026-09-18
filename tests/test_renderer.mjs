@@ -89,14 +89,29 @@ for (const [payload, visibleText] of injectionPayloads) {
 class FakeIframe {
   constructor() {
     this.attributes = new Map();
+    this.srcWrites = 0;
+    this.srcRemovals = 0;
+  }
+
+  getAttribute(name) {
+    return this.attributes.has(name) ? this.attributes.get(name) : null;
   }
 
   setAttribute(name, value) {
+    if (name === "src") this.srcWrites += 1;
     this.attributes.set(name, String(value));
   }
 
   removeAttribute(name) {
+    if (name === "src" && this.attributes.has(name)) this.srcRemovals += 1;
     this.attributes.delete(name);
+  }
+}
+
+class FakePanel {
+  constructor() {
+    this.innerHTML = "";
+    this.outerHTML = "";
   }
 }
 
@@ -104,10 +119,15 @@ class FakeCard {
   constructor() {
     this.iframe = new FakeIframe();
     this.innerHTML = "";
+    this.panels = new Map(
+      [".stream-header", ".stream-left", ".stream-center", ".media-summary", ".stream-right"]
+        .map(selector => [selector, new FakePanel()]),
+    );
   }
 
   querySelector(selector) {
-    return selector === ".preview-frame" ? this.iframe : null;
+    if (selector === ".preview-frame") return this.iframe;
+    return this.panels.get(selector) || null;
   }
 }
 
@@ -136,6 +156,56 @@ assert.equal(
 );
 updateStreamCard(offlineCard, {name: "offline", available: false, readers: []});
 assert.equal(offlineCard.iframe.attributes.has("src"), false);
+
+// Preview-Lebenszyklus: ein normaler Metrics-Refresh darf die bestehende
+// WebRTC-Sitzung nicht neu starten.
+const previewBase = "http://monitor.example:8889";
+const previewSrc = path =>
+  `${previewBase}/__preview__/${path}?controls=false&muted=true&autoplay=true&playsInline=true`;
+const activeStream = extra => ({name: "camera/main", available: true, readers: [], ...extra});
+
+const lifecycleCard = renderStreamCard(activeStream(), previewBase);
+const lifecycleIframe = lifecycleCard.iframe;
+assert.equal(lifecycleIframe.srcWrites, 1);
+assert.equal(lifecycleIframe.getAttribute("src"), previewSrc("camera/main"));
+
+updateStreamCard(lifecycleCard, activeStream(), previewBase);
+assert.equal(lifecycleCard.querySelector(".preview-frame"), lifecycleIframe);
+assert.equal(lifecycleIframe.srcWrites, 1);
+assert.equal(lifecycleIframe.srcRemovals, 0);
+
+for (const bitrate of [4.8, 5.1, 6.2]) {
+  updateStreamCard(
+    lifecycleCard,
+    activeStream({source: {type: "srtConn", bitrate_mbps: bitrate, details: {}}}),
+    previewBase,
+  );
+}
+assert.equal(lifecycleCard.querySelector(".preview-frame"), lifecycleIframe);
+assert.equal(lifecycleIframe.srcWrites, 1);
+assert.equal(lifecycleIframe.srcRemovals, 0);
+assert.match(lifecycleCard.panels.get(".stream-left").outerHTML, /stream-left/);
+assert.match(lifecycleCard.panels.get(".stream-right").innerHTML, /Keine OUT-Verbindung/);
+assert.equal(lifecycleCard.panels.get(".stream-center").innerHTML, "");
+
+updateStreamCard(lifecycleCard, activeStream({available: false}), previewBase);
+assert.equal(lifecycleIframe.getAttribute("src"), null);
+assert.equal(lifecycleIframe.srcRemovals, 1);
+updateStreamCard(lifecycleCard, activeStream({available: false}), previewBase);
+assert.equal(lifecycleIframe.srcRemovals, 1);
+
+updateStreamCard(lifecycleCard, activeStream(), previewBase);
+assert.equal(lifecycleIframe.srcWrites, 2);
+assert.equal(lifecycleIframe.getAttribute("src"), previewSrc("camera/main"));
+updateStreamCard(lifecycleCard, activeStream(), previewBase);
+assert.equal(lifecycleIframe.srcWrites, 2);
+
+updateStreamCard(lifecycleCard, activeStream({name: "camera/backup"}), previewBase);
+assert.equal(lifecycleIframe.srcWrites, 3);
+assert.equal(lifecycleIframe.getAttribute("src"), previewSrc("camera/backup"));
+updateStreamCard(lifecycleCard, activeStream({name: "camera/backup"}), previewBase);
+assert.equal(lifecycleIframe.srcWrites, 3);
+assert.equal(lifecycleIframe.srcRemovals, 1);
 
 const multiReaderCard = renderStreamCard({
   name: "multi",

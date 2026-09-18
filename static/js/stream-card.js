@@ -99,16 +99,24 @@ function buildPreviewIframeSrc(streamName, webrtcBaseUrl) {
   return `${base.href.replace(/\/$/, "")}/__preview__/${encodedPath}?controls=false&muted=true&autoplay=true&playsInline=true`;
 }
 
+/**
+ * Apply the wanted preview source without restarting an unchanged session.
+ *
+ * Re-assigning an unchanged `src` reloads the iframe and therefore rebuilds the
+ * WebRTC session, so the attribute is only written on an actual change.
+ */
 function updatePreview(preview, stream, webrtcBaseUrl) {
   if (!preview) return;
   preview.setAttribute("title", `Preview: ${stream?.name || ""}`);
-  if (stream?.available === false) {
-    preview.removeAttribute("src");
+  const wantedSrc = stream?.available === false
+    ? null
+    : buildPreviewIframeSrc(stream?.name, webrtcBaseUrl);
+  const currentSrc = preview.getAttribute("src");
+  if (!wantedSrc) {
+    if (currentSrc !== null) preview.removeAttribute("src");
     return;
   }
-  const src = buildPreviewIframeSrc(stream?.name, webrtcBaseUrl);
-  if (src) preview.setAttribute("src", src);
-  else preview.removeAttribute("src");
+  if (currentSrc !== wantedSrc) preview.setAttribute("src", wantedSrc);
 }
 
 function sortedReaders(stream) {
