@@ -208,7 +208,10 @@ Für jeden Path fragt der Collector `/v3/paths/forward-dests/list?path=<name>` a
 Der Snapshot enthält ausschließlich die nicht sensitiven Beobachtungen `id`,
 `pos`, `type`, `state`, `outboundBytes` und `created`; Konfiguration, URLs,
 Credentials und Fehlertexte werden nicht an API oder Frontend weitergegeben.
-Eine eigene Dashboarddarstellung ist derzeit nicht Teil des Monitors.
+Das Dashboard stellt diese Forward-/Push-Ziele unter OUT neben den Readern
+dar. Grundlage sind ausschließlich die sanitisierten `forwardDestinations`;
+angezeigt werden nur die von MediaMTX gelieferten Runtime-Zustände. Ziel-URLs,
+Stream-Keys, Credentials und Tokens werden nicht dargestellt.
 
 Die v1.21-Control-API liefert dafür unter
 `/v3/paths/forward-dests/list?path=<name>` strukturierte Einträge mit `id`,
