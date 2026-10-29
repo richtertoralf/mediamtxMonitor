@@ -20,6 +20,7 @@ import sys
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
+from urllib.parse import quote
 
 try:
     from redis.exceptions import RedisError
@@ -49,8 +50,11 @@ try:
         HLS_MUXER_ENDPOINT,
         MINIMUM_MEDIAMTX_VERSION,
         OPTIONAL_SECURE_ENDPOINTS,
+        STATIC_SOURCE_CONNECTION_TYPES,
+        STATIC_SOURCE_ENDPOINT,
         index_details,
         is_supported_version,
+        sanitize_static_source,
     )
     from .monitoring_config import (
         DEFAULT_CONFIG_PATH,
@@ -106,8 +110,11 @@ except ImportError:
         HLS_MUXER_ENDPOINT,
         MINIMUM_MEDIAMTX_VERSION,
         OPTIONAL_SECURE_ENDPOINTS,
+        STATIC_SOURCE_CONNECTION_TYPES,
+        STATIC_SOURCE_ENDPOINT,
         index_details,
         is_supported_version,
+        sanitize_static_source,
     )
     from monitoring_config import (
         DEFAULT_CONFIG_PATH,
@@ -172,8 +179,10 @@ class PollCache:
     """Small in-process cache for data that does not belong in the 1 Hz path."""
 
     next_forward_refresh: float = 0.0
+    next_static_source_refresh: float = 0.0
     next_output_write: float = 0.0
     forward_destinations: Dict[str, Any] = field(default_factory=dict)
+    static_sources: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     lifecycle_roles_by_path: Dict[str, set[tuple[str, str]]] = field(
         default_factory=dict
     )
@@ -687,6 +696,23 @@ def collect_and_store() -> Dict[str, float]:
             now + COLLECTOR_CFG["forward_refresh_seconds"]
         )
 
+    if now >= poll_cache.next_static_source_refresh:
+        # MediaMTX has no list of static sources; ask only paths that pull.
+        static_sources = {}
+        for path in visible_paths:
+            if (path.get("source") or {}).get("type") not in STATIC_SOURCE_CONNECTION_TYPES:
+                continue
+            name = str(path.get("name", ""))
+            static_details = sanitize_static_source(cycle_fetch(
+                STATIC_SOURCE_ENDPOINT + quote(name, safe="/")
+            ))
+            if static_details:
+                static_sources[name] = static_details
+        poll_cache.static_sources = static_sources
+        poll_cache.next_static_source_refresh = (
+            now + COLLECTOR_CFG["static_source_refresh_seconds"]
+        )
+
     aggregated = []
     for path in visible_paths:
         name: str = path.get("name", "")
@@ -699,6 +725,12 @@ def collect_and_store() -> Dict[str, float]:
         )
         source = entry["source"]
         src_type: Optional[str] = source["type"]
+        if src_type in STATIC_SOURCE_CONNECTION_TYPES:
+            source["details"] = dict(poll_cache.static_sources.get(name, {}))
+            if STATIC_SOURCE_CONNECTION_TYPES[src_type]:
+                source["connection_type"] = STATIC_SOURCE_CONNECTION_TYPES[src_type]
+        # Static sources reuse the metrics of the equivalent connection type.
+        metric_type: Optional[str] = source.get("connection_type") or src_type
         src_details = source["details"]
         normalized_readers = entry["readers"]
         entry["readers"] = []
@@ -762,9 +794,13 @@ def collect_and_store() -> Dict[str, float]:
         # Prefer the native SRT receive rate over a byte-counter estimate.
         api_rx_mbps = src_details.get("mbpsReceiveRate")
         # Detail counters preserve connection scope; the path counter is a fallback.
-        pub_bytes_value = first_available(src_details, "inboundBytes")
-        if pub_bytes_value is None and src_type == "srtConn":
-            pub_bytes_value = first_available(src_details, "bytesReceived")
+        pub_bytes_value = None
+        # Cached static-source counters age between refreshes; the path
+        # counter is current in every cycle.
+        if src_type not in STATIC_SOURCE_CONNECTION_TYPES:
+            pub_bytes_value = first_available(src_details, "inboundBytes")
+            if pub_bytes_value is None and metric_type == "srtConn":
+                pub_bytes_value = first_available(src_details, "bytesReceived")
         if pub_bytes_value is None:
             pub_bytes_value = entry.get("inboundBytes")
 
@@ -793,12 +829,12 @@ def collect_and_store() -> Dict[str, float]:
             entry["source"]["bitrate_mbps"] = pub_calc_mbps
 
         # SRT transport RTT is provided natively by MediaMTX.
-        if src_type == "srtConn" and src_details.get("msRTT") is not None:
+        if metric_type == "srtConn" and src_details.get("msRTT") is not None:
             entry["source"]["transport_rtt_ms"] = round(
                 float(src_details["msRTT"]), 2
             )
 
-        if src_type == "srtConn":
+        if metric_type == "srtConn":
             if src_details.get("msReceiveTsbPdDelay") is not None:
                 entry["source"]["srt_latency_ms"] = src_details[
                     "msReceiveTsbPdDelay"
@@ -818,7 +854,7 @@ def collect_and_store() -> Dict[str, float]:
         else:
             _enrich_protocol_metrics(
                 entry["source"],
-                connection_type=src_type,
+                connection_type=metric_type,
                 details=src_details,
                 direction="publisher",
                 connection_key=pub_key,
@@ -831,8 +867,8 @@ def collect_and_store() -> Dict[str, float]:
                 history_key=connection_history_key(pub_key),
                 direction="publisher",
                 timestamp=now,
-                include_rate_history=src_type in RTMP_CONNECTION_TYPES,
-                include_jitter_history=src_type in {
+                include_rate_history=metric_type in RTMP_CONNECTION_TYPES,
+                include_jitter_history=metric_type in {
                     "rtspSession", "rtspsSession", "webRTCSession",
                 },
             )

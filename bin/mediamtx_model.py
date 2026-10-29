@@ -29,6 +29,21 @@ DETAIL_ENDPOINTS = {
 }
 
 HLS_MUXER_ENDPOINT = "/v3/hls/muxers/list"
+STATIC_SOURCE_ENDPOINT = "/v3/paths/static-sources/get/"
+
+# Sources that MediaMTX pulls itself. Those with a connection-like transport
+# map to the connection type whose native fields their typeSpecific shares.
+STATIC_SOURCE_CONNECTION_TYPES: Dict[str, Optional[str]] = {
+    "rtspSource": "rtspSession",
+    "srtSource": "srtConn",
+    "webRTCSource": "webRTCSession",
+    "rtmpSource": "rtmpConn",
+    "moqSource": "moqSession",
+    "hlsSource": None,
+    "mpegtsSource": None,
+    "rtpSource": None,
+    "rpiCameraSource": None,
+}
 
 # A URL query can carry user/pass or JWT parameters; marker names guard
 # against future native fields with credentials. Neither is ever displayed.
@@ -91,6 +106,41 @@ def is_sensitive_field(name: Any) -> bool:
     return lowered in SENSITIVE_DETAIL_FIELDS or any(
         marker in lowered for marker in SENSITIVE_FIELD_MARKERS
     )
+
+
+_URL_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://\S+")
+_USERINFO_PATTERN = re.compile(r"\S+:\S*@\S+")
+_QUERY_PATTERN = re.compile(r"[?&][^\s=&]+=[^\s&]*")
+MAX_ERROR_TEXT_LENGTH = 200
+
+
+def redact_error_text(text: Any) -> Optional[str]:
+    """Return a native error text without URLs, userinfo, or query values.
+
+    Source URLs can contain credentials, so they are replaced; addresses and
+    the error reason itself stay readable.
+    """
+    if not isinstance(text, str) or not text.strip():
+        return None
+    redacted = _URL_PATTERN.sub("<URL>", text.strip())
+    redacted = _USERINFO_PATTERN.sub("<URL>", redacted)
+    redacted = _QUERY_PATTERN.sub("", redacted)
+    return redacted[:MAX_ERROR_TEXT_LENGTH]
+
+
+def sanitize_static_source(item: Any) -> Dict[str, Any]:
+    """Build source details from one static-source object without secrets."""
+    if not isinstance(item, Mapping) or item.get("state") is None:
+        return {}
+    transport = item.get("typeSpecific")
+    details = sanitize_details(transport) if isinstance(transport, Mapping) else {}
+    details["state"] = item["state"]
+    if item.get("created") is not None:
+        details["created"] = item["created"]
+    error = redact_error_text(item.get("lastError"))
+    if error:
+        details["last_error"] = error
+    return details
 
 
 def sanitize_details(item: Mapping[str, Any]) -> Dict[str, Any]:

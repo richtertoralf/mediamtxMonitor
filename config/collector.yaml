@@ -27,6 +27,7 @@ collector:
   output_json_path: "/tmp/mediamtx_streams.json"
   interval_seconds: 1
   forward_refresh_seconds: 5
+  static_source_refresh_seconds: 5
   output_refresh_seconds: 5
   ignore_path_prefixes:
     - "__preview__/"

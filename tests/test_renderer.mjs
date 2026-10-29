@@ -444,3 +444,21 @@ const rtmpForward = renderForwardDestination({
 assert.match(rtmpForward, /TX/);
 assert.match(rtmpForward, /2\.00/);
 assert.match(rtmpForward, /1\.0 MB|1 MB|1\.00 MB/);
+
+// Statische Quellen zeigen Pull-Zustand und gefilterten Fehler im IN-Block.
+const staticSource = renderStreamLeft({
+  name: "pull",
+  source: {
+    type: "rtspSource", id: "", connection_type: "rtspSession",
+    bitrate_mbps: 1.5,
+    protocol_metrics: {family: "rtsp", gauges: {jitter_ms: 5.5}},
+    details: {state: "error", remoteAddr: "192.0.2.20:554",
+      last_error: '<img src=x onerror=alert(1)> connection refused'},
+  },
+});
+assert.match(staticSource, /RTSP Pull/);
+assert.match(staticSource, /Pull/);
+assert.match(staticSource, />error</);
+assert.match(staticSource, /Jitter/);
+assert.match(staticSource, /connection refused/);
+assert.doesNotMatch(staticSource, /<img\b/);

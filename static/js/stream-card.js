@@ -27,7 +27,26 @@ export function renderMonitorTitle(titleElement, monitorVersion) {
   document.title = title;
 }
 
-function renderConnectionMetrics(connection, direction, stream = null) {
+/** Report whether MediaMTX pulls this source itself (static source). */
+function isStaticSource(source) {
+  return typeof source?.type === "string" && source.type.endsWith("Source");
+}
+
+function renderStaticSourceStatus(source) {
+  if (!isStaticSource(source)) return "";
+  const details = source?.details || {};
+  const status = renderMetrics([metric("Pull", details.state || "—")]);
+  const error = details.last_error
+    ? `<div class="connection-notes">Fehler: ${escapeHtml(details.last_error)}</div>`
+    : "";
+  return status + error;
+}
+
+function renderConnectionMetrics(source, direction, stream = null) {
+  // Static sources carry the metrics of their equivalent connection type.
+  const connection = source?.connection_type
+    ? {...source, type: source.connection_type}
+    : source;
   const totalBytes = connectionTotal(connection, direction, stream);
   const historyKey = connectionTelemetryKey(
     stream?.name,
@@ -83,6 +102,7 @@ export function renderStreamLeft(stream) {
     <section class="stream-left flow-panel" aria-label="Eingangsverbindung">
       <h2 class="panel-title">IN</h2>
       ${renderConnectionHeading(source.type, source.details || {}, source)}
+      ${renderStaticSourceStatus(source)}
       ${renderConnectionMetrics(source, "in", stream)}
     </section>
   `;

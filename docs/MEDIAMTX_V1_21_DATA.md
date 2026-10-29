@@ -99,6 +99,29 @@ in 10-s-/60-s-Fenstern geführt und bleibt ausdrücklich ein Muxer-/Path-Wert,
 kein individueller Browserverlust. User-Agent und CDN-Kennung aus HLS-Sessions
 bleiben Teil der Darstellung.
 
+## Statische Quellen
+
+Pfade, deren Quelle MediaMTX selbst bezieht, melden in `/v3/paths/list` einen
+Quelltyp mit der Endung `Source` (zum Beispiel `rtspSource`, `srtSource`,
+`hlsSource`) und eine leere `id`. MediaMTX bietet dafür keine Liste, sondern
+`GET /v3/paths/static-sources/get/{name}`. Der Collector fragt diesen Endpunkt
+nur für solche Pfade ab, standardmäßig alle `static_source_refresh_seconds`
+(5 s), und hält das Ergebnis bis zur nächsten Abfrage.
+
+Übernommen werden `state` (`idle`, `running`, `error`), `created` und die
+nativen Transportwerte aus `typeSpecific`. `lastError` erscheint als
+`last_error` nur gefiltert: URLs, Benutzerangaben und Query-Werte werden
+entfernt, weil Quell-URLs Zugangsdaten enthalten können; die Fehlerursache
+bleibt lesbar. Pull-Quellen über RTSP, SRT, WebRTC, RTMP und MoQ verwenden die
+Auswertung des gleichartigen Verbindungstyps (`connection_type`), also etwa
+Jitter und Verlustfenster wie eine RTSP-Session oder RTT, Latenz und
+SRT-Ereignisse wie eine SRT-Verbindung. HLS-, MPEG-TS-, RTP- und
+RPi-Kamera-Quellen liefern nur Zustand und Zeitpunkt. Die Eingangsrate stammt
+für statische Quellen aus dem in jedem Zyklus aktuellen Pfadzähler
+`inboundBytes`, bei SRT aus `mbpsReceiveRate`. Antwortet der Endpunkt mit einem
+Fehler, bleiben die Quelldetails bis zur nächsten erfolgreichen Abfrage leer;
+veraltete Werte werden nicht weiter angezeigt.
+
 RTSP- und RTSPS-RTP-/RTCP-Daten stammen ausdrücklich aus den Session-Endpunkten.
 Die zusätzlich möglichen Reader-Typen `rtspConn` und `rtspsConn` werden über
 ihre Connection-Listen aufgelöst. Deren Verbindungsobjekte dienen jedoch nicht
