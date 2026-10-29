@@ -140,6 +140,28 @@ class SrtHealthModelTests(unittest.TestCase):
         self.assertNotIn("belated_packets", health)
         self.assertNotIn("undecrypt_packets", health)
 
+    def test_reader_frame_discards_become_interval_values(self):
+        self.health({"outboundFramesDiscarded": 40}, direction="reader")
+        health = self.health({"outboundFramesDiscarded": 46}, direction="reader")
+        self.assertEqual(health["discarded_frames"], 6)
+        # A publisher has no reader queue and therefore no discard counter.
+        self.assertNotIn(
+            "discarded_frames",
+            self.health({"outboundFramesDiscarded": 3}, direction="publisher"),
+        )
+
+    def test_reader_frame_discards_enter_the_short_history_windows(self):
+        from connection_history import build_history_sample, summarize_history
+
+        samples = [
+            build_history_sample({"srt_health": {"discarded_frames": value}},
+                                 "reader", timestamp)
+            for timestamp, value in ((100.0, 2), (105.0, 3), (140.0, 1))
+        ]
+        summary = summarize_history(samples, 141.0)
+        self.assertEqual(summary["events"]["10s"]["discarded_frames"], 1)
+        self.assertEqual(summary["events"]["60s"]["discarded_frames"], 6)
+
     def test_missing_values_do_not_create_zero_placeholders(self):
         self.assertEqual(self.health({}), {})
         self.assertNotIn(

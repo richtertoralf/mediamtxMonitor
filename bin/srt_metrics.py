@@ -34,6 +34,8 @@ READER_COUNTERS = {
     "loss_packets": "packetsSendLoss",
     "sent_packets": "packetsSent",
     "unique_packets": "packetsSentUnique",
+    # Media units MediaMTX dropped because this reader's queue was full.
+    "discarded_frames": "outboundFramesDiscarded",
 }
 
 

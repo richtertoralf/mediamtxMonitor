@@ -188,6 +188,21 @@ bildet daraus bereits reset-sichere Ereignisdeltas je Collector-Intervall. Die
 Kurzzeithistorie speichert diese normalisierten Intervallwerte und summiert sie
 für 10-s- und 60-s-Fenster; sie bildet nicht erneut Counter-Deltas.
 
+Für SRT-Reader und SRT-Forward-Ziele zählt `outboundFramesDiscarded` die
+Media-Einheiten, die MediaMTX nicht in die volle Ausgangsqueue des Readers
+einreihen konnte. Der Monitor führt daraus reset-sichere Intervallwerte
+`discarded_frames` in denselben 10-s-/60-s-Fenstern wie die übrigen
+SRT-Ereignisse; das Dashboard zeigt diese Fenster, den kumulativen Wert nur im
+Tooltip, und wertet Frame Discard in „SRT Impact“ wie Send Drop als kritisch.
+`msSendBuf` erscheint für OUT als `Send Buffer`: Er misst noch nicht bestätigte
+Daten im Sendepuffer und steigt, wenn sich der Ausgang staut. Bewusst nicht
+angezeigt werden `msReceiveBuf` (beim Empfänger im Normalbetrieb etwa gleich der
+TSBPD-Latenz und damit ohne eigene Aussage), `packetsFlightSize` (folgt aus RTT
+und Rate, neben dem Sendepuffer redundant), `mbpsMaxBW` (konfigurierte Grenze,
+kein Messwert) und `packetsReceivedAvgBelatedTime` (nur bei vorhandenen
+Belated-Paketen aussagekräftig, deren Anzahl bereits angezeigt wird). Die
+Rohwerte bleiben im Snapshot unter `details`.
+
 MediaMTX-`msRTT` wird für SRT als `transport_rtt_ms` normalisiert. Für einen
 Publisher beziehungsweise IN wird `msReceiveTsbPdDelay` als `srt_latency_ms`
 übernommen; für einen Reader beziehungsweise OUT stammt `srt_latency_ms` aus
