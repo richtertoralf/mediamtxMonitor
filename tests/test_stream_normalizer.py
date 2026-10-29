@@ -44,7 +44,6 @@ class StreamNormalizerTests(unittest.TestCase):
                 "details": self.srt_publisher,
             },
         )
-        self.assertIs(publisher["details"], self.srt_publisher)
 
     def test_normalizes_another_protocol_and_missing_publisher(self):
         rtmp = normalize_publisher(

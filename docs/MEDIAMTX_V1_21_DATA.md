@@ -68,7 +68,17 @@ Die Details werden über folgende Listen aufgelöst:
 
 Die Detailobjekte werden im normalisierten Snapshot unter `details` übernommen.
 Das bedeutet nicht automatisch, dass der Browser jedes enthaltene Feld bereits
-protokollspezifisch darstellt.
+protokollspezifisch darstellt. Vorher entfernt `index_details` zentral Felder,
+die Zugangsdaten tragen können: `query` (URL-Parameter wie `user`, `pass` oder
+`jwt`) sowie jedes Feld, dessen Name `pass`, `token`, `secret`, `jwt` oder
+`credential` enthält. Diese Werte erreichen weder Redis noch die JSON-Ausgabe
+noch `/api/streams`.
+
+MediaMTX liefert Listen seitenweise mit standardmäßig 100 Einträgen und meldet
+die Seitenzahl in `pageCount`. Der Collector liest Pfade, Verbindungs- und
+Sitzungslisten, HLS-Muxer und Forward-Ziele vollständig; weitere Seiten fragt
+er nur ab, wenn `pageCount` sie meldet. Verschiebt sich die Pfadliste zwischen
+zwei Seitenabrufen, wird ein doppelt gelieferter Pfad nur einmal übernommen.
 
 Das WebRTC-Sessionobjekt enthält im v1.21.0-Schema insbesondere
 `inboundRTPPackets`, `inboundRTPPacketsJitter`, `inboundRTPPacketsLost`,
