@@ -37,6 +37,10 @@ class MediaMTXMonitorCliTests(unittest.TestCase):
             """#!/usr/bin/env bash
 set -euo pipefail
 printf 'git %s\n' "$*" >> "$FAKE_LOG"
+if [[ "$1" == "-C" && "$3" == "rev-parse" ]]; then
+  printf '%s\n' "${FAKE_REVISION:-1111111111111111111111111111111111111111}"
+  exit 0
+fi
 destination="${@: -1}"
 cp -a "$FAKE_REPOSITORY" "$destination"
 """,
@@ -84,13 +88,15 @@ fi
         path.write_text(content, encoding="utf-8")
         path.chmod(0o755)
 
-    def _create_installation(self, version: str = "0.1.0") -> None:
+    def _create_installation(self, version: str = "0.1.0", revision: str | None = None) -> None:
         (self.install_dir / "bin").mkdir(parents=True)
         (self.install_dir / "static").mkdir()
         (self.install_dir / "config").mkdir()
         self.service_dir.mkdir()
         (self.install_dir / "venv/bin").mkdir(parents=True)
         (self.install_dir / "VERSION").write_text(f"{version}\n", encoding="utf-8")
+        if revision is not None:
+            (self.install_dir / "REVISION").write_text(f"{revision}\n", encoding="utf-8")
         (self.install_dir / "bin/old.py").write_text("old\n", encoding="utf-8")
         (self.install_dir / "static/old.js").write_text("old\n", encoding="utf-8")
         (self.install_dir / "config/collector.yaml").write_text("local: true\n", encoding="utf-8")
@@ -151,11 +157,13 @@ fi
         self.assertIn("Run install.sh first", result.stderr)
 
     def test_same_version_stops_without_changes_or_services(self) -> None:
-        self._create_installation()
+        self._create_installation(revision="1" * 40)
         self._create_source("0.1.0")
         result = self._run("--upgrade")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("already up to date: 0.1.0", result.stdout)
+        self.assertIn("Installed: 0.1.0 (1111111)", result.stdout)
+        self.assertIn("already up to date: 0.1.0 (1111111)", result.stdout)
+        self.assertTrue((self.install_dir / "bin/old.py").exists())
         log = self.log_file.read_text(encoding="utf-8")
         self.assertNotIn("python -m pip install", log)
         self.assertNotIn("systemctl disable", log)
@@ -185,7 +193,50 @@ fi
         self.assertIn(f"systemctl restart {' '.join(SERVICES)}", log)
         for service in SERVICES:
             self.assertIn(f"systemctl is-active {service}", log)
-        self.assertIn("Upgrade complete: 0.1.0 -> 0.1.1", result.stdout)
+        self.assertIn(
+            "Upgrade complete: 0.1.0 (unknown commit) -> 0.1.1 (1111111)", result.stdout
+        )
+        self.assertEqual(
+            (self.install_dir / "REVISION").read_text(encoding="utf-8"), "1" * 40 + "\n"
+        )
+
+    def test_same_version_with_new_commit_updates(self) -> None:
+        self._create_installation("0.1.0", revision="a" * 40)
+        self._create_source("0.1.0")
+        result = self._run("--upgrade")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.install_dir / "bin/new.py").is_file())
+        self.assertIn("Upgrade complete: 0.1.0 (aaaaaaa) -> 0.1.0 (1111111)", result.stdout)
+        self.assertEqual(
+            (self.install_dir / "REVISION").read_text(encoding="utf-8"), "1" * 40 + "\n"
+        )
+        self.assertIn(f"systemctl restart {' '.join(SERVICES)}", self.log_file.read_text())
+
+    def test_unknown_commit_updates_once_then_stops(self) -> None:
+        self._create_installation("0.1.0")
+        self._create_source("0.1.0")
+        first = self._run("--upgrade")
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertIn("Installed: 0.1.0 (unknown commit)", first.stdout)
+        self.assertIn("Upgrade complete", first.stdout)
+        second = self._run("--upgrade")
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertIn("already up to date: 0.1.0 (1111111)", second.stdout)
+
+    def test_invalid_downloaded_commit_aborts_before_changes(self) -> None:
+        self._create_installation()
+        self._create_source()
+        self.env["FAKE_REVISION"] = "not-a-commit"
+        result = self._run("--upgrade")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Invalid downloaded commit", result.stderr)
+        self.assertTrue((self.install_dir / "bin/old.py").exists())
+
+    def test_version_shows_installed_commit_when_known(self) -> None:
+        self._create_installation("2.3.4", revision="0123456789" * 4)
+        result = self._run("--version")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "MediaMTX Monitor 2.3.4 (0123456)\n")
 
     def test_upgrade_removes_active_legacy_system_monitor(self) -> None:
         self._create_installation()

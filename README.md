@@ -268,8 +268,22 @@ mediamtx-monitor --version
 sudo mediamtx-monitor --upgrade
 ```
 
+Das Upgrade lädt den aktuellen Stand von `main` und vergleicht Version und
+Commit mit der Installation. Es aktualisiert, sobald sich eines davon
+unterscheidet, also auch nach einem Merge ohne Versionserhöhung; sind beide
+gleich, ändert es nichts. Den installierten Commit speichert es in `REVISION`
+neben `VERSION`; `mediamtx-monitor --version` und `--status` zeigen ihn gekürzt
+an. Eine Installation ohne `REVISION` (vor dieser Funktion oder direkt per
+`install.sh`) hat einen unbekannten Commit und wird beim nächsten Upgrade
+einmal aktualisiert. Auch ein Dev-Deployment mit `devtools/deploy-dev.sh`
+ändert `REVISION` nicht; das nächste Upgrade stellt deshalb wieder den Stand
+von `main` her. Eine installierte CLI aus der Zeit vor dieser Funktion
+vergleicht noch nur die Version; sie übernimmt den Vergleich erst mit der
+nächsten Versionserhöhung oder nach einem einmaligen Aufruf der aktuellen CLI
+aus einem Checkout (`sudo ./mediamtx-monitor --upgrade`).
+
 Das Upgrade aktualisiert Programmcode, Python-Abhängigkeiten im bestehenden
-venv, die CLI, die Versionsdatei und die drei systemd-Units der
+venv, die CLI, Versions- und Commit-Datei und die drei systemd-Units der
 Monitoring-Dienste. Die lokale `config/collector.yaml` bleibt absichtlich
 unverändert: Sie ist die betreiberspezifische Laufzeitkonfiguration und gehört
 dem Betreiber. Dieses Kompatibilitätsprinzip orientiert sich am Umgang von
