@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2059 # Die Spaltenformate sind bewusst Formatstrings.
 
 # Spaltenbreiten definieren
 col_widths=(6 16 9 28 10 10 10 10)  # Status, IP, State, Path, Recv(MB), RTT, RecvRate, LinkCap

@@ -45,7 +45,6 @@ echo "$json_data" | jq -r '
 select(.online == true) |
 [.name, .source.type, ([.tracks2[].codec] | join(", ")), .inboundBytes, .outboundBytes, ([.readers[].type] | join(", "))] |
 @tsv' | while IFS=$'\t' read -r name type tracks bytes_rx bytes_tx readers; do
-    status="✅"
     [ -z "$readers" ] && readers="–"
     rx_mb=$(bytes_to_mb "$bytes_rx")
     tx_mb=$(bytes_to_mb "$bytes_tx")

@@ -30,6 +30,11 @@ DETAIL_ENDPOINTS = {
 
 HLS_MUXER_ENDPOINT = "/v3/hls/muxers/list"
 
+# A URL query can carry user/pass or JWT parameters; marker names guard
+# against future native fields with credentials. Neither is ever displayed.
+SENSITIVE_DETAIL_FIELDS = frozenset({"query"})
+SENSITIVE_FIELD_MARKERS = ("pass", "token", "secret", "jwt", "credential")
+
 # MediaMTX does not register these routes when the corresponding TLS listener
 # is disabled. In that case, a 404 means an empty protocol list.
 OPTIONAL_SECURE_ENDPOINTS = {
@@ -80,11 +85,29 @@ def is_supported_version(value: Any) -> bool:
     return parsed is not None and parsed >= MINIMUM_MEDIAMTX_VERSION
 
 
+def is_sensitive_field(name: Any) -> bool:
+    """Report whether a native field may carry credentials or tokens."""
+    lowered = str(name).lower()
+    return lowered in SENSITIVE_DETAIL_FIELDS or any(
+        marker in lowered for marker in SENSITIVE_FIELD_MARKERS
+    )
+
+
+def sanitize_details(item: Mapping[str, Any]) -> Dict[str, Any]:
+    """Return a connection object without fields that may carry secrets."""
+    return {key: value for key, value in item.items() if not is_sensitive_field(key)}
+
+
 def index_details(items_by_type: Mapping[str, Any]) -> Dict[str, Dict[str, Any]]:
-    """Index every protocol response by the ID referenced by Path objects."""
+    """Index every protocol response by the ID referenced by Path objects.
+
+    This is the single entry point of connection details into the snapshot,
+    so sensitive native fields are removed here before Redis, JSON output, or
+    the monitor API can see them.
+    """
     return {
         obj_type: {
-            str(item.get("id")): item
+            str(item.get("id")): sanitize_details(item)
             for item in items
             if isinstance(item, dict) and item.get("id") is not None
         }

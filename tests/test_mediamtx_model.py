@@ -62,7 +62,8 @@ class ModelTests(unittest.TestCase):
     def test_rtsp_details_are_indexed_by_session_id(self):
         session = {"id": "session-1", "inboundRTPPacketsLost": 2}
         details = index_details({"rtspSession": [session]})
-        self.assertIs(
+        # Details are a sanitized copy; non-sensitive values stay unchanged.
+        self.assertEqual(
             get_details_by_type("rtspSession", "session-1", details), session
         )
 

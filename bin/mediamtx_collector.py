@@ -485,6 +485,28 @@ def collect_and_store() -> Dict[str, float]:
             ) * 1000
             metrics["api_request_count"] += 1
 
+    def cycle_fetch_items(
+        endpoint: str,
+        params: Optional[Dict[str, str]] = None,
+        *,
+        required: bool = False,
+    ) -> list[Any]:
+        """Return all items of a list endpoint; MediaMTX pages after 100 items.
+
+        Further pages are requested only when ``pageCount`` reports them.
+        """
+        data = cycle_fetch(endpoint, params, required=required)
+        items = list(data.get("items") or [])
+        page_count = data.get("pageCount")
+        if type(page_count) is int:
+            for page in range(1, page_count):
+                items.extend(cycle_fetch(
+                    endpoint,
+                    {**(params or {}), "page": str(page)},
+                    required=required,
+                ).get("items") or [])
+        return items
+
     now = time.time()
     try:
         info = cycle_fetch("/v3/info", required=True)
@@ -511,13 +533,23 @@ def collect_and_store() -> Dict[str, float]:
         return metrics
 
     try:
-        paths = cycle_fetch("/v3/paths/list", required=True).get("items", [])
+        paths = cycle_fetch_items("/v3/paths/list", required=True)
     except MediaMTXError as exc:
         logging.warning("MediaMTX-Paths konnten nicht gelesen werden: %s", exc)
         metrics["cycle_duration_ms"] = (
             time.perf_counter() - cycle_started
         ) * 1000
         return metrics
+    # Paths can shift between page requests; keep the first occurrence only.
+    seen_names: set[str] = set()
+    unique_paths = []
+    for path in paths:
+        name = str(path.get("name", "")) if isinstance(path, dict) else None
+        if name is None or name in seen_names:
+            continue
+        seen_names.add(name)
+        unique_paths.append(path)
+    paths = unique_paths
     visible_paths = [
         path
         for path in paths
@@ -536,7 +568,7 @@ def collect_and_store() -> Dict[str, float]:
         if connection.get("type") in DETAIL_ENDPOINTS
     }
     details = index_details({
-        obj_type: cycle_fetch(DETAIL_ENDPOINTS[obj_type]).get("items", [])
+        obj_type: cycle_fetch_items(DETAIL_ENDPOINTS[obj_type])
         for obj_type in DETAIL_ENDPOINTS
         if obj_type in active_types
     })
@@ -544,16 +576,16 @@ def collect_and_store() -> Dict[str, float]:
     if "hlsSession" in active_types:
         hls_muxers = {
             str(item.get("path")): item
-            for item in cycle_fetch(HLS_MUXER_ENDPOINT).get("items", [])
+            for item in cycle_fetch_items(HLS_MUXER_ENDPOINT)
             if isinstance(item, dict) and item.get("path") is not None
         }
 
     if now >= poll_cache.next_forward_refresh:
         poll_cache.forward_destinations = {
-            str(path.get("name", "")): cycle_fetch(
+            str(path.get("name", "")): cycle_fetch_items(
                 "/v3/paths/forward-dests/list",
                 params={"path": str(path.get("name", ""))},
-            ).get("items", [])
+            )
             for path in visible_paths
         }
         poll_cache.next_forward_refresh = (
