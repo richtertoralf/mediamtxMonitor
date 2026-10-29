@@ -21,6 +21,7 @@ _SRT_EVENT_FIELDS = (
     "drop_packets",
     "belated_packets",
     "undecrypt_packets",
+    "discarded_frames",
 )
 
 _FRAME_DISCARD_FIELD = "frame_discard_delta"

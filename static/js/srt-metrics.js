@@ -62,18 +62,23 @@ function renderImpactIndicators(connection, direction) {
       ["Send Loss", "loss_packets", false],
       ["Retrans", "retrans_packets", false],
       ["Send Drop", "drop_packets", true],
+      // Optional: absent counters must not turn a clear state into "—".
+      ["Frame Discard", "discarded_frames", true, true],
     ];
-  const impacts = definitions.map(([label, field, critical]) => ({
+  const impacts = definitions.map(([label, field, critical, optional = false]) => ({
     label,
     field,
     critical,
+    optional,
     value10: optionalNumber(recentEvents[field]),
     value60: optionalNumber(heldEvents[field]),
   }));
   const currentCritical = impacts.some(item => item.critical && item.value10 > 0);
   const currentWarning = impacts.some(item => !item.critical && item.value10 > 0);
   const recentImpact = impacts.some(item => item.value60 > 0);
-  const allClear = impacts.every(item => item.value10 === 0 && item.value60 === 0);
+  const allClear = impacts.every(item => item.optional
+    ? (item.value10 ?? 0) === 0 && (item.value60 ?? 0) === 0
+    : item.value10 === 0 && item.value60 === 0);
   const status = currentCritical
     ? "crit"
     : currentWarning ? "warn" : recentImpact ? "recent" : allClear ? "ok" : "unavailable";
@@ -120,6 +125,26 @@ function renderLinkTelemetry(connection, historyKey, assessment = null, directio
   return `<div class="link-telemetry">${trend}${latencyRelation}${impacts}</div>`;
 }
 
+/** Frame discards as 10-s/60-s interval sums, the native total as tooltip. */
+function renderFrameDiscard(connection) {
+  const total = connection?.details?.outboundFramesDiscarded;
+  const windows = connection?.window_metrics?.events || {};
+  const recent = windows["10s"]?.discarded_frames;
+  const minute = windows["60s"]?.discarded_frames;
+  const totalLabel = total == null ? null : `Gesamt seit Verbindungsaufbau: ${formatCount(total)}`;
+  if (recent == null && minute == null) {
+    return total == null ? null : metric("Frame Discard", `gesamt ${formatCount(total)}`);
+  }
+  return metric(
+    "Frame Discard",
+    `10s ${formatCount(recent) ?? "—"} · 60s ${formatCount(minute) ?? "—"}`,
+    null,
+    null,
+    null,
+    totalLabel,
+  );
+}
+
 export function renderSrtMetrics(connection, direction, totalBytes, historyKey = null) {
   const details = connection?.details || {};
   const health = connection?.srt_health || {};
@@ -160,15 +185,23 @@ export function renderSrtMetrics(connection, direction, totalBytes, historyKey =
       null,
       assessment ? `srt-rtt-${assessment.status}` : null,
     ),
+    direction === "out"
+      ? metric(
+        "Send Buffer",
+        formatCount(details.msSendBuf),
+        "ms",
+        null,
+        null,
+        "Noch nicht bestätigte Daten im SRT-Sendepuffer; wächst der Wert, staut sich der Ausgang.",
+      )
+      : null,
     metricFullRow(linkTelemetry),
     loss,
     metric("SRT est. Link", formatNumber(
       firstAvailable(health.link_capacity_mbps, details.mbpsLinkCapacity),
       1,
     ), "Mbit/s"),
-    direction === "out"
-      ? metric("Frame Discard", formatCount(details.outboundFramesDiscarded))
-      : null,
+    direction === "out" ? renderFrameDiscard(connection) : null,
     metric("Age", formatConnectionAge(details.created) ?? "—"),
   ]);
 }

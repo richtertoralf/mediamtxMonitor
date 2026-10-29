@@ -158,7 +158,7 @@ assertRttLatencyRelation(srtReader, "good", "2%", 5.17, "48.4×");
 assert.doesNotMatch(srtReader, /8888/);
 assertMetric(srtReader, "Send Loss Rate", "0.00", "%");
 assertMetric(srtReader, "SRT est. Link", "11.4", "Mbit/s");
-assertMetric(srtReader, "Frame Discard", "6");
+assertMetric(srtReader, "Frame Discard", "gesamt 6");
 assert.doesNotMatch(srtReader, /Reserve/);
 assert.doesNotMatch(srtReader, /Ping/);
 assert.doesNotMatch(srtReader, /9\.99/);
@@ -408,3 +408,21 @@ assert.deepEqual(metricLabels(srtPublisher), [
 assert.deepEqual(metricLabels(srtReader), [
   "TX", "Total", "RTT", "Snd Latency", "Send Loss Rate", "SRT est. Link", "Frame Discard", "Age",
 ]);
+
+// SRT-Reader: Sendepuffer als Momentwert, Frame Discard als Fenster mit Gesamtwert im Tooltip.
+const srtBacklog = renderReader({
+  type: "srtConn", id: "srt-backlog", bitrate_mbps: 3,
+  details: {msSendBuf: 870, outboundFramesDiscarded: 52, msSendTsbPdDelay: 1000},
+  srt_health: {tx_mbps: 3},
+  window_metrics: {events: {
+    "10s": {loss_packets: 0, retrans_packets: 0, drop_packets: 0, discarded_frames: 4},
+    "60s": {loss_packets: 0, retrans_packets: 0, drop_packets: 0, discarded_frames: 9},
+  }},
+}, 0, "camera/srt");
+assertMetric(srtBacklog, "Send Buffer", "870", "ms");
+assertMetric(srtBacklog, "Frame Discard", "10s 4 · 60s 9");
+assert.match(srtBacklog, /title="Gesamt seit Verbindungsaufbau: 52"/);
+assertSrtImpact(srtBacklog, "crit", "CRIT", "Frame Discard 10s 4 · 60s 9");
+
+// Ein Publisher zeigt keinen Sendepuffer.
+assert.doesNotMatch(srtPublisher, /Send Buffer/);
