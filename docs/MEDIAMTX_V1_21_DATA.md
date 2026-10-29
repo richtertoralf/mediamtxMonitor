@@ -214,10 +214,26 @@ allgemeine Verbindungs- oder Stream-Gesundheit; Loss, Drop, Belated,
 Retransmissionen sowie RTT-Trend und -Volatilität bleiben davon getrennte
 Messwerte für eine spätere umfassende Bewertung.
 
-Für jeden Path fragt der Collector `/v3/paths/forward-dests/list?path=<name>` ab.
-Der Snapshot enthält ausschließlich die nicht sensitiven Beobachtungen `id`,
-`pos`, `type`, `state`, `outboundBytes` und `created`; Konfiguration, URLs,
-Credentials und Fehlertexte werden nicht an API oder Frontend weitergegeben.
+Für jeden Path fragt der Collector `/v3/paths/forward-dests/list?path=<name>` ab,
+standardmäßig alle `forward_refresh_seconds` (5 s). Der Snapshot enthält die
+nicht sensitiven Beobachtungen `id`, `pos`, `type`, `state`, `outboundBytes` und
+`created` sowie unter `details` die nativen Transportwerte aus `typeSpecific`.
+Konfiguration (`conf`), URLs, `lastError`, Credentials und die Zieladresse
+(`remoteAddr`, ICE-Kandidaten) werden nicht an API oder Frontend weitergegeben.
+
+Identität eines Forward-Ziels ist die native `id`. Seit MediaMTX v1.21.3
+behält ein unverändertes Ziel bei einer Konfigurationsänderung seine `id`,
+während `pos` der neuen Reihenfolge folgt; ein geändertes Ziel erhält eine neue
+`id` und beginnt mit einer neuen Baseline. Aus `outboundBytes` entsteht bei
+jeder Forward-Abfrage eine Ausgangsrate über das Abfrageintervall; bei SRT hat
+`mbpsSendRate` Vorrang. Jeder Forward-Typ verwendet die Auswertung des
+gleichartigen Verbindungstyps: SRT wie ein SRT-Reader (RTT, TSBPD-Latenz,
+Send Loss, Retrans, Send Drop, Sendepuffer), RTSP wie ein RTSP-Session-Reader
+(gemeldeter Verlust), WebRTC wie ein WebRTC-Reader (verworfene Frames, Peer),
+RTMP und MoQ nur mit Rate und Bytes. Die Intervallwerte laufen in dieselbe
+Kurzzeithistorie mit 10-s-/60-s-Fenstern; ein Zählerrücksprung erzeugt keinen
+negativen Wert. Es entstehen keine zusätzlichen API-Aufrufe.
+
 Das Dashboard stellt diese Forward-/Push-Ziele unter OUT neben den Readern
 dar. Grundlage sind ausschließlich die sanitisierten `forwardDestinations`;
 angezeigt werden nur die von MediaMTX gelieferten Runtime-Zustände. Ziel-URLs,

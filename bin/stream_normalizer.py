@@ -22,10 +22,32 @@ try:
     from .mediamtx_model import (
         build_media_model,
         get_details_by_type,
+        sanitize_details,
         track_codecs,
     )
 except ImportError:
-    from mediamtx_model import build_media_model, get_details_by_type, track_codecs
+    from mediamtx_model import (
+        build_media_model,
+        get_details_by_type,
+        sanitize_details,
+        track_codecs,
+    )
+
+
+FORWARD_FIELDS = ("id", "pos", "type", "state", "outboundBytes", "created")
+# Metrics the collector derives from already sanitized forward data.
+FORWARD_METRIC_FIELDS = (
+    "connection_type",
+    "bitrate_mbps",
+    "transport_rtt_ms",
+    "srt_latency_ms",
+    "srt_health",
+    "common",
+    "protocol_metrics",
+    "window_metrics",
+)
+# Target addresses identify the destination like its URL and stay hidden.
+FORWARD_HIDDEN_DETAILS = frozenset({"remoteAddr", "localCandidate", "remoteCandidate"})
 
 
 def normalize_publisher(
@@ -62,7 +84,12 @@ def connection_identity(connection: Mapping[str, Any]) -> Any:
 
 
 def sanitize_forward_destinations(destinations: Any) -> list[dict[str, Any]]:
-    """Expose only non-sensitive v1.21 forward-destination observations."""
+    """Expose only non-sensitive v1.21 forward-destination observations.
+
+    Configuration, URLs and ``lastError`` are never copied. Native transport
+    values from ``typeSpecific`` become ``details`` without target addresses.
+    The function is idempotent for its own output.
+    """
     if not isinstance(destinations, list):
         return []
     safe: list[dict[str, Any]] = []
@@ -70,9 +97,18 @@ def sanitize_forward_destinations(destinations: Any) -> list[dict[str, Any]]:
         if not isinstance(destination, Mapping):
             continue
         item: dict[str, Any] = {}
-        for field in ("id", "pos", "type", "state", "outboundBytes", "created"):
+        for field in FORWARD_FIELDS + FORWARD_METRIC_FIELDS:
             if field in destination:
                 item[field] = destination[field]
+        transport = destination.get("typeSpecific", destination.get("details"))
+        if isinstance(transport, Mapping):
+            details = {
+                key: value
+                for key, value in sanitize_details(transport).items()
+                if key not in FORWARD_HIDDEN_DETAILS
+            }
+            if details:
+                item["details"] = details
         if item:
             safe.append(item)
     return safe

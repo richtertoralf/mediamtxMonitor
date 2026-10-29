@@ -24,6 +24,7 @@ _CONNECTION_LIFECYCLE_PREFIX = "lifecycle"
 _COUNTER_STATE_SUFFIX = "counters"
 _PATH_PREFIX = "path"
 _HLS_MUXER_PREFIX = "hls-muxer"
+_FORWARD_PREFIX = "fwd"
 
 
 def publisher_connection_key(
@@ -38,6 +39,16 @@ def reader_connection_key(
 ) -> str:
     """Build the existing reader measurement identity."""
     return f"{_READER_PREFIX}:{path}:{connection_type}:{connection_id}"
+
+
+def forward_connection_key(path: str, forward_id: str) -> str:
+    """Return the measurement identity of one forward destination by native id."""
+    return f"{_FORWARD_PREFIX}:{path}:{forward_id}"
+
+
+def forward_srt_health_key(path: str, forward_id: str) -> str:
+    """Return the SRT counter-state prefix of one forward destination."""
+    return f"{_SRT_HEALTH_PREFIX}:{forward_connection_key(path, forward_id)}"
 
 
 def connection_history_key(connection_key: str) -> str:
