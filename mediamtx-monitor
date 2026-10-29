@@ -25,7 +25,7 @@ fail() {
 }
 
 usage() {
-  printf 'Usage: mediamtx-monitor --version | --upgrade | --check-config [FILE]\n' >&2
+  printf 'Usage: mediamtx-monitor --version | --status | --upgrade | --check-config [FILE]\n' >&2
 }
 
 read_version() {
@@ -199,6 +199,14 @@ check_config() {
   exec "$python_bin" "$INSTALL_DIR/bin/config_check.py" --standard "$INSTALL_DIR/config/collector.yaml"
 }
 
+show_status() {
+  local python_bin="$INSTALL_DIR/venv/bin/python"
+
+  [ -x "$python_bin" ] || fail "Existing Python environment is missing: $python_bin"
+  # Read-only: is the monitor running, is its data current, where is the dashboard?
+  exec "$python_bin" "$INSTALL_DIR/bin/monitor_status.py" "$INSTALL_DIR/config/collector.yaml"
+}
+
 main() {
   if [ "$#" -eq 2 ] && [ "$1" = --check-config ]; then
     check_config "$2"
@@ -211,6 +219,9 @@ main() {
   case "$1" in
     --check-config)
       check_config
+      ;;
+    --status)
+      show_status
       ;;
     --version)
       printf 'MediaMTX Monitor %s\n' "$(read_version "$INSTALL_DIR/VERSION")"

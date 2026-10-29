@@ -292,6 +292,36 @@ Die zwei bekannten alten Snapshot-Werte `mediamtx:streams:latest` und
 in ihre neuen fachlichen Namen übersetzt; alte Redis-Keys werden weder gelesen
 noch migriert.
 
+## Betriebsstatus anzeigen
+
+Zwei lesende Befehle mit getrennten Aufgaben:
+
+- `mediamtx-monitor --status` beantwortet: Läuft der Monitor, bekommt er
+  aktuelle Daten, und wo ist das Dashboard erreichbar?
+- `mediamtx-monitor --check-config` beantwortet: Ist die Konfiguration korrekt,
+  und welche Einstellungen gelten? (siehe nächster Abschnitt)
+
+```bash
+mediamtx-monitor --status
+```
+
+`--status` zeigt Monitor-Version und Hostname, die lokale Dashboard-URL samt
+Erreichbarkeit, mögliche Netzwerk-URLs aus den eigenen IPv4-Adressen und dem
+`listen_port`, den Zustand der drei Dienste, Adresse, Erreichbarkeit und
+Version der MediaMTX-API, Adresse und Erreichbarkeit von Redis sowie das Alter
+der letzten Stream- und Systemdaten. Netzwerk-URLs sind ausdrücklich nur
+mögliche Zugänge: Ob sie von außen erreichbar sind, entscheiden Firewall, NAT
+und Routing; der Befehl prüft das nicht und fragt keine externen Dienste ab.
+Bei `listen_host: 0.0.0.0` erscheint diese Bind-Adresse nie als Browser-Ziel.
+Nicht ermittelbare Werte heißen „unbekannt“ beziehungsweise „nicht prüfbar“.
+
+Der Befehl benötigt kein sudo, schreibt nichts nach Redis, ändert keine
+Konfiguration und startet keine Dienste. Zugangsdaten in URLs werden maskiert.
+Er endet mit 0, wenn alles in Ordnung ist, sonst mit 1 und konkreten Hinweisen,
+etwa auf einen inaktiven Dienst, nicht erreichbare Komponenten oder veraltete
+Daten (Streams älter als dreimal das Collector-Intervall, mindestens 10 s;
+Systemdaten älter als dreimal das Systemmonitor-Intervall).
+
 ## Konfiguration prüfen
 
 `config/collector.yaml` konfiguriert trotz ihres historischen Namens die
