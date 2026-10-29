@@ -1,5 +1,9 @@
 # MediaMTX Monitor
 
+[![Version](https://img.shields.io/badge/version-0.8.7-blue)](VERSION)
+[![License](https://img.shields.io/github/license/richtertoralf/mediamtxMonitor)](LICENSE)
+[![MediaMTX](https://img.shields.io/badge/MediaMTX-%E2%89%A5%201.21.0-informational)](docs/MEDIAMTX_V1_21_DATA.md)
+
 MediaMTX Monitor zeigt aktive MediaMTX-Streams, Publisher, Reader, Bitraten,
 SRT-Metriken und Systemdaten in einem kleinen Web-Dashboard. Das Frontend bleibt
 Vanilla JavaScript. Redis puffert die vom Collector gelesenen Daten, FastAPI
