@@ -1,6 +1,6 @@
 # MediaMTX Monitor
 
-[![Version](https://img.shields.io/badge/version-0.8.7-blue)](VERSION)
+[![Version](https://img.shields.io/badge/version-0.8.8-blue)](https://github.com/richtertoralf/mediamtxMonitor/releases/latest)
 [![License](https://img.shields.io/github/license/richtertoralf/mediamtxMonitor)](LICENSE)
 [![MediaMTX](https://img.shields.io/badge/MediaMTX-%E2%89%A5%201.21.0-informational)](docs/MEDIAMTX_V1_21_DATA.md)
 
