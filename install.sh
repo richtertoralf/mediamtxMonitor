@@ -91,7 +91,7 @@ if [ "${EUID:-$(id -u)}" -ne 0 ]; then
   fail "Root-Rechte sind erforderlich. Aufruf: sudo ./install.sh"
 fi
 
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
 
 # Betriebssysteminformationen einlesen.
 # /etc/os-release ist üblicherweise ein Link auf /usr/lib/os-release.
@@ -197,6 +197,7 @@ required_sources=(
   "$SCRIPT_DIR/static/index.html"
 )
 for source_file in "${required_sources[@]}"; do
+  # shellcheck disable=SC2015 # fail soll bei jeder fehlgeschlagenen Prüfung greifen.
   [ -f "$source_file" ] && [ -r "$source_file" ] || fail "Erforderliche Repository-Datei fehlt: $source_file"
 done
 
@@ -374,6 +375,7 @@ install -d -m 0755 "$TEMP_DIR/extract"
 tar -xzf "$TEMP_DIR/$ARCHIVE" -C "$TEMP_DIR/extract" mediamtx mediamtx.yml || \
   fail "Das geprüfte Release-Archiv enthält nicht die erwarteten Dateien mediamtx und mediamtx.yml."
 [ -x "$TEMP_DIR/extract/mediamtx" ] || fail "Das MediaMTX-Archiv enthält kein ausführbares Binary."
+# shellcheck disable=SC2015 # fail soll bei jeder fehlgeschlagenen Prüfung greifen.
 [ -f "$TEMP_DIR/extract/mediamtx.yml" ] && [ -r "$TEMP_DIR/extract/mediamtx.yml" ] || \
   fail "Das MediaMTX-Archiv enthält keine lesbare mediamtx.yml."
 

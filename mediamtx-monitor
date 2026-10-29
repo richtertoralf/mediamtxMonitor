@@ -127,6 +127,7 @@ upgrade() {
   require_upgrade_commands
 
   temp_dir=$(mktemp -d)
+  # shellcheck disable=SC2064 # Der Pfad wird bewusst beim Setzen der Falle festgelegt.
   trap "rm -rf -- '$temp_dir'" EXIT
   source_dir="$temp_dir/repository"
 
