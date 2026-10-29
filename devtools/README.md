@@ -135,6 +135,21 @@ uninstall.sh
 freizugebende Aktualisierung der Python-vEnv unter
 `/opt/mediamtx-monitoring-backend/venv`.
 
+## Release
+
+Änderungen werden über Pull Requests nach `main` gemergt; nicht jeder Merge
+erhöht die Version. `mediamtx-monitor --upgrade` installiert den neuesten Stand
+von `main` und erkennt ihn am Commit. Ein Release markiert einen geprüften
+Stand für andere Nutzer:
+
+1. Auf einem Branch `VERSION` und das Versions-Badge im README erhöhen
+   (`tests/test_readme_badges.py` prüft die Übereinstimmung), Pull Request
+   prüfen und mergen.
+2. Den Merge-Commit auf `main` mit einem annotierten Tag `vX.Y.Z` markieren und
+   den Tag pushen.
+3. Ein GitHub-Release zu diesem Tag mit den Änderungen seit dem letzten Release
+   veröffentlichen.
+
 ## Frische Neuinstallation einer Dev-VM
 
 `install.sh` ist ausschließlich für eine frische VM vorgesehen. Das Skript ist
