@@ -12,6 +12,10 @@ function protocolLabel(type) {
     rtspConn: "RTSP", rtspSession: "RTSP", rtspsConn: "RTSPS",
     rtspsSession: "RTSPS", hlsSession: "HLS",
     webRTCSession: "WebRTC", moqSession: "MoQ",
+    rtspSource: "RTSP Pull", srtSource: "SRT Pull", rtmpSource: "RTMP Pull",
+    webRTCSource: "WebRTC Pull", moqSource: "MoQ Pull", hlsSource: "HLS Pull",
+    mpegtsSource: "MPEG-TS Pull", rtpSource: "RTP Pull",
+    rpiCameraSource: "RPi Camera",
   }[type] || type || "—";
 }
 

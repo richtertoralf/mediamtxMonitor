@@ -48,6 +48,7 @@ COLLECTOR_DEFAULTS: Dict[str, Any] = {
     "output_json_path": "/tmp/mediamtx_streams.json",
     "interval_seconds": 1,
     "forward_refresh_seconds": 5,
+    "static_source_refresh_seconds": 5,
     "output_refresh_seconds": 5,
     "ignore_path_prefixes": ["__preview__/"],
 }
@@ -218,6 +219,9 @@ def resolve_collector_config(config: Mapping[str, Any]) -> Dict[str, Any]:
     resolved = _component_config(config, "collector", COLLECTOR_DEFAULTS)
     resolved["interval_seconds"] = int(resolved["interval_seconds"])
     resolved["forward_refresh_seconds"] = int(resolved["forward_refresh_seconds"])
+    resolved["static_source_refresh_seconds"] = int(
+        resolved["static_source_refresh_seconds"]
+    )
     resolved["output_refresh_seconds"] = int(resolved["output_refresh_seconds"])
     resolved["ignore_path_prefixes"] = list(resolved["ignore_path_prefixes"])
     return resolved
