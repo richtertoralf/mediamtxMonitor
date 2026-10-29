@@ -25,7 +25,7 @@ fail() {
 }
 
 usage() {
-  printf 'Usage: mediamtx-monitor --version | --upgrade\n' >&2
+  printf 'Usage: mediamtx-monitor --version | --upgrade | --check-config [FILE]\n' >&2
 }
 
 read_version() {
@@ -187,13 +187,31 @@ upgrade() {
   printf '\nUpgrade complete: %s -> %s\n' "$installed_version" "$available_version"
 }
 
+check_config() {
+  local python_bin="$INSTALL_DIR/venv/bin/python"
+
+  [ -x "$python_bin" ] || fail "Existing Python environment is missing: $python_bin"
+  # Read-only: no Redis, network, service, or file changes. Without FILE the
+  # check uses the installed configuration.
+  if [ "$#" -eq 1 ]; then
+    exec "$python_bin" "$INSTALL_DIR/bin/config_check.py" "$1"
+  fi
+  exec "$python_bin" "$INSTALL_DIR/bin/config_check.py" --standard "$INSTALL_DIR/config/collector.yaml"
+}
+
 main() {
+  if [ "$#" -eq 2 ] && [ "$1" = --check-config ]; then
+    check_config "$2"
+  fi
   if [ "$#" -ne 1 ]; then
     usage
     exit 2
   fi
 
   case "$1" in
+    --check-config)
+      check_config
+      ;;
     --version)
       printf 'MediaMTX Monitor %s\n' "$(read_version "$INSTALL_DIR/VERSION")"
       ;;
