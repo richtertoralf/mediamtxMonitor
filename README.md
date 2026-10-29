@@ -13,6 +13,12 @@ nicht durch externe Messungen gegen Publisher oder Reader ersetzt. Details
 stehen im [MediaMTX-v1.21+-Datenmodell](docs/MEDIAMTX_V1_21_DATA.md) und in der
 [Architekturdokumentation](docs/ARCHITECTURE.md).
 
+Der Monitor ist ein eigenständiges, schlankes Werkzeug ausschließlich für
+MediaMTX. Er arbeitet strikt lesend, steuert keine Streams, kennt kein Failover
+und enthält keine Integrationen für bestimmte andere Anwendungen. Die
+dauerhaften [Leitlinien](docs/ARCHITECTURE.md#leitlinien) stehen in der
+Architekturdokumentation.
+
 > **Sicherheitshinweis:** Dashboard und Monitor-API besitzen keine eingebaute
 > Authentifizierung und stellen auf Port 8080 unverschlüsseltes HTTP bereit.
 > Dieser Port darf nicht ungeschützt aus dem öffentlichen Internet erreichbar
@@ -285,7 +291,7 @@ getrennt sind:
 
 ```text
 Redis DB 0
-├── gfx:*                                  GFX Engine
+├── <andere-anwendung>:*                   andere Anwendung
 └── mediamtx-monitor:node:<node-id>:*      MediaMTX Monitor
 ```
 

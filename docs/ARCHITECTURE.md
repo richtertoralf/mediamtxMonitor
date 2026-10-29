@@ -36,6 +36,29 @@ Das lokale System- und Hostmonitoring ist davon getrennt. Es erfasst den Host,
 auf dem der Monitor läuft, und fällt nicht unter diese Grenze für Stream-,
 Verbindungs- und Transportmetriken.
 
+## Leitlinien
+
+MediaMTX Monitor ist ein eigenständiges, universelles und schlankes
+Monitoringwerkzeug ausschließlich für MediaMTX. Diese Leitlinien gelten
+dauerhaft:
+
+- Einfachheit und geringer Ressourcenverbrauch haben oberste Priorität. Keine
+  unnötigen Frameworks, Dienste, Datenbanken oder zusätzlichen
+  Verwaltungsschichten.
+- Monitoring bleibt strikt lesend und diagnostisch: keine aktive
+  Streamsteuerung, kein Failover, keine Produktionsregie.
+- Neue MediaMTX-Versionen werden regelmäßig auf neue Metriken,
+  Protokollinformationen und Diagnosemöglichkeiten geprüft. Was praktischen
+  Nutzen hat, wird in den Monitor übernommen. Aussagekraft und Genauigkeit der
+  vorhandenen Metriken werden fortlaufend verbessert.
+- Die Videovorschau soll langfristig ressourcenschonender werden.
+- Keine projektspezifischen Integrationen und keine Redis-Schlüssel,
+  Datenmodelle oder Abhängigkeiten anderer Anwendungen.
+- Andere Monitoringlösungen dürfen den Monitor als technische Grundlage
+  verwenden. Der Monitor kennt diese Anwendungen nicht.
+- Das öffentliche Repository enthält keine Verweise auf private oder
+  projektspezifische Anwendungen.
+
 ## Architekturprinzip
 
 Dieses Projekt verwendet eine pragmatische modulare Architektur. Eine
@@ -304,11 +327,12 @@ konfigurierte Anwendungs-Namespace; `node.id` ist die stabile Identität der
 überwachten MediaMTX-Instanz und hat für die aktuelle Single-Node-Laufzeit den
 Default `local`. Die Builder dieses Abschnitts enthalten diesen Prefix nicht.
 
-Redis DB 0 darf mit der getrennten GFX Engine geteilt werden:
+Redis DB 0 darf mit anderen Anwendungen geteilt werden, sofern diese eigene
+Namespaces verwenden:
 
 ```text
 Redis DB 0
-├── gfx:*                                  GFX Engine
+├── <andere-anwendung>:*                   andere Anwendung
 └── mediamtx-monitor:node:<node-id>:*      MediaMTX Monitor
 ```
 
@@ -370,6 +394,12 @@ Preview bleibt ein eigener Integrationspfad aus UI, MediaMTX und FFmpeg. Die
 Preview-Basis-URL und ihr Nodebezug müssen langfristig konfigurierbar sein. Die
 Preview-Logik gehört weder in die Streamnormalisierung noch in die Health-
 Bewertung.
+
+Die heutige FFmpeg-Vorschau mit niedriger Auflösung und Bitrate ist bewusst
+auf geringe Bandbreite beim Betrachter ausgelegt. Dafür kostet sie je Pfad
+Server-CPU für Dekodierung und Neukodierung. Der Ressourcenverbrauch der
+Vorschau soll langfristig sinken; welches Verfahren dafür geeignet ist, bleibt
+offen.
 
 ### Installation und Deployment
 
