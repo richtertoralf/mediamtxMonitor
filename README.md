@@ -195,11 +195,16 @@ mediamtx-monitor --version
 Anschließend das Dashboard unter `http://<server-ip>:8080/` öffnen; der
 ausführliche Funktionstest steht weiter unten.
 
-Die Fresh-Installation wurde mit MediaMTX v1.21.0 auf Ubuntu Server 24.04 LTS
-amd64 getestet. Diese Version ist als getesteter Repository-Default festgelegt.
-Für einen ausdrücklich gewünschten Fresh-Stand kann optional
-`--mediamtx-version VERSION` angegeben werden; bei vorhandener MediaMTX-
-Infrastruktur wird diese Angabe nicht angewendet.
+Eine Fresh-Installation erhält standardmäßig MediaMTX v1.21.3, die aktuelle
+stabile Version mit den hier ausgewerteten API-Feldern. Die vom Installer
+ergänzte `mediamtx.yml` wurde mit dem offiziellen v1.21.3-Archiv erzeugt und mit
+`mediamtx --validate-conf` geprüft; ein vollständiger Fresh-Lauf auf Ubuntu
+Server 24.04 LTS amd64 wurde mit v1.21.0 getestet. Für einen ausdrücklich
+gewünschten Fresh-Stand kann optional `--mediamtx-version VERSION` angegeben
+werden; bei vorhandener MediaMTX-Infrastruktur wird diese Angabe nicht
+angewendet. Eine vorhandene MediaMTX-Installation wird weder vom Installer
+(Reuse-Pfad) noch von `mediamtx-monitor --upgrade` aktualisiert oder ersetzt;
+ihr Upgrade bleibt eine separate Betreiberentscheidung.
 
 Der Installer ermittelt:
 
@@ -337,7 +342,7 @@ eine separate Betreiberoperation.
 
 ## Ports
 
-Für die mit MediaMTX v1.21.0 getestete Konfiguration:
+Standardports von MediaMTX v1.21 (unverändert in v1.21.3):
 
 | Port | Funktion |
 |---:|---|

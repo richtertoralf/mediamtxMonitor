@@ -9,7 +9,7 @@ readonly SERVICE_DIR="/etc/systemd/system"
 readonly SERVICE_USER="mediamtxmon"
 readonly SERVICE_GROUP="mediamtxmon"
 readonly MINIMUM_MEDIAMTX_VERSION="1.21.0"
-readonly DEFAULT_MEDIAMTX_VERSION="1.21.0"
+readonly DEFAULT_MEDIAMTX_VERSION="1.21.3"
 INSTALL_MODE=""
 
 fail() {
