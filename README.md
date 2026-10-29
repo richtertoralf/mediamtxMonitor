@@ -288,6 +288,53 @@ Die zwei bekannten alten Snapshot-Werte `mediamtx:streams:latest` und
 in ihre neuen fachlichen Namen übersetzt; alte Redis-Keys werden weder gelesen
 noch migriert.
 
+## Konfiguration prüfen
+
+`config/collector.yaml` konfiguriert trotz ihres historischen Namens die
+gesamte Anwendung: Collector, Systemmonitor, Monitor-API und Frontend. Eine
+Umbenennung ist nicht erforderlich. Die Prüfung liest die Datei, zeigt jeden
+wirksamen Wert mit seiner Herkunft (`Datei` oder `Default`) und den Diensten, die
+ihn lesen, und benennt Fehler und Warnungen:
+
+```bash
+mediamtx-monitor --check-config                  # installierte Konfiguration
+mediamtx-monitor --check-config /pfad/datei.yaml # ausdrücklich gewählte Datei
+```
+
+Die Prüfung schreibt keine Dateien oder Redis-Werte, startet keine Dienste,
+ändert MediaMTX nicht und benötigt kein Netzwerk; im Repository funktioniert sie
+auch direkt mit `python3 bin/config_check.py DATEI`. Zugangsdaten in URLs und
+Schlüssel, die nach Passwort, Token oder Secret klingen, werden maskiert.
+
+- **Fehler** (Rückgabecode 1): fehlende oder unlesbare Datei, ungültiges YAML,
+  doppelte Schlüssel, Abschnitte, die kein Mapping sind, sowie unzulässige Werte
+  (falscher Typ, Port außerhalb 1–65535, Intervalle ≤ 0, unbekannte
+  Log-Stufe, ungültige `node.id` oder `webrtc_base_url`).
+- **Warnungen** (Rückgabecode 0): unbekannte Schlüssel, die die Dienste
+  ignorieren.
+- Nicht gesetzte optionale Schlüssel sind kein Fehler; sie erhalten ihre
+  rückwärtskompatiblen Defaults.
+
+Das Laufzeitverhalten bleibt unverändert: Ohne lesbare Datei beenden sich
+Collector und Systemmonitor, die Monitor-API startet nach einer Warnung mit
+Defaults; einen Abschnitt, der kein Mapping ist, ersetzen die Dienste
+stillschweigend durch Defaults. Deshalb vor und nach jeder Änderung prüfen.
+
+Nach einer Änderung sind die Dienste neu zu starten, die den geänderten Wert
+lesen:
+
+| Schlüssel bzw. Abschnitt | Neustart |
+|---|---|
+| `collector`, `bitrate` | `mediamtx-collector.service` |
+| `api_base_url` | `mediamtx-collector.service`, `mediamtx-api.service` |
+| `system_monitor` | `mediamtx-system.service`, `mediamtx-api.service` |
+| `webrtc_base_url`, `api_server`, `logging`, `frontend` | `mediamtx-api.service` |
+| `redis`, `node` | alle drei Dienste |
+
+Zu sichern ist `config/collector.yaml` unter dem Installationsverzeichnis; alle
+übrigen Dateien stellt `mediamtx-monitor --upgrade` beziehungsweise der
+Installer wieder her. Ein Upgrade ersetzt diese Datei nicht.
+
 ## Redis-Namespace und Node-ID
 
 Der Monitor verwendet weiterhin Redis DB 0. Sie darf gemeinsam mit anderen
