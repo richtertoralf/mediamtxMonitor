@@ -9,7 +9,7 @@ import tempfile
 import unittest
 
 from bin.mediamtx_client import MediaMTXRequestError
-from bin.monitor_status import Probes, build_status, dashboard_urls
+from bin.monitor_status import Probes, build_status, dashboard_urls, read_version
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -150,6 +150,19 @@ class StatusTests(unittest.TestCase):
         self.assertEqual(dashboard_urls("192.0.2.5", 80, ["192.0.2.1"]),
                          ([], ["http://192.0.2.5:80/"]))
         self.assertEqual(dashboard_urls("::1", 80, []), (["http://[::1]:80/"], []))
+
+
+class VersionTests(unittest.TestCase):
+    def test_version_includes_the_installed_commit_when_valid(self):
+        with tempfile.TemporaryDirectory() as directory:
+            version = Path(directory, "VERSION")
+            revision = Path(directory, "REVISION")
+            version.write_text("0.8.7\n", encoding="utf-8")
+            self.assertEqual(read_version(version, revision), "0.8.7")
+            revision.write_text("f6eb1c1" + "0" * 33 + "\n", encoding="utf-8")
+            self.assertEqual(read_version(version, revision), "0.8.7 (f6eb1c1)")
+            revision.write_text("kein-commit\n", encoding="utf-8")
+            self.assertEqual(read_version(version, revision), "0.8.7")
 
 
 class StatusCliTests(unittest.TestCase):

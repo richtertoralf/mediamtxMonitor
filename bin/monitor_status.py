@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass, field
 import ipaddress
+import re
 from pathlib import Path
 import shutil
 import socket
@@ -55,14 +56,25 @@ SERVICES = (
 )
 WILDCARD_HOSTS = {"", "0.0.0.0", "::", "[::]"}
 VERSION_PATH = Path(__file__).absolute().parents[1] / "VERSION"
+REVISION_PATH = Path(__file__).absolute().parents[1] / "REVISION"
 PROBE_TIMEOUT_SECONDS = 2.0
 
 
-def read_version(path: Path = VERSION_PATH) -> Optional[str]:
+def read_version(
+    path: Path = VERSION_PATH, revision_path: Path = REVISION_PATH
+) -> Optional[str]:
+    """Return the installed version plus the short commit written by --upgrade."""
     try:
-        return path.read_text(encoding="utf-8").strip() or None
+        version = path.read_text(encoding="utf-8").strip() or None
     except OSError:
         return None
+    try:
+        revision = revision_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        revision = ""
+    if version and re.fullmatch(r"[0-9a-f]{40}", revision):
+        return f"{version} ({revision[:7]})"
+    return version
 
 
 def service_state(unit: str) -> str:

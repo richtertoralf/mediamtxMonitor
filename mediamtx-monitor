@@ -39,6 +39,26 @@ read_version() {
   printf '%s' "$version"
 }
 
+# The installed commit; empty when unknown (installations before REVISION).
+read_revision() {
+  local revision_file=$1
+  local revision=""
+
+  if [ -r "$revision_file" ]; then
+    IFS= read -r revision < "$revision_file" || true
+  fi
+  [[ "$revision" =~ ^[0-9a-f]{40}$ ]] && printf '%s' "$revision"
+  return 0
+}
+
+describe_revision() {
+  if [ -n "$1" ]; then
+    printf '%s' "${1:0:7}"
+  else
+    printf 'unknown commit'
+  fi
+}
+
 require_upgrade_commands() {
   local command_name
   for command_name in git rsync systemctl; do
@@ -114,6 +134,7 @@ remove_legacy_system_monitor() {
 
 upgrade() {
   local temp_dir source_dir installed_version available_version service status
+  local installed_revision available_revision
 
   [ -d "$INSTALL_DIR" ] || {
     printf 'No existing MediaMTX Monitor installation found.\n' >&2
@@ -124,6 +145,7 @@ upgrade() {
     fail "Root privileges are required. Run: sudo mediamtx-monitor --upgrade"
 
   installed_version=$(read_version "$INSTALL_DIR/VERSION")
+  installed_revision=$(read_revision "$INSTALL_DIR/REVISION")
   require_upgrade_commands
 
   temp_dir=$(mktemp -d)
@@ -134,9 +156,13 @@ upgrade() {
   printf 'Downloading...\n'
   git clone --depth 1 "$REPOSITORY_URL" "$source_dir" >/dev/null
   available_version=$(read_version "$source_dir/VERSION")
+  available_revision=$(git -C "$source_dir" rev-parse HEAD) || \
+    fail "Downloaded commit could not be determined"
+  [[ "$available_revision" =~ ^[0-9a-f]{40}$ ]] || \
+    fail "Invalid downloaded commit: $available_revision"
 
-  printf 'Installed: %s\n' "$installed_version"
-  printf 'Available: %s\n\n' "$available_version"
+  printf 'Installed: %s (%s)\n' "$installed_version" "$(describe_revision "$installed_revision")"
+  printf 'Available: %s (%s)\n\n' "$available_version" "$(describe_revision "$available_revision")"
   for source_path in bin static requirements.txt mediamtx-monitor; do
     [ -e "$source_dir/$source_path" ] || fail "Downloaded repository is incomplete: $source_path"
   done
@@ -146,11 +172,15 @@ upgrade() {
   done
 
   remove_legacy_system_monitor
-  if [ "$installed_version" = "$available_version" ]; then
+  # Version and commit must both match; a merge without a version bump still
+  # updates, and an installation with unknown commit is updated once.
+  if [ "$installed_version" = "$available_version" ] && \
+     [ "$installed_revision" = "$available_revision" ]; then
     if [ "$LEGACY_UNIT_REMOVED" -eq 1 ]; then
       systemctl daemon-reload || fail "Failed to reload systemd units"
     fi
-    printf 'MediaMTX Monitor is already up to date: %s\n' "$installed_version"
+    printf 'MediaMTX Monitor is already up to date: %s (%s)\n' \
+      "$installed_version" "$(describe_revision "$installed_revision")"
     return 0
   fi
 
@@ -164,6 +194,8 @@ upgrade() {
   printf 'Updating Python dependencies...\n'
   upgrade_dependencies
   install_application_file "$source_dir/VERSION" "$INSTALL_DIR/VERSION"
+  printf '%s\n' "$available_revision" > "$temp_dir/REVISION"
+  install_application_file "$temp_dir/REVISION" "$INSTALL_DIR/REVISION"
   if [ "$INSTALL_DIR" = "$DEFAULT_INSTALL_DIR" ]; then
     chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/bin" "$INSTALL_DIR/static"
   fi
@@ -184,7 +216,21 @@ upgrade() {
     fi
   done
 
-  printf '\nUpgrade complete: %s -> %s\n' "$installed_version" "$available_version"
+  printf '\nUpgrade complete: %s (%s) -> %s (%s)\n' \
+    "$installed_version" "$(describe_revision "$installed_revision")" \
+    "$available_version" "$(describe_revision "$available_revision")"
+}
+
+show_version() {
+  local version revision
+
+  version=$(read_version "$INSTALL_DIR/VERSION")
+  revision=$(read_revision "$INSTALL_DIR/REVISION")
+  if [ -n "$revision" ]; then
+    printf 'MediaMTX Monitor %s (%s)\n' "$version" "${revision:0:7}"
+  else
+    printf 'MediaMTX Monitor %s\n' "$version"
+  fi
 }
 
 check_config() {
@@ -224,7 +270,7 @@ main() {
       show_status
       ;;
     --version)
-      printf 'MediaMTX Monitor %s\n' "$(read_version "$INSTALL_DIR/VERSION")"
+      show_version
       ;;
     --upgrade)
       upgrade
