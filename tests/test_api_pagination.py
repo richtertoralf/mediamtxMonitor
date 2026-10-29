@@ -101,6 +101,18 @@ class PaginationTests(unittest.TestCase):
         self.assertEqual(client.count("/v3/paths/list"), 2)
         self.assertEqual(client.count("/v3/webrtc/sessions/list"), 2)
 
+    def test_preview_paths_are_counted_but_not_shown_as_streams(self):
+        client = PagedClient(path_count=2, session_count=0)
+        client.paths.append({
+            "name": "__preview__/cam-000", "available": True, "online": True,
+            "source": {"type": "rtspSession", "id": "t"}, "readers": [],
+        })
+        redis, _ = self.collect(client)
+        snapshot = json.loads(redis.values[mediamtx_collector.REDIS_KEY])
+        self.assertEqual([item["name"] for item in snapshot], ["cam-000", "cam-001"])
+        count_key = f"{mediamtx_collector.REDIS_KEY}:preview_paths"
+        self.assertEqual(json.loads(redis.values[count_key]), 1)
+
     def test_single_page_needs_no_additional_request(self):
         client = PagedClient(path_count=100, session_count=100)
         self.collect(client)

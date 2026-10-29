@@ -48,6 +48,7 @@ async function updateUI() {
     result.systeminfo || {},
     ageText || "Datenalter: —",
     dataAgeStatusClass(result.collected_at),
+    result.preview_path_count,
   );
 
   const newInterval = result.streamlist_refresh_ms ?? 1000;

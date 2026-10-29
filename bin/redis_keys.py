@@ -66,6 +66,11 @@ def mediamtx_version_key(snapshot_key: str) -> str:
     return f"{snapshot_key}:mediamtx_version"
 
 
+def preview_paths_key(snapshot_key: str) -> str:
+    """Return the sidecar key with the number of active preview paths."""
+    return f"{snapshot_key}:preview_paths"
+
+
 def mediamtx_started_key(snapshot_key: str) -> str:
     """Build the last successfully observed MediaMTX-start sidecar."""
     return f"{snapshot_key}:mediamtx_started"

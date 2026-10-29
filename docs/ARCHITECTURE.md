@@ -393,7 +393,9 @@ die UI-seitigen SRT-Klassifikationen sind der oben dokumentierte
 Preview bleibt ein eigener Integrationspfad aus UI, MediaMTX und FFmpeg. Die
 Preview-Basis-URL und ihr Nodebezug müssen langfristig konfigurierbar sein. Die
 Preview-Logik gehört weder in die Streamnormalisierung noch in die Health-
-Bewertung.
+Bewertung. Eine Vorschau startet nur auf ausdrücklichen Wunsch je Stream; der
+Monitor verwaltet keine Transcoder, sondern nutzt den On-Demand-Mechanismus von
+MediaMTX.
 
 Die heutige FFmpeg-Vorschau mit niedriger Auflösung und Bitrate ist bewusst
 auf geringe Bandbreite beim Betrachter ausgelegt. Dafür kostet sie je Pfad
