@@ -159,5 +159,30 @@ class StreamNormalizerTests(unittest.TestCase):
         )
 
 
+class StatusFieldTests(unittest.TestCase):
+    def test_native_status_fields_are_kept_and_missing_ones_omitted(self):
+        stream = normalize_stream({
+            "name": "cam/1",
+            "available": True,
+            "online": True,
+            "availableTime": "2026-10-29T10:00:00.5+01:00",
+            "onlineTime": "2026-10-29T09:59:59+01:00",
+            "confName": "~^cam/.*$",
+            "source": None,
+            "readers": [],
+        }, {}, "1.21.3", [])
+        self.assertEqual(stream["availableTime"], "2026-10-29T10:00:00.5+01:00")
+        self.assertEqual(stream["onlineTime"], "2026-10-29T09:59:59+01:00")
+        self.assertEqual(stream["confName"], "~^cam/.*$")
+
+        # MediaMTX returns null times while a path is not available/online.
+        idle = normalize_stream({
+            "name": "idle", "availableTime": None, "onlineTime": None,
+            "source": None, "readers": [],
+        }, {}, "1.21.3", [])
+        for field in ("availableTime", "onlineTime", "confName"):
+            self.assertNotIn(field, idle)
+
+
 if __name__ == "__main__":
     unittest.main()

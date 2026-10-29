@@ -48,7 +48,15 @@ protokollspezifischen IDs. Der Collector übernimmt `tracks2` vollständig und
 erzeugt daraus zusätzlich die bisher von der Oberfläche erwartete kompakte
 Codec-Liste `tracks`. Außerdem erfasst er `inboundBytes`, `outboundBytes` und
 `inboundFramesInError`; die geprüfte Version steht als `mediamtxVersion` im
-Path-Modell. Die deprecated Felder `tracks`, `bytesReceived` und
+Path-Modell. `availableTime` und `onlineTime` (seit wann der Pfad verfügbar
+beziehungsweise online ist; `null` solange nicht) sowie `confName` (der
+Konfigurationseintrag, der den Pfad erzeugt hat, etwa ein Regex oder
+`all_others`) werden unverändert übernommen. Das Dashboard zeigt „LIVE seit …“
+und beide Zeitpunkte im Tooltip; `confName` erscheint sichtbar nur, wenn er vom
+Pfadnamen abweicht. Für Verbindungen zeigt es `userAgent` für alle Protokolle
+und `expiresAt` als „Session endet: in …“: Seit v1.21.3 schließt MediaMTX eine
+Session, wenn ihre Authentifizierung (JWT) abläuft. Alle Texte werden
+HTML-escaped; fehlende Felder entfallen. Die deprecated Felder `tracks`, `bytesReceived` und
 `bytesSent` des Path-Objekts werden nicht mehr gelesen. Für den Preview-Entscheid
 ist `available` maßgeblich; `online` bleibt ein davon getrennter Zustand. Das
 deprecated Feld `ready` wird nicht verwendet.

@@ -142,6 +142,13 @@ body > h1 {
   overflow-wrap: anywhere;
 }
 
+.stream-rule {
+  margin-left: 0.6em;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
 .stream-status {
   flex: 0 0 auto;
   color: var(--text-main);

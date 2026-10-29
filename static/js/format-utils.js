@@ -69,6 +69,20 @@ export function formatRelativeTime(value, nowMs = Date.now()) {
   return `vor ${Math.floor(seconds / 86400)} d`;
 }
 
+/** Format a future native timestamp, for example a session expiry. */
+export function formatUntil(value, nowMs = Date.now()) {
+  if (!value) return null;
+  const timestamp = Date.parse(value);
+  const currentTime = optionalNumber(nowMs);
+  if (!Number.isFinite(timestamp) || currentTime == null) return null;
+  const seconds = Math.floor((timestamp - currentTime) / 1000);
+  if (seconds <= 0) return "abgelaufen";
+  if (seconds < 60) return `in ${seconds} s`;
+  if (seconds < 3600) return `in ${Math.floor(seconds / 60)} min`;
+  if (seconds < 86400) return `in ${Math.floor(seconds / 3600)} h`;
+  return `in ${Math.floor(seconds / 86400)} d`;
+}
+
 export function formatDataAge(collectedAt, nowMs = Date.now()) {
   const timestamp = optionalNumber(collectedAt);
   const currentTime = optionalNumber(nowMs);
