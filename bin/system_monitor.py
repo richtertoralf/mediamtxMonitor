@@ -2,8 +2,9 @@
 """
 MediaMTX Monitor - local host-system monitoring.
 
-Collects host identity, CPU, memory, disk, filtered network counters and rates,
-and available temperatures, then writes the current system snapshot. Temperature
+Collects host identity, CPU (per core, steal, iowait, Linux CPU pressure),
+memory, disk, filtered network counters and rates, and available
+temperatures, then writes the current system snapshot. Temperature
 selection prefers the CPU package sensor and falls back to another available
 sensor value.
 
@@ -100,6 +101,65 @@ def initialize_runtime(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
     except Exception as exc:
         logging.error(f"❌ Verbindung zu Redis fehlgeschlagen: {exc}")
         sys.exit(1)
+
+CPU_PRESSURE_PATH = Path("/proc/pressure/cpu")
+
+
+def read_cpu_pressure(path: Path = CPU_PRESSURE_PATH) -> Dict[str, float] | None:
+    """Return Linux PSI "some" averages for the CPU, or None if unavailable."""
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            kind, *fields = line.split()
+            if kind != "some":
+                continue
+            values = dict(field.split("=", 1) for field in fields)
+            return {
+                "some_avg10": float(values["avg10"]),
+                "some_avg60": float(values["avg60"]),
+            }
+    except (OSError, ValueError, KeyError):
+        return None
+    return None
+
+
+def get_cpu_breakdown(settings: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    """Return per-core CPU shares since the previous call and explanatory hints.
+
+    ``busy`` counts everything except idle and iowait, as ``cpu_percent`` does;
+    steal is part of busy and reported separately because the host, not this
+    VM, used that time.
+    """
+    settings = settings or system_monitor_cfg
+    cores = []
+    for times in psutil.cpu_times_percent(interval=None, percpu=True):
+        idle = getattr(times, "idle", 0.0)
+        iowait = getattr(times, "iowait", 0.0)
+        cores.append({
+            "busy": round(max(0.0, 100.0 - idle - iowait), 1),
+            "idle": round(idle, 1),
+            "iowait": round(iowait, 1),
+            "steal": round(getattr(times, "steal", 0.0), 1),
+        })
+    count = len(cores)
+    breakdown: Dict[str, Any] = {"logical_cores": count, "per_core": cores}
+    if count:
+        for field in ("busy", "iowait", "steal"):
+            breakdown[f"{field}_percent"] = round(
+                sum(core[field] for core in cores) / count, 1
+            )
+    pressure = read_cpu_pressure()
+    breakdown["pressure"] = pressure
+
+    hints = []
+    if count and all(core["idle"] < settings["saturation_idle_percent"] for core in cores):
+        hints.append("saturation")
+    if count and breakdown["steal_percent"] >= settings["steal_hint_percent"]:
+        hints.append("steal")
+    if pressure and pressure["some_avg10"] >= settings["pressure_hint_percent"]:
+        hints.append("pressure")
+    breakdown["hints"] = hints
+    return breakdown
+
 
 def get_temperatures():
     """Return available host temperature sensor records, or an empty mapping."""
@@ -204,6 +264,7 @@ def collect_and_store():
             "server_ips": get_server_ips(),
             "timestamp": now,
             "cpu_percent": psutil.cpu_percent(interval=1),
+            "cpu": get_cpu_breakdown(),
             "memory": psutil.virtual_memory()._asdict(),
             "swap": psutil.swap_memory()._asdict(),
             "disk": psutil.disk_usage("/")._asdict(),

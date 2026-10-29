@@ -30,6 +30,8 @@ DETAIL_ENDPOINTS = {
 
 HLS_MUXER_ENDPOINT = "/v3/hls/muxers/list"
 STATIC_SOURCE_ENDPOINT = "/v3/paths/static-sources/get/"
+# Paths of the monitor's own on-demand preview rule (config/monitor-preview-path.yml).
+PREVIEW_PATH_PREFIX = "__preview__/"
 
 # Sources that MediaMTX pulls itself. Those with a connection-like transport
 # map to the connection type whose native fields their typeSpecific shares.

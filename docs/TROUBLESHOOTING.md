@@ -125,9 +125,16 @@ Encoder müssen Zielport und MediaMTX-Stream-ID entsprechend gesetzt sein.
 
 ## Vorschaufehler
 
-Die Vorschau verwendet `webrtc_base_url`, andernfalls die beim Start aus
-MediaMTX abgeleitete Basis; der Dienst protokolliert den effektiven Wert. Beim Öffnen erzeugt MediaMTX den
-Pfad `__preview__/<stream>` und startet FFmpeg on demand. Prüfen:
+Eine Vorschau startet nur, wenn auf der Streamkarte „Vorschau anzeigen“
+angehakt ist; standardmäßig ist sie aus, und das Öffnen des Dashboards startet
+keinen Transcoder. Die Vorschau verwendet `webrtc_base_url`, andernfalls die
+beim Start aus MediaMTX abgeleitete Basis; der Dienst protokolliert den
+effektiven Wert. Beim Anhaken erzeugt MediaMTX den Pfad `__preview__/<stream>`
+und startet FFmpeg on demand; mehrere Betrachter desselben Streams teilen sich
+diesen Transcoder. Abwählen oder Schließen des Tabs beendet die eigene
+WebRTC-Session; ohne verbleibende Leser beendet MediaMTX den Transcoder nach
+`runOnDemandCloseAfter` (20 s). „Vorschau-Transcoder“ in der Systemanzeige
+zählt die aktiven `__preview__`-Pfade. Prüfen:
 
 ```bash
 sudo ss -lntup | grep ':8889'
@@ -148,6 +155,30 @@ Dienstaufruf ohne Overrides aus YAML ermittelt oder ausdrücklich gesetzt werden
 YAML-Datei, Dienstkonfiguration und `MTX_*`-Overrides sind bei ihrer Wahl zu
 berücksichtigen. Ein API-Verbindungsfehler beweist nicht `api: false`.
 
+
+## CPU-Anzeige und Hinweise
+
+„CPU-Auslastung“ bezieht sich auf alle logischen Kerne („von n vCPU“). Je Kern
+zählt alles außer Idle und I/O-Wait als belegt. Steal-Zeit ist darin enthalten
+und wird getrennt gezeigt: Die VM wollte rechnen, der Host gab ihr die Zeit
+nicht. „CPU-Druck (PSI)“ stammt aus `/proc/pressure/cpu` (`some`, Anteil der
+Zeit, in der Prozesse auf einen Kern warteten) und fehlt auf Systemen ohne PSI.
+Werte je Kern, Steal und I/O-Wait gelten für das letzte Erfassungsintervall des
+Systemmonitors.
+
+Hinweise sind Erklärungen, keine Alarme. Die Schwellen stehen unter
+`system_monitor` und haben diese Defaults:
+
+| Hinweis | Bedingung | Schlüssel |
+|---|---|---|
+| CPU-Sättigung | jeder Kern unter 5 % idle | `saturation_idle_percent` |
+| Host-Engpass | Steal im Mittel ab 10 % | `steal_hint_percent` |
+| CPU-Konkurrenz | PSI `some avg10` ab 20 % | `pressure_hint_percent` |
+
+Im Stream-Kopf markiert „Discard 60s“ die Summe der von MediaMTX verworfenen
+Frames bzw. Pakete aller OUT-Verbindungen der letzten 60 s; „Forward auffällig“
+zählt Forward-Ziele, die nicht `forwarding` melden oder bei `forwarding` keine
+Ausgangsdaten haben.
 
 ## `auto.crt: permission denied`
 

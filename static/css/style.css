@@ -142,6 +142,42 @@ body > h1 {
   overflow-wrap: anywhere;
 }
 
+.system-hint {
+  grid-column: 1 / -1;
+  margin: 4px 0 0;
+  color: var(--status-critical);
+  font-size: 0.86rem;
+}
+
+.stream-badge {
+  margin-left: 0.6em;
+  padding: 0 0.45em;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.stream-badge-warn {
+  color: var(--status-critical);
+  border: 1px solid var(--status-critical);
+}
+
+.forward-block-warn .forward-state {
+  color: var(--status-critical);
+}
+
+.preview-toggle-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+  cursor: pointer;
+}
+
+.preview-frame:not([src]) {
+  display: none;
+}
+
 .stream-rule {
   margin-left: 0.6em;
   color: var(--text-muted);

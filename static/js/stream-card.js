@@ -2,6 +2,7 @@
  * MediaMTX Monitor - Stream card composition.
  *
  * Composes stream panels and updates cards while preserving preview iframes.
+ * A preview runs only after the viewer ticks "Vorschau anzeigen" on a card.
  */
 
 import {connectionTotal} from "./connection-metrics.js";
@@ -133,11 +134,16 @@ function buildPreviewIframeSrc(streamName, webrtcBaseUrl) {
  *
  * Re-assigning an unchanged `src` reloads the iframe and therefore rebuilds the
  * WebRTC session, so the attribute is only written on an actual change.
+ * Removing `src` closes this browser's WebRTC reader; MediaMTX stops the shared
+ * transcoder itself once no reader is left (`runOnDemandCloseAfter`).
  */
-function updatePreview(preview, stream, webrtcBaseUrl) {
+function updatePreview(card) {
+  const preview = card?.querySelector(".preview-frame");
   if (!preview) return;
+  const {stream, webrtcBaseUrl} = card.previewContext || {};
+  const wanted = card.querySelector(".preview-toggle")?.checked === true;
   preview.setAttribute("title", `Preview: ${stream?.name || ""}`);
-  const wantedSrc = stream?.available === false
+  const wantedSrc = !wanted || stream?.available === false
     ? null
     : buildPreviewIframeSrc(stream?.name, webrtcBaseUrl);
   const currentSrc = preview.getAttribute("src");
@@ -185,7 +191,7 @@ export function renderForwardDestination(destination, index = 0) {
   const type = destination?.type;
   const state = destination?.state;
   return `
-    <section class="reader-block forward-block">
+    <section class="reader-block forward-block${isForwardAnomalous(destination) ? " forward-block-warn" : ""}">
       <h3>Forward ${index + 1}</h3>
       <div class="connection-heading">
         <span>${escapeHtml(type ? String(type).toUpperCase() : "—")}</span>
@@ -205,6 +211,47 @@ function sortedReaders(stream) {
     (order[a.type] || 99) - (order[b.type] || 99));
 }
 
+/** Sum native discard windows of all OUT consumers over the last 60 s. */
+export function streamDiscards60s(stream) {
+  const windows = connection => connection?.window_metrics || {};
+  const outputs = [...(stream?.readers || []), ...(stream?.forwardDestinations || [])];
+  let total = 0;
+  for (const connection of outputs) {
+    const metrics = windows(connection);
+    for (const value of [
+      metrics.frame_discard?.["60s"],
+      metrics.protocol_counters?.["60s"]?.frame_discard,
+      metrics.protocol_counters?.["60s"]?.discard,
+      metrics.events?.["60s"]?.discarded_frames,
+    ]) {
+      if (typeof value === "number" && value > 0) total += value;
+    }
+  }
+  const muxer = stream?.hls_muxer?.window_metrics?.protocol_counters?.["60s"]?.mux_discard;
+  if (typeof muxer === "number" && muxer > 0) total += muxer;
+  return total;
+}
+
+/** A forward destination that is not forwarding, or forwards no data. */
+export function isForwardAnomalous(destination) {
+  if (destination?.state !== "forwarding") return true;
+  return destination?.bitrate_mbps === 0;
+}
+
+function renderHeaderBadges(stream) {
+  const badges = [];
+  const discards = streamDiscards60s(stream);
+  if (discards > 0) {
+    badges.push(`<span class="stream-badge stream-badge-warn" title="Von MediaMTX verworfene Frames bzw. Pakete aller OUT-Verbindungen in den letzten 60 s">Discard 60s: ${discards}</span>`);
+  }
+  const anomalous = (stream?.forwardDestinations || []).filter(isForwardAnomalous);
+  if (anomalous.length) {
+    const states = anomalous.map(item => item?.state || "—").join(", ");
+    badges.push(`<span class="stream-badge stream-badge-warn" title="${escapeHtml(`Zustand: ${states}`)}">Forward auffällig: ${anomalous.length}</span>`);
+  }
+  return badges.join("");
+}
+
 function renderHeaderContent(stream) {
   const outCount = (stream?.readers?.length || 0)
     + (stream?.forwardDestinations?.length || 0);
@@ -219,7 +266,7 @@ function renderHeaderContent(stream) {
     ? `<span class="stream-rule" title="Verwendete Konfigurationsregel">Regel ${escapeHtml(stream.confName)}</span>`
     : "";
   return `
-    <div class="stream-name">${escapeHtml(stream?.name || "—")}${rule}</div>
+    <div class="stream-name">${escapeHtml(stream?.name || "—")}${rule}${renderHeaderBadges(stream)}</div>
     <div class="stream-status${active ? "" : " stream-status-idle"}"${times ? ` title="${escapeHtml(times)}"` : ""}>
       <span class="live-dot"></span>${active ? "LIVE" : "INAKTIV"}${since ? ` seit ${escapeHtml(since)}` : ""} · ${outCount} OUT
     </div>
@@ -229,6 +276,10 @@ function renderHeaderContent(stream) {
 function renderCenterContent(stream) {
   return `
     <h2 class="panel-title">PREVIEW</h2>
+    <label class="preview-toggle-label"
+           title="Startet in MediaMTX einen Vorschau-Transcoder; mehrere Betrachter eines Streams teilen ihn.">
+      <input type="checkbox" class="preview-toggle"> Vorschau anzeigen
+    </label>
     <iframe
       class="preview-frame"
       loading="lazy"
@@ -273,7 +324,10 @@ export function renderStreamCard(stream, webrtcBaseUrl = "") {
     </div>
   `;
 
-  updatePreview(card.querySelector(".preview-frame"), stream, webrtcBaseUrl);
+  card.previewContext = {stream, webrtcBaseUrl};
+  card.querySelector(".preview-toggle")
+    ?.addEventListener("change", () => updatePreview(card));
+  updatePreview(card);
   return card;
 }
 
@@ -288,5 +342,6 @@ export function updateStreamCard(card, stream, webrtcBaseUrl = "") {
   if (left) left.outerHTML = renderStreamLeft(stream);
   if (media) media.innerHTML = renderMedia(stream);
   if (right) right.innerHTML = renderRightContent(stream);
-  updatePreview(card.querySelector(".preview-frame"), stream, webrtcBaseUrl);
+  card.previewContext = {stream, webrtcBaseUrl};
+  updatePreview(card);
 }

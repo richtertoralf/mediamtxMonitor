@@ -150,6 +150,19 @@ class ApiFreshnessTests(unittest.TestCase):
         self.assertEqual(payload["streams"], [])
         self.assertEqual(payload["mediamtx_version"], "1.21.0")
         self.assertEqual(payload["mediamtx_started"], "2026-09-15T10:00:00Z")
+        self.assertIsNone(payload["preview_path_count"])
+
+    def test_api_exposes_the_number_of_active_preview_paths(self):
+        from bin.redis_keys import preview_paths_key
+
+        values = {
+            self.api.REDIS_KEY: json.dumps([]),
+            preview_paths_key(self.api.REDIS_KEY): json.dumps(2),
+            self.api.SYSTEM_REDIS_KEY: json.dumps({}),
+        }
+        self.api.snapshot_store = RedisStore(FakeRedis(values))
+        payload = json.loads(self.api.get_streams().body)
+        self.assertEqual(payload["preview_path_count"], 2)
 
     def test_api_preserves_system_hostname_and_ipv4_addresses(self):
         systeminfo = {

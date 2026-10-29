@@ -119,9 +119,26 @@ class FakePanel {
   }
 }
 
+class FakeToggle {
+  constructor() {
+    this.checked = false;
+    this.listeners = [];
+  }
+
+  addEventListener(type, listener) {
+    if (type === "change") this.listeners.push(listener);
+  }
+
+  set(checked) {
+    this.checked = checked;
+    for (const listener of this.listeners) listener();
+  }
+}
+
 class FakeCard {
   constructor() {
     this.iframe = new FakeIframe();
+    this.toggle = new FakeToggle();
     this.innerHTML = "";
     this.panels = new Map(
       [".stream-header", ".stream-left", ".stream-center", ".media-summary", ".stream-right"]
@@ -131,6 +148,7 @@ class FakeCard {
 
   querySelector(selector) {
     if (selector === ".preview-frame") return this.iframe;
+    if (selector === ".preview-toggle") return this.toggle;
     return this.panels.get(selector) || null;
   }
 }
@@ -153,9 +171,15 @@ assert.match(noReaderCard.innerHTML, /stream-center/);
 assert.match(noReaderCard.innerHTML, /stream-right/);
 assert.equal((noReaderCard.innerHTML.match(/H\.264 · 1920×1080/g) || []).length, 1);
 
+// Ohne Häkchen setzt das Dashboard nie eine Vorschau-Quelle (kein Transcoder).
 const offlineCard = renderStreamCard({name: "offline", available: false, readers: []});
+assert.match(offlineCard.innerHTML, /class="preview-toggle"/);
+assert.match(offlineCard.innerHTML, /Vorschau anzeigen/);
+assert.doesNotMatch(offlineCard.innerHTML, /class="preview-toggle" checked/);
 assert.equal(offlineCard.iframe.attributes.has("src"), false);
 updateStreamCard(offlineCard, {name: "offline", available: true, readers: []}, "http://monitor.example:8889");
+assert.equal(offlineCard.iframe.attributes.has("src"), false);
+offlineCard.toggle.set(true);
 assert.equal(
   offlineCard.iframe.attributes.get("src"),
   "http://monitor.example:8889/__preview__/offline?controls=false&muted=true&autoplay=true&playsInline=true",
@@ -172,8 +196,13 @@ const activeStream = extra => ({name: "camera/main", available: true, readers: [
 
 const lifecycleCard = renderStreamCard(activeStream(), previewBase);
 const lifecycleIframe = lifecycleCard.iframe;
+const otherCard = renderStreamCard(activeStream({name: "camera/other"}), previewBase);
+assert.equal(lifecycleIframe.srcWrites, 0);
+lifecycleCard.toggle.set(true);
 assert.equal(lifecycleIframe.srcWrites, 1);
 assert.equal(lifecycleIframe.getAttribute("src"), previewSrc("camera/main"));
+// Nur der ausgewählte Stream erhält eine Vorschau.
+assert.equal(otherCard.iframe.srcWrites, 0);
 
 updateStreamCard(lifecycleCard, activeStream(), previewBase);
 assert.equal(lifecycleCard.querySelector(".preview-frame"), lifecycleIframe);
@@ -212,6 +241,13 @@ assert.equal(lifecycleIframe.getAttribute("src"), previewSrc("camera/backup"));
 updateStreamCard(lifecycleCard, activeStream({name: "camera/backup"}), previewBase);
 assert.equal(lifecycleIframe.srcWrites, 3);
 assert.equal(lifecycleIframe.srcRemovals, 1);
+
+// Abwählen gibt den Browser-Reader sofort frei; Refreshes starten ihn nicht neu.
+lifecycleCard.toggle.set(false);
+assert.equal(lifecycleIframe.getAttribute("src"), null);
+assert.equal(lifecycleIframe.srcRemovals, 2);
+updateStreamCard(lifecycleCard, activeStream({name: "camera/backup"}), previewBase);
+assert.equal(lifecycleIframe.srcWrites, 3);
 
 // main.js rendert ausschliesslich die aktiven Streams und raeumt den Rest ab.
 // Die Schleife ist ohne DOM nicht importierbar, deshalb wird ihr Vertrag hier
@@ -407,6 +443,7 @@ const injectionCard = renderStreamCard({
 assert.doesNotMatch(injectionCard.innerHTML, /<svg\b/i);
 assert.doesNotMatch(injectionCard.innerHTML, /<[^>]*\sonload\s*=/i);
 assert.equal(injectionCard.iframe.attributes.get("title"), `Preview: ${previewPayload}`);
+injectionCard.toggle.set(true);
 assert.equal(
   injectionCard.iframe.attributes.get("src"),
   "http://monitor.example:8889/__preview__/%22%3E%3Csvg%20onload%3Dalert(1)%3E?controls=false&muted=true&autoplay=true&playsInline=true",
@@ -414,11 +451,13 @@ assert.equal(
 
 for (const base of ["http://media.example:8899", "https://media.example:9443/preview-proxy/"]) {
   const card = renderStreamCard({name: "camera/main", available: true}, base);
+  card.toggle.set(true);
   assert.equal(card.iframe.attributes.get("src"),
     `${base.replace(/\/$/, "")}/__preview__/camera/main?controls=false&muted=true&autoplay=true&playsInline=true`);
 }
 for (const base of ["", "javascript:alert(1)", "https://user:secret@example.test", "https://example.test?token=secret"]) {
   const card = renderStreamCard({name: "camera", available: true}, base);
+  card.toggle.set(true);
   assert.equal(card.iframe.attributes.has("src"), false);
 }
 
@@ -488,4 +527,36 @@ assert.doesNotMatch(staticSource, /<img\b/);
   }, "http://127.0.0.1:8889").innerHTML;
   assert.doesNotMatch(sameRule, /stream-rule/);
   assert.match(sameRule, /INAKTIV · 0 OUT/);
+}
+
+// Hervorhebung vorhandener Störungszähler im Stream-Kopf.
+{
+  const {streamDiscards60s, isForwardAnomalous} = await import("../static/js/stream-card.js");
+  const stream = {
+    name: "cam", available: true, online: true,
+    readers: [
+      {type: "rtmpConn", window_metrics: {frame_discard: {"10s": 1, "60s": 4}}},
+      {type: "webRTCSession", window_metrics: {protocol_counters: {"60s": {frame_discard: 2}}}},
+      {type: "srtConn", window_metrics: {events: {"60s": {discarded_frames: 3}}}},
+      {type: "rtspSession", window_metrics: {protocol_counters: {"60s": {discard: 0}}}},
+    ],
+    hls_muxer: {window_metrics: {protocol_counters: {"60s": {mux_discard: 1}}}},
+    forwardDestinations: [
+      {id: "a", type: "rtmp", state: "forwarding", bitrate_mbps: 2.5},
+      {id: "b", type: "srt", state: "error"},
+      {id: "c", type: "rtmp", state: "forwarding", bitrate_mbps: 0},
+    ],
+  };
+  assert.equal(streamDiscards60s(stream), 10);
+  assert.equal(isForwardAnomalous(stream.forwardDestinations[0]), false);
+  assert.equal(isForwardAnomalous(stream.forwardDestinations[1]), true);
+  assert.equal(isForwardAnomalous(stream.forwardDestinations[2]), true);
+  const html = renderStreamCard(stream, "http://127.0.0.1:8889").innerHTML;
+  assert.match(html, /stream-badge-warn[^>]*>Discard 60s: 10</);
+  assert.match(html, /title="Zustand: error, forwarding"[^>]*>Forward auffällig: 2</);
+  assert.match(html, /forward-block forward-block-warn/);
+
+  const quiet = renderStreamCard({name: "ruhig", available: true, online: true, readers: [],
+    forwardDestinations: [{id: "a", state: "forwarding", bitrate_mbps: 1}]}, "").innerHTML;
+  assert.doesNotMatch(quiet, /stream-badge/);
 }

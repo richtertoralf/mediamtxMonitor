@@ -65,6 +65,10 @@ SYSTEM_MONITOR_DEFAULTS: Dict[str, Any] = {
     "redis_key": DEFAULT_SYSTEM_SNAPSHOT_KEY,
     "output_json_path": "/tmp/mediamtx_system.json",
     "interval_seconds": 10,
+    # Thresholds of the CPU hints; hints explain, they do not alarm.
+    "saturation_idle_percent": 5.0,
+    "steal_hint_percent": 10.0,
+    "pressure_hint_percent": 20.0,
 }
 
 API_DEFAULTS: Dict[str, Any] = {
@@ -245,6 +249,8 @@ def resolve_system_monitor_config(config: Mapping[str, Any]) -> Dict[str, Any]:
     """Resolve system-monitor settings with compatible defaults."""
     resolved = _component_config(config, "system_monitor", SYSTEM_MONITOR_DEFAULTS)
     resolved["interval_seconds"] = int(resolved["interval_seconds"])
+    for key in ("saturation_idle_percent", "steal_hint_percent", "pressure_hint_percent"):
+        resolved[key] = float(resolved[key])
     if resolved["redis_key"] == LEGACY_SYSTEM_SNAPSHOT_KEY:
         resolved["redis_key"] = DEFAULT_SYSTEM_SNAPSHOT_KEY
     return resolved

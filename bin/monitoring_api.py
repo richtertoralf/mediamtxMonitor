@@ -30,6 +30,7 @@ try:
     from .redis_store import NamespacedRedis, RedisStore, SnapshotDecodeError
     from .redis_keys import (
         mediamtx_started_key,
+        preview_paths_key,
         mediamtx_version_key,
         stream_snapshot_freshness_key,
     )
@@ -45,6 +46,7 @@ except ImportError:
     from redis_store import NamespacedRedis, RedisStore, SnapshotDecodeError
     from redis_keys import (
         mediamtx_started_key,
+        preview_paths_key,
         mediamtx_version_key,
         stream_snapshot_freshness_key,
     )
@@ -212,6 +214,11 @@ def get_streams():
     except SnapshotDecodeError:
         mediamtx_started = None
 
+    try:
+        preview_path_count = snapshot_store.read_snapshot(preview_paths_key(REDIS_KEY))
+    except SnapshotDecodeError:
+        preview_path_count = None
+
     frontend_cfg = config["frontend"]
 
     return JSONResponse(content={
@@ -223,6 +230,7 @@ def get_streams():
         "monitor_version": monitor_version,
         "mediamtx_version": mediamtx_version,
         "mediamtx_started": mediamtx_started,
+        "preview_path_count": preview_path_count,
         "systeminfo": systeminfo
     })
 

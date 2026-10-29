@@ -50,6 +50,7 @@ try:
         HLS_MUXER_ENDPOINT,
         MINIMUM_MEDIAMTX_VERSION,
         OPTIONAL_SECURE_ENDPOINTS,
+        PREVIEW_PATH_PREFIX,
         STATIC_SOURCE_CONNECTION_TYPES,
         STATIC_SOURCE_ENDPOINT,
         index_details,
@@ -71,6 +72,7 @@ try:
         mediamtx_started_key,
         mediamtx_version_key,
         path_metric_key,
+        preview_paths_key,
         publisher_connection_key,
         publisher_srt_health_key,
         reader_connection_key,
@@ -110,6 +112,7 @@ except ImportError:
         HLS_MUXER_ENDPOINT,
         MINIMUM_MEDIAMTX_VERSION,
         OPTIONAL_SECURE_ENDPOINTS,
+        PREVIEW_PATH_PREFIX,
         STATIC_SOURCE_CONNECTION_TYPES,
         STATIC_SOURCE_ENDPOINT,
         index_details,
@@ -131,6 +134,7 @@ except ImportError:
         mediamtx_started_key,
         mediamtx_version_key,
         path_metric_key,
+        preview_paths_key,
         publisher_connection_key,
         publisher_srt_health_key,
         reader_connection_key,
@@ -646,6 +650,11 @@ def collect_and_store() -> Dict[str, float]:
         seen_names.add(name)
         unique_paths.append(path)
     paths = unique_paths
+    # MediaMTX lists a regex preview path only while a browser reads it, so
+    # each listed path is one running or starting preview transcoder.
+    preview_count = sum(
+        1 for name in seen_names if name.startswith(PREVIEW_PATH_PREFIX)
+    )
     visible_paths = [
         path
         for path in paths
@@ -972,6 +981,7 @@ def collect_and_store() -> Dict[str, float]:
         snapshot_store.write_snapshot(
             stream_snapshot_freshness_key(REDIS_KEY), collected_at
         )
+        snapshot_store.write_snapshot(preview_paths_key(REDIS_KEY), preview_count)
         logging.info(
             f"✅ {len(aggregated)} Pfade in Redis gespeichert (Key: {REDIS_KEY})."
         )
