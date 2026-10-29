@@ -144,4 +144,9 @@ def normalize_stream(
     for field in ("available", "online"):
         if field in path:
             normalized[field] = bool(path.get(field))
+    # Native timestamps since when the path is available/online, and the
+    # configuration entry (possibly a regex or all_others) that matched it.
+    for field in ("availableTime", "onlineTime", "confName"):
+        if path.get(field) is not None:
+            normalized[field] = path[field]
     return normalized

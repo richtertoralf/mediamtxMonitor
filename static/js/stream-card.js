@@ -5,7 +5,7 @@
  */
 
 import {connectionTotal} from "./connection-metrics.js";
-import {escapeHtml, firstAvailable, formatBytes, formatRelativeTime} from "./format-utils.js";
+import {escapeHtml, firstAvailable, formatBytes, formatConnectionAge, formatRelativeTime, formatUntil} from "./format-utils.js";
 import {metric, renderConnectionHeading, renderMetrics} from "./metric-grid.js";
 import {renderMedia} from "./media-tracks.js";
 import {renderHlsMuxer, renderNonSrtMetrics, renderPathMetrics} from "./protocol-metrics.js";
@@ -59,13 +59,16 @@ function renderConnectionMetrics(source, direction, stream = null) {
       + (direction === "in" ? renderPathMetrics(stream) : "");
 }
 
-function readerDetails(reader) {
-  const details = reader?.details || {};
+function connectionNotes(connection) {
+  const details = connection?.details || {};
   const lines = [];
-  if (reader?.type === "hlsSession") {
-    if (details.userAgent) lines.push(`Agent: ${details.userAgent}`);
-    if (details.isCDN != null) lines.push(`CDN: ${details.isCDN ? "ja" : "nein"}`);
+  if (details.userAgent) lines.push(`Agent: ${details.userAgent}`);
+  if (connection?.type === "hlsSession" && details.isCDN != null) {
+    lines.push(`CDN: ${details.isCDN ? "ja" : "nein"}`);
   }
+  // MediaMTX closes a session when its authentication (JWT) expires.
+  const expiry = formatUntil(details.expiresAt);
+  if (expiry) lines.push(`Session endet: ${expiry} (${details.expiresAt})`);
   return lines.length
     ? `<div class="connection-notes">${lines.map(escapeHtml).join("<br>")}</div>`
     : "";
@@ -78,7 +81,7 @@ export function renderReader(reader, index = 0, streamName = "", stream = null) 
       <h3>Reader ${index + 1}</h3>
       ${renderConnectionHeading(reader?.type, reader?.details || {}, reader)}
       ${renderConnectionMetrics(reader, "out", stream || {name: streamName})}
-      ${readerDetails(reader)}
+      ${connectionNotes(reader)}
     </section>
   `;
 }
@@ -104,6 +107,7 @@ export function renderStreamLeft(stream) {
       ${renderConnectionHeading(source.type, source.details || {}, source)}
       ${renderStaticSourceStatus(source)}
       ${renderConnectionMetrics(source, "in", stream)}
+      ${connectionNotes(source)}
     </section>
   `;
 }
@@ -205,10 +209,19 @@ function renderHeaderContent(stream) {
   const outCount = (stream?.readers?.length || 0)
     + (stream?.forwardDestinations?.length || 0);
   const active = isStreamActive(stream);
+  const since = active ? formatConnectionAge(stream?.availableTime) : null;
+  const times = [
+    stream?.availableTime ? `verfügbar seit ${stream.availableTime}` : null,
+    stream?.onlineTime ? `online seit ${stream.onlineTime}` : null,
+  ].filter(Boolean).join(" · ");
+  // Only a differing rule (regex, all_others) explains something new.
+  const rule = stream?.confName && stream.confName !== stream?.name
+    ? `<span class="stream-rule" title="Verwendete Konfigurationsregel">Regel ${escapeHtml(stream.confName)}</span>`
+    : "";
   return `
-    <div class="stream-name">${escapeHtml(stream?.name || "—")}</div>
-    <div class="stream-status${active ? "" : " stream-status-idle"}">
-      <span class="live-dot"></span>${active ? "LIVE" : "INAKTIV"} · ${outCount} OUT
+    <div class="stream-name">${escapeHtml(stream?.name || "—")}${rule}</div>
+    <div class="stream-status${active ? "" : " stream-status-idle"}"${times ? ` title="${escapeHtml(times)}"` : ""}>
+      <span class="live-dot"></span>${active ? "LIVE" : "INAKTIV"}${since ? ` seit ${escapeHtml(since)}` : ""} · ${outCount} OUT
     </div>
   `;
 }

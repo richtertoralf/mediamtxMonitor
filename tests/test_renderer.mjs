@@ -462,3 +462,30 @@ assert.match(staticSource, />error</);
 assert.match(staticSource, /Jitter/);
 assert.match(staticSource, /connection refused/);
 assert.doesNotMatch(staticSource, /<img\b/);
+
+// Statusfelder: verfügbar seit, Konfigurationsregel, User-Agent und Sessionende.
+{
+  const availableTime = new Date(Date.now() - 5 * 60_000).toISOString();
+  const expiresAt = new Date(Date.now() + 12 * 60_000 + 5_000).toISOString();
+  const card = renderStreamCard({
+    name: "cam/1", available: true, online: true,
+    availableTime, onlineTime: availableTime, confName: "~^cam/.*$",
+    source: {type: "rtmpConn", id: "p", details: {userAgent: '<b>OBS</b> 30', created: availableTime}},
+    readers: [{type: "webRTCSession", id: "r",
+      details: {userAgent: "Mozilla/5.0", expiresAt, remoteAddr: "192.0.2.1:1"}}],
+    forwardDestinations: [],
+  }, "http://127.0.0.1:8889").innerHTML;
+  assert.match(card, /LIVE seit 5 min · 1 OUT/);
+  assert.match(card, /title="verfügbar seit [^"]+ · online seit [^"]+"/);
+  assert.match(card, /class="stream-rule"[^>]*>Regel ~\^cam\/\.\*\$</);
+  assert.match(card, /Agent: &lt;b&gt;OBS&lt;\/b&gt; 30/);
+  assert.match(card, /Agent: Mozilla\/5\.0/);
+  assert.match(card, /Session endet: in 12 min/);
+  assert.doesNotMatch(card, /<b>OBS/);
+
+  const sameRule = renderStreamCard({
+    name: "cam/2", available: false, confName: "cam/2", readers: [], forwardDestinations: [],
+  }, "http://127.0.0.1:8889").innerHTML;
+  assert.doesNotMatch(sameRule, /stream-rule/);
+  assert.match(sameRule, /INAKTIV · 0 OUT/);
+}
