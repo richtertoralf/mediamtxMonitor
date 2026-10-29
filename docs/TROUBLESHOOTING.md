@@ -42,8 +42,8 @@ sudo journalctl -u mediamtx-collector -f
 sudo ss -lntup | grep -E ':8554|:1935|:8888|:8889|:8890|:9997|:8080|:6379'
 ```
 
-Bei MediaMTX v1.21.0 wurden RTSP 8554, RTMP 1935, HLS 8888, WebRTC
-8889, SRT 8890 und Control API 9997 bestätigt. Port 8080 gehört zum Monitor.
+Bei MediaMTX v1.21.0 bis v1.21.3 sind RTSP 8554, RTMP 1935, HLS 8888, WebRTC
+8889, SRT 8890 und Control API 9997 die Standardports. Port 8080 gehört zum Monitor.
 
 ## Control API
 

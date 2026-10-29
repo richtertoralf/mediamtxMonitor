@@ -1,7 +1,11 @@
 # MediaMTX-v1.21+-Datenmodell
 
-Der Monitor unterstützt MediaMTX ab v1.21.0. Grundlage ist die offizielle
-[Control-API-Definition für v1.21.0](https://github.com/bluenviron/mediamtx/blob/v1.21.0/api/openapi.yaml).
+Der Monitor unterstützt MediaMTX ab v1.21.0; Neuinstallationen erhalten
+v1.21.3. Grundlage ist die offizielle
+[Control-API-Definition für v1.21.3](https://github.com/bluenviron/mediamtx/blob/v1.21.3/api/openapi.yaml).
+Alle vom Monitor gelesenen Felder existieren seit v1.21.0, außer den in
+v1.21.3 ergänzten Feldern `expiresAt` und `duration`; fehlen sie bei älteren
+Versionen, entfallen ihre Anzeigen.
 Der Collector fragt `/v3/info` in jedem Erfassungszyklus direkt ab. `version`
 und `started` sind die einzige Quelle für die beobachteten Servermetadaten und
 werden unabhängig von vorhandenen Streams als Redis-Sidecars gespeichert. Bei
@@ -16,7 +20,7 @@ Begründungen dieser Grenze stehen in `docs/ARCHITECTURE.md`.
 
 ## MediaMTX-Datenoberflächen
 
-MediaMTX v1.21.0 stellt mehrere voneinander getrennte Diagnose- und
+MediaMTX v1.21 stellt mehrere voneinander getrennte Diagnose- und
 Telemetrieoberflächen bereit:
 
 - **Control API:** Sie ist mit `api` separat zu aktivieren, standardmäßig
@@ -37,6 +41,27 @@ Telemetrieoberflächen bereit:
 - **Logging:** MediaMTX-Logs dienen der Betriebs- und Fehlerdiagnose. Der
   aktuelle Monitor parst sie nicht als primäre Stream- oder
   Transportmetrikquelle.
+
+Der Metrics-Endpunkt enthält gegenüber der Control API keine zusätzlichen
+Diagnosedaten, die der Monitor benötigt: Er bietet keine statischen Quellen,
+keine Aufnahmen und keine `typeSpecific`-Werte der Forward-Ziele. Sein einziger
+Vorteil wären alle Forward-Ziele in einem Aufruf (`?type=forward_dests`); dafür
+lohnt sich keine zweite Datenquelle mit eigener Aktivierung und Berechtigung.
+
+## Änderungen in MediaMTX v1.21.3
+
+| Änderung | Umgang im Monitor |
+|---|---|
+| `expiresAt` in HLS-, MoQ-, RTMP-, RTSP-, SRT- und WebRTC-Sessions; Sessions enden beim JWT-Ablauf | angezeigt als „Session endet: in …“ |
+| `user` in MoQ-Sessions (andere Protokolle hatten es bereits) | im Snapshot, nicht angezeigt |
+| Forward-Ziele werden beim Neuladen über ihre Konfiguration statt ihre Position zugeordnet | Identität ist die native `id`, `pos` nur Anzeige |
+| `duration` in fMP4-Aufnahmesegmenten (`null` bei MPEG-TS) | nicht genutzt: `/v3/recordings/*` öffnet dafür jede Segmentdatei; als Dauerabfrage zu teuer |
+| MoQ-Versionen `moqt-20` bis `moqt-22` | Version wird unverändert angezeigt |
+| `/v3/config/internal-users/*` | nicht genutzt: Konfigurationsverwaltung, außerhalb des Monitorzwecks |
+
+Keine Änderung entfernt oder ersetzt ein vom Monitor gelesenes Feld; veraltete
+Felder (`ready`, `tracks`, `bytesReceived`/`bytesSent` außerhalb von SRT,
+`conf` und `protocol` der Forward-Ziele) liest der Monitor nicht.
 
 Parameter wie `writeQueueSize`, `udpReadBufferSize` und `udpMaxPayloadSize`
 sind MediaMTX-Konfiguration und keine vom Monitor erfassten Transportmetriken.
@@ -88,7 +113,7 @@ Sitzungslisten, HLS-Muxer und Forward-Ziele vollständig; weitere Seiten fragt
 er nur ab, wenn `pageCount` sie meldet. Verschiebt sich die Pfadliste zwischen
 zwei Seitenabrufen, wird ein doppelt gelieferter Pfad nur einmal übernommen.
 
-Das WebRTC-Sessionobjekt enthält im v1.21.0-Schema insbesondere
+Das WebRTC-Sessionobjekt enthält im v1.21-Schema insbesondere
 `inboundRTPPackets`, `inboundRTPPacketsJitter`, `inboundRTPPacketsLost`,
 `inboundRTCPPackets`, `outboundRTPPackets`, `outboundRTCPPackets`,
 `outboundFramesDiscarded`, `localCandidate`, `remoteCandidate`, `state` und
@@ -188,7 +213,7 @@ Schätzwert als `link_capacity_mbps`; das Dashboard bezeichnet ihn als
 `SRT est. Link`. Der Wert ist weder eine garantierte nutzbare Bandbreite noch
 eine garantierte Reserve oder ein belastbarer Headroom-Wert.
 
-Die von MediaMTX v1.21.0 gelieferten Felder `packetsReceivedRetrans`,
+Die von MediaMTX v1.21 gelieferten Felder `packetsReceivedRetrans`,
 `packetsReceivedLoss`, `packetsReceivedDrop`, `packetsReceivedBelated`,
 `packetsReceivedUndecrypt`, `packetsRetrans`, `packetsSendLoss` und
 `packetsSendDrop` sind Gesamtzähler der jeweiligen SRT-Verbindung. Der Monitor

@@ -1,6 +1,9 @@
 """Statische Verträge für die automatische MediaMTX-Lifecycle-Auswahl."""
 
 from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
 
 
@@ -14,10 +17,41 @@ class InstallLifecycleTests(unittest.TestCase):
 
     def test_default_install_is_valid_and_has_tested_version(self):
         self.assertIn('while [ "$#" -gt 0 ]; do', self.source)
-        self.assertIn('readonly DEFAULT_MEDIAMTX_VERSION="1.21.0"', self.source)
+        self.assertIn('readonly DEFAULT_MEDIAMTX_VERSION="1.21.3"', self.source)
         self.assertIn('readonly MINIMUM_MEDIAMTX_VERSION="1.21.0"', self.source)
         self.assertIn('MEDIAMTX_VERSION="$DEFAULT_MEDIAMTX_VERSION"', self.source)
         self.assertNotIn("--app-only", self.source)
+
+    def test_fresh_configuration_step_handles_the_v1_21_3_layout(self):
+        """Run the installer's config step offline on the v1.21.3 key layout."""
+        lines = self.source.splitlines()
+        start = next(index for index, line in enumerate(lines)
+                     if "konnte nicht sicher automatisch ergänzt werden" in line)
+        end = next(index for index in range(start + 1, len(lines))
+                   if lines[index] == "PY")
+        script = "\n".join(lines[start + 1:end])
+        # Excerpt of the official v1.21.3 mediamtx.yml: same keys and comments.
+        official = (
+            "api: false\napiAddress: :9997\napiEncryption: false\n"
+            "rtsp: true # RTSP server\nwebrtc: true\nwebrtcAddress: :8889\n"
+            "webrtcEncryption: false\npaths:\n  # example:\n  all_others:\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory, "mediamtx.yml")
+            output = Path(directory, "out.yml")
+            source.write_text(official, encoding="utf-8")
+            subprocess.run(
+                [sys.executable, "-I", "-c", script, str(source),
+                 str(ROOT / "config/monitor-preview-path.yml"), str(output),
+                 "9997", "8889"],
+                check=True,
+            )
+            result = output.read_text(encoding="utf-8")
+        self.assertIn("api: true\n", result)
+        self.assertIn('apiAddress: "127.0.0.1:9997"', result)
+        self.assertRegex(result, r"rtsp: true #\s?RTSP server")
+        self.assertEqual(result.count("__preview__"), 1)
+        self.assertLess(result.index("__preview__"), result.index("  all_others:"))
 
     def test_reuse_checks_shared_mediamtx_without_writing_it(self):
         self.assertIn('INSTALL_MODE=reuse', self.source)
