@@ -5,7 +5,7 @@
  */
 
 import {connectionTotal} from "./connection-metrics.js";
-import {escapeHtml, formatBytes, formatRelativeTime} from "./format-utils.js";
+import {escapeHtml, firstAvailable, formatBytes, formatRelativeTime} from "./format-utils.js";
 import {metric, renderConnectionHeading, renderMetrics} from "./metric-grid.js";
 import {renderMedia} from "./media-tracks.js";
 import {renderHlsMuxer, renderNonSrtMetrics, renderPathMetrics} from "./protocol-metrics.js";
@@ -124,6 +124,38 @@ function updatePreview(preview, stream, webrtcBaseUrl) {
   if (currentSrc !== wantedSrc) preview.setAttribute("src", wantedSrc);
 }
 
+function renderForwardMetrics(destination) {
+  // The collector maps a forward type to the connection type with equal
+  // native transport fields, so the existing OUT renderers apply.
+  const details = destination?.details || {};
+  const connection = {
+    ...destination,
+    type: destination?.connection_type,
+    details: {
+      ...details,
+      outboundBytes: firstAvailable(details.outboundBytes, destination?.outboundBytes),
+      created: destination?.created,
+    },
+  };
+  if (connection.type === "srtConn") {
+    return renderSrtMetrics(connection, "out", connectionTotal(connection, "out"));
+  }
+  if (connection.type) {
+    return renderNonSrtMetrics(connection, "out", connectionTotal(connection, "out"));
+  }
+  return renderMetrics([
+    metric("Total", formatBytes(destination?.outboundBytes)),
+    metric(
+      "Aufgebaut",
+      formatRelativeTime(destination?.created),
+      null,
+      null,
+      null,
+      destination?.created,
+    ),
+  ]);
+}
+
 /** Render one MediaMTX forward destination as a permanent OUT block. */
 export function renderForwardDestination(destination, index = 0) {
   const type = destination?.type;
@@ -135,17 +167,7 @@ export function renderForwardDestination(destination, index = 0) {
         <span>${escapeHtml(type ? String(type).toUpperCase() : "—")}</span>
         <span class="forward-state">· ${escapeHtml(state || "—")}</span>
       </div>
-      ${renderMetrics([
-        metric("Total", formatBytes(destination?.outboundBytes)),
-        metric(
-          "Aufgebaut",
-          formatRelativeTime(destination?.created),
-          null,
-          null,
-          null,
-          destination?.created,
-        ),
-      ])}
+      ${renderForwardMetrics(destination)}
     </section>
   `;
 }

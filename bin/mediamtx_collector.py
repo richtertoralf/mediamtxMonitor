@@ -61,6 +61,8 @@ try:
         connection_counter_key,
         connection_lifecycle_key,
         connection_history_key,
+        forward_connection_key,
+        forward_srt_health_key,
         hls_muxer_metric_key,
         mediamtx_started_key,
         mediamtx_version_key,
@@ -80,7 +82,11 @@ try:
         counter_fields,
     )
     from .srt_metrics import build_srt_health
-    from .stream_normalizer import connection_identity, normalize_stream
+    from .stream_normalizer import (
+        connection_identity,
+        normalize_stream,
+        sanitize_forward_destinations,
+    )
 except ImportError:
     from bitrate import calc_bitrate
     from counter_metrics import counter_delta, counter_deltas
@@ -112,6 +118,8 @@ except ImportError:
         connection_counter_key,
         connection_lifecycle_key,
         connection_history_key,
+        forward_connection_key,
+        forward_srt_health_key,
         hls_muxer_metric_key,
         mediamtx_started_key,
         mediamtx_version_key,
@@ -131,7 +139,11 @@ except ImportError:
         counter_fields,
     )
     from srt_metrics import build_srt_health
-    from stream_normalizer import connection_identity, normalize_stream
+    from stream_normalizer import (
+        connection_identity,
+        normalize_stream,
+        sanitize_forward_destinations,
+    )
 
 
 config = resolve_monitoring_config({})
@@ -331,6 +343,81 @@ def _update_connection_history(
                 ] = average
     except (RedisError, ConnectionError, TimeoutError, TypeError, ValueError) as exc:
         logging.warning("Kurzzeithistorie konnte nicht geschrieben werden: %s", exc)
+
+
+# Forward destination types mapped to the connection type with equal metrics.
+FORWARD_CONNECTION_TYPES = {
+    "srt": "srtConn",
+    "rtsp": "rtspSession",
+    "webRTC": "webRTCSession",
+    "rtmp": "rtmpConn",
+    "moq": "moqSession",
+}
+
+
+def _enrich_forward_destination(
+    path: str, destination: Dict[str, Any], timestamp: float
+) -> Dict[str, Any]:
+    """Attach rate and native transport metrics to one sanitized destination.
+
+    The native ``id`` is the identity. Since MediaMTX v1.21.3 a kept
+    destination keeps its id when the configuration changes, while its
+    ``pos`` follows the new configuration order.
+    """
+    forward_id = destination.get("id")
+    connection_type = FORWARD_CONNECTION_TYPES.get(destination.get("type"))
+    if not forward_id or connection_type is None:
+        return destination
+    details = destination.get("details", {}) or {}
+    key = forward_connection_key(path, str(forward_id))
+    destination["connection_type"] = connection_type
+
+    calculated = None
+    if destination.get("outboundBytes") is not None:
+        calculated = calc_bitrate(
+            r,
+            key=key,
+            bytes_now=int(destination["outboundBytes"]),
+            now=timestamp,
+            min_dt=BITRATE_MIN_DT,
+            smooth_alpha=BITRATE_SMOOTH_ALPHA,
+            smooth_reference_seconds=BITRATE_SMOOTH_REFERENCE_SECONDS,
+            ttl=BITRATE_TTL,
+        )
+    native = details.get("mbpsSendRate")
+    destination["bitrate_mbps"] = (
+        round(float(native), 2) if native is not None else calculated
+    )
+
+    if connection_type == "srtConn":
+        if details.get("msRTT") is not None:
+            destination["transport_rtt_ms"] = round(float(details["msRTT"]), 2)
+        if details.get("msSendTsbPdDelay") is not None:
+            destination["srt_latency_ms"] = details["msSendTsbPdDelay"]
+        destination["srt_health"] = build_srt_health(
+            r,
+            key=forward_srt_health_key(path, str(forward_id)),
+            details=details,
+            direction="reader",
+            ttl=BITRATE_TTL,
+            transport_rtt_ms=destination.get("transport_rtt_ms"),
+        )
+    else:
+        _enrich_protocol_metrics(
+            destination,
+            connection_type=connection_type,
+            details=details,
+            direction="reader",
+            connection_key=key,
+        )
+    _update_connection_history(
+        destination,
+        history_key=connection_history_key(key),
+        direction="reader",
+        timestamp=timestamp,
+    )
+    destination.pop("frame_discard_delta", None)
+    return destination
 
 
 def _enrich_protocol_metrics(
@@ -581,11 +668,19 @@ def collect_and_store() -> Dict[str, float]:
         }
 
     if now >= poll_cache.next_forward_refresh:
+        # Rates need the refresh interval; between refreshes the cache stays.
         poll_cache.forward_destinations = {
-            str(path.get("name", "")): cycle_fetch_items(
-                "/v3/paths/forward-dests/list",
-                params={"path": str(path.get("name", ""))},
-            )
+            str(path.get("name", "")): [
+                _enrich_forward_destination(
+                    str(path.get("name", "")), destination, now
+                )
+                for destination in sanitize_forward_destinations(
+                    cycle_fetch_items(
+                        "/v3/paths/forward-dests/list",
+                        params={"path": str(path.get("name", ""))},
+                    )
+                )
+            ]
             for path in visible_paths
         }
         poll_cache.next_forward_refresh = (

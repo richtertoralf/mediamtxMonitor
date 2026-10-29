@@ -421,3 +421,26 @@ for (const base of ["", "javascript:alert(1)", "https://user:secret@example.test
   const card = renderStreamCard({name: "camera", available: true}, base);
   assert.equal(card.iframe.attributes.has("src"), false);
 }
+
+// Forward-Ziele verwenden die vorhandenen OUT-Darstellungen ihres Protokolls.
+const srtForward = renderForwardDestination({
+  id: "fw-srt", pos: 0, type: "srt", state: "forwarding",
+  connection_type: "srtConn", outboundBytes: 2048,
+  created: "2026-10-29T10:00:00Z", bitrate_mbps: 3.5,
+  transport_rtt_ms: 42.5, srt_latency_ms: 300,
+  srt_health: {tx_mbps: 3.5, rtt_ms: 42.5},
+  details: {msRTT: 42.5, msSendTsbPdDelay: 300, mbpsSendRate: 3.5, bytesSent: 2048},
+});
+assert.match(srtForward, /<span>SRT<\/span>/);
+assert.match(srtForward, /TX/);
+assert.match(srtForward, /3\.50/);
+assert.match(srtForward, /RTT/);
+
+const rtmpForward = renderForwardDestination({
+  id: "fw-rtmp", pos: 1, type: "rtmp", state: "forwarding",
+  connection_type: "rtmpConn", outboundBytes: 1048576, bitrate_mbps: 2,
+  created: "2026-10-29T10:00:00Z", details: {outboundBytes: 1048576},
+});
+assert.match(rtmpForward, /TX/);
+assert.match(rtmpForward, /2\.00/);
+assert.match(rtmpForward, /1\.0 MB|1 MB|1\.00 MB/);
