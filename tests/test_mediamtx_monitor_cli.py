@@ -64,11 +64,42 @@ fi
 if [[ "$1" == "disable" && "${FAIL_LEGACY_DISABLE:-}" == "yes" ]]; then
   exit 1
 fi
-if [[ "$1" == "is-active" && "${FAIL_SERVICE:-}" == "$2" ]]; then
-  printf 'failed\n'
-  exit 3
+if [[ "$1" == "is-enabled" ]]; then
+  if [[ " ${FAKE_DISABLED:-} " == *" $2 "* ]]; then printf 'disabled\n'; exit 1; fi
+  printf 'enabled\n'
+  exit 0
 fi
-[[ "$1" != "is-active" ]] || printf 'active\n'
+if [[ "$1" == "is-active" ]]; then
+  if [[ " ${FAKE_INACTIVE:-} " == *" $2 "* ]]; then printf 'inactive\n'; exit 3; fi
+  # Ein fehlerhafter Dienst fällt erst nach dem Neustart mit der neuen Laufzeit aus.
+  if [[ "${FAIL_SERVICE:-}" == "$2" ]] && grep -q '^systemctl restart' "$FAKE_LOG"; then
+    printf 'failed\n'
+    exit 3
+  fi
+  printf 'active\n'
+fi
+""",
+        )
+        # python3 -m venv ohne Netz: eine venv, deren python jeden Aufruf protokolliert.
+        self._write_executable(
+            self.fake_bin / "python3",
+            """#!/usr/bin/env bash
+set -euo pipefail
+printf 'python3 %s\n' "$*" >> "$FAKE_LOG"
+if [[ "$1" == "-m" && "$2" == "venv" ]]; then
+  mkdir -p "$3/bin"
+  cat > "$3/bin/python" <<'PYTHON'
+#!/usr/bin/env bash
+printf '%s %s\n' "$0" "$*" >> "$FAKE_LOG"
+[[ "${FAIL_CHECK:-}" != pip || "$*" != "-m pip check" ]] || exit 1
+[[ "${FAIL_CHECK:-}" != config || "$*" != *config_check.py* ]] || exit 1
+exit 0
+PYTHON
+  chmod 0755 "$3/bin/python"
+  printf '#!%s/bin/python\n' "$3" > "$3/bin/uvicorn"
+  exit 0
+fi
+exec /usr/bin/python3 "$@"
 """,
         )
         self.env = os.environ.copy()
@@ -184,10 +215,10 @@ fi
         )
         self.assertEqual((self.install_dir / "VERSION").read_text(encoding="utf-8"), "0.1.1\n")
         log = self.log_file.read_text(encoding="utf-8")
-        self.assertIn(
-            f"{self.install_dir}/venv/bin/python -m pip install "
-            f"--disable-pip-version-check --upgrade -r {self.install_dir}/requirements.txt",
+        self.assertRegex(
             log,
+            rf"{self.install_dir}\.upgrade-\w+/venv/bin/python -m pip install "
+            rf"--disable-pip-version-check -r {self.install_dir}\.upgrade-\w+/requirements.txt",
         )
         self.assertIn("systemctl daemon-reload", log)
         self.assertIn(f"systemctl restart {' '.join(SERVICES)}", log)
@@ -396,6 +427,116 @@ fi
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Failed to restart monitor services", result.stderr)
         self.assertNotIn("Upgrade complete", result.stdout)
+
+    def _siblings(self) -> list[str]:
+        return sorted(p.name for p in self.temp_dir.iterdir() if p.name.startswith("installation."))
+
+    def test_new_runtime_is_built_and_checked_beside_the_installation(self) -> None:
+        self._create_installation(revision="a" * 40)
+        self._create_source()
+        (self.install_dir / ".cache").mkdir()
+        (self.install_dir / ".cache/pip-marker").write_text("cache\n", encoding="utf-8")
+        result = self._run("--upgrade")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        log = self.log_file.read_text(encoding="utf-8")
+        self.assertRegex(log, rf"python3 -m venv {self.install_dir}\.upgrade-\w+/venv")
+        self.assertRegex(log, r"\.upgrade-\w+/venv/bin/python -m pip check")
+        self.assertRegex(log, rf"config_check\.py --standard {self.install_dir}/config/collector.yaml")
+        # Prüfungen vor dem Austausch, Austausch vor dem Neustart.
+        self.assertLess(log.index("config_check.py"), log.index("systemctl daemon-reload"))
+        self.assertEqual(
+            (self.install_dir / "venv/bin/uvicorn").read_text(encoding="utf-8"),
+            f"#!{self.install_dir}/venv/bin/python\n",
+        )
+        self.assertEqual((self.install_dir / ".cache/pip-marker").read_text(encoding="utf-8"), "cache\n")
+        self.assertEqual((self.install_dir / "config/collector.yaml").read_text(encoding="utf-8"), "local: true\n")
+        self.assertEqual(self._siblings(), [])
+        self.assertNotIn("mediamtx.service", log)
+        self.assertNotIn("redis", log)
+
+    def _assert_previous_runtime(self) -> None:
+        self.assertTrue((self.install_dir / "bin/old.py").exists())
+        self.assertFalse((self.install_dir / "bin/new.py").exists())
+        self.assertEqual((self.install_dir / "VERSION").read_text(encoding="utf-8"), "0.1.0\n")
+        self.assertEqual((self.install_dir / "REVISION").read_text(encoding="utf-8"), "a" * 40 + "\n")
+        self.assertEqual((self.install_dir / "config/collector.yaml").read_text(encoding="utf-8"), "local: true\n")
+        self.assertEqual(
+            (self.service_dir / "mediamtx-api.service").read_text(encoding="utf-8"),
+            "ExecStart=python bin/mediamtx_api.py\n",
+        )
+        self.assertEqual((self.service_dir / "mediamtx.service").read_text(encoding="utf-8"), "local mediamtx unit\n")
+        self.assertEqual(self.cli_path.read_text(encoding="utf-8"), "#!/usr/bin/env bash\nprintf 'old cli\n'\n")
+        self.assertEqual(self._siblings(), [])
+
+    def test_failure_after_swap_restores_the_previous_runtime(self) -> None:
+        self._create_installation(revision="a" * 40)
+        self._create_source()
+        self._write_executable(self.cli_path, "#!/usr/bin/env bash\nprintf 'old cli\n'\n")
+        self.env["MEDIAMTX_MONITOR_TEST_FAIL_AFTER_SWAP"] = "1"
+        result = self._run("--upgrade")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Rollback: restoring the previous runtime", result.stderr)
+        self._assert_previous_runtime()
+        log = self.log_file.read_text(encoding="utf-8")
+        # Die Dienste liefen nie mit der neuen Laufzeit: kein Neustart nötig.
+        self.assertNotIn("systemctl restart", log)
+        self.assertEqual(log.count("systemctl daemon-reload"), 2)
+
+    def test_service_failing_after_restart_rolls_back_and_restarts_previous_services(self) -> None:
+        self._create_installation(revision="a" * 40)
+        self._create_source()
+        self._write_executable(self.cli_path, "#!/usr/bin/env bash\nprintf 'old cli\n'\n")
+        self.env["FAIL_SERVICE"] = "mediamtx-collector.service"
+        result = self._run("--upgrade")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Service is not active after upgrade: mediamtx-collector.service", result.stderr)
+        self._assert_previous_runtime()
+        log = self.log_file.read_text(encoding="utf-8")
+        self.assertEqual(log.count(f"systemctl restart {' '.join(SERVICES)}\n"), 2)
+
+    def test_mixed_service_states_are_kept(self) -> None:
+        self._create_installation(revision="a" * 40)
+        self._create_source()
+        self.env["FAKE_INACTIVE"] = "mediamtx-system.service"
+        self.env["FAKE_DISABLED"] = "mediamtx-system.service"
+        result = self._run("--upgrade")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("mediamtx-system.service      inactive, disabled", result.stdout)
+        self.assertIn("mediamtx-system      not started (was not active)", result.stdout)
+        log = self.log_file.read_text(encoding="utf-8")
+        self.assertIn("systemctl restart mediamtx-api.service mediamtx-collector.service\n", log)
+        for action in ("enable", "disable", "start ", "stop"):
+            self.assertNotIn(f"systemctl {action}", log)
+
+    def test_mixed_states_rollback_restarts_only_previously_active_services(self) -> None:
+        self._create_installation(revision="a" * 40)
+        self._create_source()
+        self.env["FAKE_INACTIVE"] = "mediamtx-system.service"
+        self.env["FAIL_SERVICE"] = "mediamtx-api.service"
+        result = self._run("--upgrade")
+        self.assertEqual(result.returncode, 1)
+        log = self.log_file.read_text(encoding="utf-8")
+        self.assertEqual(log.count("systemctl restart mediamtx-api.service mediamtx-collector.service\n"), 2)
+        self.assertNotIn("mediamtx-system.service\n", log.split("systemctl restart", 1)[1].split("\n")[0])
+
+    def test_failed_checks_leave_the_installation_untouched(self) -> None:
+        for check in ("pip", "config"):
+            with self.subTest(check=check):
+                shutil.rmtree(self.install_dir, ignore_errors=True)
+                shutil.rmtree(self.service_dir, ignore_errors=True)
+                shutil.rmtree(self.source_dir, ignore_errors=True)
+                self.log_file.unlink(missing_ok=True)
+                self._create_installation(revision="a" * 40)
+                self._create_source()
+                self.env["FAIL_CHECK"] = check
+                result = self._run("--upgrade")
+                self.assertEqual(result.returncode, 1)
+                self.assertTrue((self.install_dir / "bin/old.py").exists())
+                self.assertEqual(self._siblings(), [])
+                log = self.log_file.read_text(encoding="utf-8")
+                self.assertNotIn("systemctl daemon-reload", log)
+                self.assertNotIn("systemctl restart", log)
+        self.env.pop("FAIL_CHECK")
 
     def test_unknown_option_shows_usage(self) -> None:
         result = self._run("--unknown")
