@@ -61,36 +61,132 @@ describe_revision() {
 
 require_upgrade_commands() {
   local command_name
-  for command_name in git rsync systemctl; do
+  for command_name in git python3 rsync systemctl; do
     command -v "$command_name" >/dev/null 2>&1 || fail "Required command is missing: $command_name"
   done
 }
 
-upgrade_dependencies() {
-  local requirements_file="$INSTALL_DIR/requirements.txt"
-  local python_bin="$INSTALL_DIR/venv/bin/python"
+# Programmbestandteile, die ein Upgrade austauscht. config/ (Betreiberdatei)
+# und .cache/ (pip-Cache des Dienstkontos) bleiben unberührt.
+readonly RUNTIME_ITEMS=(bin static venv requirements.txt VERSION REVISION)
+TEMP_DIR=""
+STAGING_DIR=""
+BACKUP_DIR=""
+SWAP_STARTED=0
+SERVICES_RESTARTED=0
+UPGRADE_DONE=0
+ACTIVE_SERVICES=()
 
-  [ -x "$python_bin" ] || fail "Existing Python environment is missing: $python_bin"
+# Neue Laufzeit getrennt von der Installation bauen: Programmdateien, eigene
+# venv mit den Abhängigkeiten, VERSION und REVISION.
+build_runtime() {
+  local source_dir=$1 revision=$2 venv_script
+  STAGING_DIR=$(mktemp -d "$INSTALL_DIR.upgrade-XXXXXX")
+  chmod 0755 "$STAGING_DIR"
+  rsync -rl --exclude='__pycache__/' --exclude='*.pyc' "$source_dir/bin/" "$STAGING_DIR/bin/"
+  rsync -rl "$source_dir/static/" "$STAGING_DIR/static/"
+  install -m 0644 "$source_dir/requirements.txt" "$STAGING_DIR/requirements.txt"
+  install -m 0644 "$source_dir/VERSION" "$STAGING_DIR/VERSION"
+  printf '%s\n' "$revision" > "$STAGING_DIR/REVISION"
   if [ "$INSTALL_DIR" = "$DEFAULT_INSTALL_DIR" ]; then
     command -v runuser >/dev/null 2>&1 || fail "Required command is missing: runuser"
-    runuser -u "$SERVICE_USER" -- env HOME="$INSTALL_DIR" "$python_bin" -m pip install \
-      --disable-pip-version-check \
-      --upgrade \
-      -r "$requirements_file"
+    chown -R "$SERVICE_USER:$SERVICE_USER" "$STAGING_DIR"
+    runuser -u "$SERVICE_USER" -- env HOME="$INSTALL_DIR" python3 -m venv "$STAGING_DIR/venv"
+    runuser -u "$SERVICE_USER" -- env HOME="$INSTALL_DIR" "$STAGING_DIR/venv/bin/python" -m pip install \
+      --disable-pip-version-check -r "$STAGING_DIR/requirements.txt"
   else
-    "$python_bin" -m pip install --disable-pip-version-check --upgrade -r "$requirements_file"
+    python3 -m venv "$STAGING_DIR/venv"
+    "$STAGING_DIR/venv/bin/python" -m pip install --disable-pip-version-check -r "$STAGING_DIR/requirements.txt"
+  fi
+  # Startskripte der venv auf den endgültigen Ort umstellen.
+  { grep -Il -- "$STAGING_DIR/venv" "$STAGING_DIR"/venv/bin/* 2>/dev/null || true; } | while IFS= read -r venv_script; do
+    sed -i "s|$STAGING_DIR/venv|$INSTALL_DIR/venv|g" "$venv_script"
+  done
+  if [ "$INSTALL_DIR" = "$DEFAULT_INSTALL_DIR" ]; then
+    chown -R "$SERVICE_USER:$SERVICE_USER" "$STAGING_DIR"
   fi
 }
 
-install_application_file() {
-  local source_file=$1
-  local destination_file=$2
+# Vor dem Austausch: Abhängigkeiten, Python-Syntax und die vorhandene
+# Betreiberkonfiguration mit dem neuen Code prüfen (lesend).
+check_runtime() {
+  "$STAGING_DIR/venv/bin/python" -m pip check || fail "Python dependencies of the new runtime are inconsistent"
+  PYTHONPYCACHEPREFIX="$STAGING_DIR/.pycache-check" "$STAGING_DIR/venv/bin/python" -m compileall -q \
+    "$STAGING_DIR/bin" || fail "New program files do not compile"
+  rm -rf -- "$STAGING_DIR/.pycache-check"
+  "$STAGING_DIR/venv/bin/python" "$STAGING_DIR/bin/config_check.py" --standard \
+    "$INSTALL_DIR/config/collector.yaml" >/dev/null || \
+    fail "Existing configuration does not fit the new version: mediamtx-monitor --check-config"
+}
 
-  if [ "$INSTALL_DIR" = "$DEFAULT_INSTALL_DIR" ]; then
-    install -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0644 "$source_file" "$destination_file"
-  else
-    install -m 0644 "$source_file" "$destination_file"
+capture_service_states() {
+  local service active enabled
+  ACTIVE_SERVICES=()
+  for service in "${SERVICES[@]}"; do
+    active=$(systemctl is-active "$service" 2>/dev/null || true)
+    enabled=$(systemctl is-enabled "$service" 2>/dev/null || true)
+    printf '%-28s %s, %s\n' "$service" "${active:-unknown}" "${enabled:-unknown}"
+    [ "$active" != active ] || ACTIVE_SERVICES+=("$service")
+  done
+}
+
+# Autostart wird nie geändert; neu gestartet werden nur vorher aktive Dienste.
+restart_active_services() {
+  [ "${#ACTIVE_SERVICES[@]}" -gt 0 ] || return 0
+  SERVICES_RESTARTED=1
+  systemctl restart "${ACTIVE_SERVICES[@]}"
+}
+
+swap_runtime() {
+  local source_dir=$1 item service
+  BACKUP_DIR=$(mktemp -d "$INSTALL_DIR.rollback-XXXXXX")
+  mkdir "$BACKUP_DIR/units"
+  for service in "${SERVICES[@]}"; do
+    [ ! -f "$SERVICE_DIR/$service" ] || cp -p -- "$SERVICE_DIR/$service" "$BACKUP_DIR/units/"
+  done
+  SWAP_STARTED=1
+  for item in "${RUNTIME_ITEMS[@]}"; do
+    [ ! -e "$INSTALL_DIR/$item" ] || mv -- "$INSTALL_DIR/$item" "$BACKUP_DIR/$item"
+    mv -- "$STAGING_DIR/$item" "$INSTALL_DIR/$item"
+  done
+  install_monitor_units "$source_dir"
+  systemctl daemon-reload || fail "Failed to reload systemd units"
+  [ "${MEDIAMTX_MONITOR_TEST_FAIL_AFTER_SWAP:-0}" != 1 ] || fail "Simulated failure after swap (test)"
+}
+
+rollback_runtime() {
+  local item service
+  set +e
+  printf 'Rollback: restoring the previous runtime.\n' >&2
+  for item in "${RUNTIME_ITEMS[@]}"; do
+    rm -rf -- "${INSTALL_DIR:?}/$item"
+    [ ! -e "$BACKUP_DIR/$item" ] || mv -- "$BACKUP_DIR/$item" "$INSTALL_DIR/$item"
+  done
+  for service in "${SERVICES[@]}"; do
+    if [ -f "$BACKUP_DIR/units/$service" ]; then
+      cp -p -- "$BACKUP_DIR/units/$service" "$SERVICE_DIR/$service"
+    else
+      rm -f -- "$SERVICE_DIR/$service"
+    fi
+  done
+  systemctl daemon-reload
+  # Nur wenn die neue Laufzeit schon gestartet wurde, laufen die vorher aktiven
+  # Dienste wieder mit der alten; gestoppte Dienste bleiben gestoppt.
+  if [ "$SERVICES_RESTARTED" -eq 1 ]; then
+    systemctl restart "${ACTIVE_SERVICES[@]}"
   fi
+  set -e
+}
+
+upgrade_cleanup() {
+  local status=$? path
+  if [ "$status" -ne 0 ] && [ "$SWAP_STARTED" -eq 1 ] && [ "$UPGRADE_DONE" -eq 0 ]; then
+    rollback_runtime
+  fi
+  for path in "$TEMP_DIR" "$STAGING_DIR" "$BACKUP_DIR"; do
+    if [ -n "$path" ] && [ -d "$path" ]; then rm -rf -- "$path"; fi
+  done
+  exit "$status"
 }
 
 install_cli() {
@@ -133,7 +229,7 @@ remove_legacy_system_monitor() {
 }
 
 upgrade() {
-  local temp_dir source_dir installed_version available_version service status
+  local source_dir installed_version available_version service status
   local installed_revision available_revision
 
   [ -d "$INSTALL_DIR" ] || {
@@ -148,10 +244,9 @@ upgrade() {
   installed_revision=$(read_revision "$INSTALL_DIR/REVISION")
   require_upgrade_commands
 
-  temp_dir=$(mktemp -d)
-  # shellcheck disable=SC2064 # Der Pfad wird bewusst beim Setzen der Falle festgelegt.
-  trap "rm -rf -- '$temp_dir'" EXIT
-  source_dir="$temp_dir/repository"
+  TEMP_DIR=$(mktemp -d)
+  trap upgrade_cleanup EXIT
+  source_dir="$TEMP_DIR/repository"
 
   printf 'Downloading...\n'
   git clone --depth 1 "$REPOSITORY_URL" "$source_dir" >/dev/null
@@ -184,37 +279,30 @@ upgrade() {
     return 0
   fi
 
-  printf 'Updating application...\n'
-  rsync -rl --delete --exclude='__pycache__/' --exclude='*.pyc' \
-    "$source_dir/bin/" "$INSTALL_DIR/bin/"
-  rsync -rl --delete "$source_dir/static/" "$INSTALL_DIR/static/"
-  install_application_file "$source_dir/requirements.txt" "$INSTALL_DIR/requirements.txt"
-  install_cli "$source_dir/mediamtx-monitor"
-
-  printf 'Updating Python dependencies...\n'
-  upgrade_dependencies
-  install_application_file "$source_dir/VERSION" "$INSTALL_DIR/VERSION"
-  printf '%s\n' "$available_revision" > "$temp_dir/REVISION"
-  install_application_file "$temp_dir/REVISION" "$INSTALL_DIR/REVISION"
-  if [ "$INSTALL_DIR" = "$DEFAULT_INSTALL_DIR" ]; then
-    chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/bin" "$INSTALL_DIR/static"
-  fi
-
-  printf 'Updating systemd units...\n'
-  install_monitor_units "$source_dir"
-  systemctl daemon-reload || fail "Failed to reload systemd units"
-
-  printf 'Restarting services...\n'
-  systemctl restart "${SERVICES[@]}" || fail "Failed to restart monitor services"
+  # MediaMTX selbst wird nie installiert, geändert oder neu gestartet.
+  printf 'Service states before upgrade:\n'
+  capture_service_states
+  printf '\nBuilding new runtime...\n'
+  build_runtime "$source_dir" "$available_revision"
+  printf 'Checking new runtime...\n'
+  check_runtime
+  printf 'Replacing runtime and systemd units...\n'
+  swap_runtime "$source_dir"
+  printf 'Restarting previously active services...\n'
+  restart_active_services || fail "Failed to restart monitor services"
   printf '\n'
   for service in "${SERVICES[@]}"; do
-    if status=$(systemctl is-active "$service"); then
+    if [[ " ${ACTIVE_SERVICES[*]} " != *" $service "* ]]; then
+      printf '%-20s %s\n' "${service%.service}" "not started (was not active)"
+    elif status=$(systemctl is-active "$service"); then
       printf '%-20s %s\n' "${service%.service}" "$status"
     else
       printf '%-20s %s\n' "${service%.service}" "${status:-failed}" >&2
       fail "Service is not active after upgrade: $service"
     fi
   done
+  UPGRADE_DONE=1
+  install_cli "$source_dir/mediamtx-monitor"
 
   printf '\nUpgrade complete: %s (%s) -> %s (%s)\n' \
     "$installed_version" "$(describe_revision "$installed_revision")" \

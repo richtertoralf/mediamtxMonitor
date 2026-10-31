@@ -282,9 +282,15 @@ vergleicht noch nur die Version; sie übernimmt den Vergleich erst mit der
 nächsten Versionserhöhung oder nach einem einmaligen Aufruf der aktuellen CLI
 aus einem Checkout (`sudo ./mediamtx-monitor --upgrade`).
 
-Das Upgrade aktualisiert Programmcode, Python-Abhängigkeiten im bestehenden
-venv, die CLI, Versions- und Commit-Datei und die drei systemd-Units der
-Monitoring-Dienste. Die lokale `config/collector.yaml` bleibt absichtlich
+Das Upgrade baut Programmcode und eine neue venv zunächst neben der
+Installation (`…/mediamtx-monitoring-backend.upgrade-*`) und prüft dort
+Abhängigkeiten, Python-Syntax und die vorhandene `collector.yaml`. Erst dann
+tauscht es Programmcode, venv, Versions- und Commit-Datei sowie die drei
+systemd-Units aus und startet nur die Monitor-Dienste neu, die vorher liefen;
+gestoppte Dienste und der Autostart bleiben unverändert. Schlägt der Austausch
+oder ein Neustart fehl, stellt es den vorherigen Stand und die Dienstzustände
+wieder her. Die CLI wird erst nach Erfolg ersetzt. MediaMTX und Redis-Daten
+fasst das Upgrade nicht an. Die lokale `config/collector.yaml` bleibt absichtlich
 unverändert: Sie ist die betreiberspezifische Laufzeitkonfiguration und gehört
 dem Betreiber. Dieses Kompatibilitätsprinzip orientiert sich am Umgang von
 MediaMTX mit der lokalen `mediamtx.yml`: Ein Upgrade ersetzt die vorhandene
