@@ -64,6 +64,41 @@ Die jeweils zuständige Grundlage vor einer Änderung lesen:
   Instruktionsverzeichnisse anlegen.
 - `CLAUDE.md` verweist ausschließlich auf diese Datei.
 
+## README
+
+Die README ist die öffentliche Einstiegsseite für Anwender, Interessenten und
+Mitwirkende; Vertiefendes steht in `docs/`.
+
+- Nutzen vor technischen Details. Gliederung und Überschriften passend zum
+  Produkt wählen.
+- Nur tatsächlich vorhandene Funktionen und Befehle als verfügbar
+  beschreiben; Erprobtes und Geplantes getrennt kennzeichnen.
+- Einen Entwicklungsstatus nur nennen, wenn er nachvollziehbar belegt ist:
+  **Konzept** (keine nutzbare Implementierung), **In Entwicklung**
+  (begonnen, eventuell noch nicht installierbar; nennen, was funktioniert und
+  wie man es ausprobiert), **Im Praxistest** (bei mindestens einem realen
+  Einsatz betreut erprobt, datierter Beleg in `docs/`), **Im Einsatz**
+  (wiederholt produktiv genutzt, Beleg in `docs/`), **Archiviert**. Fehlen
+  Belege, die Aussage weglassen; Installations- und Upgradeprüfungen belegen
+  keinen Praxiseinsatz.
+- Nur verifizierte Informationen aufnehmen: Aussagen zuerst an Code und
+  Dokumentation prüfen; was sich nicht bestätigen lässt, weglassen. Fehlende
+  Dokumentation ist kein Beleg für eine fehlende Funktion.
+- Einschränkungen nur nennen, wenn sie nachgewiesen und für Anwender relevant
+  sind; keine vermuteten Risiken, vorsorglichen Warnhinweise oder künstlich
+  offenen Fragen. Lieber kürzer und sachlich richtig als ausführlich mit
+  Annahmen.
+- Bei Änderungen an Funktionen, Installation, Bedienung, Verwaltungsbefehlen
+  oder Entwicklungsstand auch die README auf nötige Anpassungen prüfen.
+- Alles Notwendige steht in diesem Repository. Nicht auf nicht öffentliche
+  Repositories als notwendige Quelle verweisen.
+- Bestehende Informationen nicht ohne fachlichen Grund entfernen, sondern bei
+  Bedarf nach `docs/` verschieben.
+- Der Leitgedanke von RICHTER.PROJECTS, „Möglichkeiten schaffen.“, ist
+  erkennbar, in eigenen Worten passend zum Produkt.
+- Natürliches, sachliches Deutsch ohne Werbe- und Füllformeln; vorhandene
+  Bilder und Beispiele erhalten.
+
 ## Verifikation und Abschluss
 
 - Der kanonische Entwicklungs-, Verifikations- und Dev-Deployment-Workflow
