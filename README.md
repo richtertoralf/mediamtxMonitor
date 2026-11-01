@@ -1,6 +1,6 @@
 # MediaMTX Monitor
 
-[![Version](https://img.shields.io/badge/version-0.8.8-blue)](https://github.com/richtertoralf/mediamtxMonitor/releases/latest)
+[![Version](https://img.shields.io/badge/version-0.8.8-blue)](VERSION)
 [![License](https://img.shields.io/github/license/richtertoralf/mediamtxMonitor)](LICENSE)
 [![MediaMTX](https://img.shields.io/badge/MediaMTX-%E2%89%A5%201.21.0-informational)](docs/MEDIAMTX_V1_21_DATA.md)
 
@@ -51,128 +51,10 @@ laufende Version über `/v3/info` und meldet ältere oder nicht eindeutig
 erkennbare Versionen als nicht unterstützt. Details zum erfassten Datenmodell
 stehen in [docs/MEDIAMTX_V1_21_DATA.md](docs/MEDIAMTX_V1_21_DATA.md).
 
-## Dienste
-
-MediaMTX und der Monitor laufen auf derselben Maschine als getrennte
-systemd-Dienste. Ein Fehler des Monitor-Dashboards soll den laufenden
-Streamingdienst nicht beenden.
-
-| Komponente | Betrieb |
-|---|---|
-| MediaMTX | unabhängiger Dienst `mediamtx.service`, systemd-Standardbenutzer `root` |
-| MediaMTX-Monitor | drei Dienste unter `mediamtxmon:mediamtxmon` |
-
-Ein Ausfall von MediaMTX beendet den Collector nicht. Der Collector meldet dann
-API-Fehler und fragt weiter; ein früherer erfolgreicher Snapshot kann
-währenddessen als veraltet angezeigt werden. Details zur Diagnose stehen unter
-[Troubleshooting](docs/TROUBLESHOOTING.md). Umgekehrt beeinflusst ein
-Monitor-Ausfall den MediaMTX-Streamingdienst auf derselben Maschine nicht.
-
-## Unterstützte Neuinstallationen
-
-Der Installer ist für Debian-basierte Linux-Systeme mit apt, dpkg und
-systemd vorgesehen, insbesondere:
-
-- Debian  
-- Ubuntu  
-- Raspberry Pi OS  
-
-Unterstützte Architekturen:
-
-- x86_64 mit Debian-Architektur amd64  
-- aarch64 mit Debian-Architektur arm64  
-- 32-Bit-ARMv6 mit Debian-Architektur armhf  
-- 32-Bit-ARMv7 mit Debian-Architektur armhf  
-
-arm64 wird vom Installer unterstützt. Dazu gehören auch aktuelle
-64-Bit-Installationen von Raspberry Pi OS auf einem Raspberry Pi.
-
-32-Bit-ARM-Systeme werden erkannt und können mit den MediaMTX-Archiven
-linux_armv6 beziehungsweise linux_armv7 installiert werden. Diese Systeme
-wurden jedoch nicht getestet. Der Installer gibt deshalb eine Warnung aus und
-setzt die Installation anschließend fort.
-
-Nicht Debian-basierte Linux-Distributionen werden vom Installer abgelehnt.
-32-Bit-x86-Systeme mit i386-/i686-Architektur werden ebenfalls abgelehnt, da
-dafür kein vorgesehenes MediaMTX-Archiv existiert.
-
-`sudo ./install.sh` wählt automatisch zwischen Fresh-Installation und der
-Wiederverwendung einer vollständig vorhandenen MediaMTX-Installation. Die
-Laufzeit benötigt MediaMTX v1.21.0 oder neuer; bei einer Fresh-Installation
-richtet der Installer diese MediaMTX-Installation zusammen mit Redis, FFmpeg,
-Python-Venv und den Monitor-Diensten ein. Bei Wiederverwendung werden
-MediaMTX-Binary, Unit und globale Konfiguration nur geprüft und nicht
-verändert. Dabei müssen Control API, WebRTC und die monitor-eigene
-`__preview__`-Regel bereits vorhanden und `/v3/info` erreichbar sein; andernfalls
-bricht der Reuse-Pfad mit einer verständlichen Meldung vor jeder Änderung ab.
-
-### MediaMTX-Endpoints
-
-`api_base_url` in `config/collector.yaml` ist die Control-API-Basis für den
-Collector. `webrtc_base_url` ist die vom **Browser** erreichbare HTTP(S)-Basis
-für die Vorschau und ein optionaler Override. Ist der Wert leer oder fehlt er,
-leitet der API-Dienst die Basis beim Start einmalig ab: Host aus der primären
-Adresse des Monitor-Hosts, Port und Verschlüsselung aus dem WebRTC-Listener,
-den MediaMTX über `/v3/config/global/get` meldet. Eine Bind-Adresse wie `:8889`,
-`0.0.0.0:8889` oder `[::]:8889` liefert dabei ausschließlich den Port und nie
-den Browser-Host. Die effektive Preview-Basis wird beim Start protokolliert.
-Ein explizit gesetzter, syntaktisch ungültiger Wert ist ein Konfigurationsfehler
-und verhindert den Dienststart; es gibt dafür keinen stillen Rückfall auf die
-Ableitung. Die Monitor-API liefert nur die WebRTC-Adresse an das Frontend, nicht
-die Control-API-Adresse.
-
-Bei Reuse ist die browserseitige WebRTC-URL ausdrücklich erforderlich. Die API-URL
-kann ebenfalls vorgegeben werden, beispielsweise:
-
-```bash
-sudo ./install.sh --mediamtx-api-url http://127.0.0.1:9998 \
-  --mediamtx-webrtc-url https://media.example:9443
-```
-
-Der Betreiber wählt die effektiven Endpoints unter Berücksichtigung der vom
-Dienst verwendeten Datei, `MTX_*`-Overrides, TLS und gegebenenfalls Reverse Proxy.
-Ohne explizite API-URL liest der Installer mit System-PyYAML ausschließlich
-`api`, `apiAddress` und `apiEncryption` aus der MediaMTX-Datei. PyYAML ist zu
-diesem Zeitpunkt nicht durch die spätere Monitor-venv garantiert: Fehlt es,
-endet die Ermittlung mit einem Hinweis auf `python3-yaml` oder die explizite URL.
-Es werden dafür keine Pakete vor den lesenden Vorprüfungen installiert.
-
-Automatischer Bootstrap ist nur beim direkten Dienstaufruf mit genau dieser
-Binary und Datei möglich. Environment-Dateien, `PassEnvironment`, abweichende
-Prozessargumente oder `MTX_API`/`MTX_APIADDRESS`/`MTX_APIENCRYPTION` im laufenden
-Prozess erfordern eine explizite URL. Nicht lesbare Dienst-/Prozessinformationen
-führen ebenfalls zum Abbruch, nicht zum Raten. Wildcard-Bind-Adressen werden
-für den lokalen Zugriff in Loopback übersetzt; TLS-Prüfung bleibt aktiv.
-YAML liefert nur den erwarteten Endpoint, keinen Beweis der laufenden Version.
-`--mediamtx-config DATEI` wählt bei Reuse die zu validierende Datei (Default:
-`/usr/local/etc/mediamtx.yml`); deren Werte sind kein Beweis des Runtime-Zustands.
-Erst `/v3/info` prüft Erreichbarkeit, Runtime-Version und Startzeit. Danach prüfen
-`/v3/config/global/get` und `/v3/config/paths/list` WebRTC und Preview-Hook.
-Bei Fehlern erfolgt ein Abbruch ohne Änderung der bestehenden Installation.
-`--validate-conf` prüft zusätzlich die Datei. Es erfolgen keine YAML-Textprüfungen
-im Reuse-Pfad und kein automatischer Neustart.
-
-Fresh erzeugt HTTP-API auf Loopback (Default 9997) und HTTP-WebRTC auf allen
-Interfaces (Default 8889). `--mediamtx-api-port` und `--mediamtx-webrtc-port`
-ändern diese erzeugten Einstellungen und die Monitor-Konfiguration gemeinsam.
-Die Browser-Adresse wird standardmäßig aus der ersten Host-IP gebildet;
-`--mediamtx-webrtc-url` kann sie explizit setzen, etwa bei einem vorhandenen Proxy.
-Der Installer richtet dafür weder TLS-Zertifikate noch einen Proxy ein.
-HTTPS-URLs bei Reuse benötigen vertrauenswürdige Zertifikate; TLS-Prüfung wird
-nicht umgangen. URLs dürfen keine Zugangsdaten, Query-Parameter oder Fragmente
-enthalten. API-Authentisierung wird durch diese Änderung nicht eingerichtet.
-Browser-Erreichbarkeit, NAT und ICE müssen weiterhin betrieblich geprüft werden.
-
-Bestehende Monitor-Installationen ohne `webrtc_base_url` erhalten die Basis
-über die beschriebene Ableitung. Ein expliziter Wert bleibt für Reverse Proxy,
-TLS, abweichende Ports und eine entfernte MediaMTX-Instanz erforderlich.
-Die Diagnosewerkzeuge unter `cli-tools/` akzeptieren `MEDIAMTX_API_URL`
-(Default `http://localhost:9997`). Beispiele mit Standardports entsprechend anpassen.
-
 ## Installation
 
-Auf einem neuen Server vom leeren Benutzerverzeichnis bis zum laufenden
-Dashboard:
+Auf einem neuen Debian-, Ubuntu- oder Raspberry-Pi-OS-Server vom leeren
+Benutzerverzeichnis bis zum laufenden Dashboard:
 
 ```bash
 cd ~
@@ -183,10 +65,9 @@ sudo ./install.sh
 
 Einzige Voraussetzung ist `git`, das auch `mediamtx-monitor --upgrade`
 benötigt; falls es fehlt, mit `sudo apt install git` nachinstallieren. Alle
-übrigen Pakete richtet `install.sh` selbst ein: Der Installer führt sein
-eigenes `apt-get update` aus und installiert Curl, FFmpeg, Redis, Python-Venv
-und die weiteren benötigten Pakete. Ein manuelles `apt update` vorab ist
-deshalb nicht erforderlich.
+übrigen Pakete richtet `install.sh` selbst ein. Ist bereits eine vollständige
+MediaMTX-Installation vorhanden, prüft der Installer sie nur und verändert sie
+nicht; andernfalls richtet er MediaMTX zusammen mit dem Monitor ein.
 
 Nach der Installation prüfen, ob beide Komponenten laufen und welche Versionen
 installiert sind:
@@ -196,268 +77,10 @@ mediamtx --version
 mediamtx-monitor --version
 ```
 
-Anschließend das Dashboard unter `http://<server-ip>:8080/` öffnen; der
-ausführliche Funktionstest steht weiter unten.
-
-Eine Fresh-Installation erhält standardmäßig MediaMTX v1.21.3, die aktuelle
-stabile Version mit den hier ausgewerteten API-Feldern. Die vom Installer
-ergänzte `mediamtx.yml` wurde mit dem offiziellen v1.21.3-Archiv erzeugt und mit
-`mediamtx --validate-conf` geprüft; ein vollständiger Fresh-Lauf auf Ubuntu
-Server 24.04 LTS amd64 wurde mit v1.21.0 getestet. Für einen ausdrücklich
-gewünschten Fresh-Stand kann optional `--mediamtx-version VERSION` angegeben
-werden; bei vorhandener MediaMTX-Infrastruktur wird diese Angabe nicht
-angewendet. Eine vorhandene MediaMTX-Installation wird weder vom Installer
-(Reuse-Pfad) noch von `mediamtx-monitor --upgrade` aktualisiert oder ersetzt;
-ihr Upgrade bleibt eine separate Betreiberentscheidung.
-
-Der Installer ermittelt:
-
-- über /etc/os-release, ob das System Debian-basiert ist,  
-- über dpkg --print-architecture die Architektur des installierten Userspace,  
-- über uname -m die Maschinen- und bei 32-Bit-ARM die ARM-Version,  
-- über den Benutzerparameter die zu installierende MediaMTX-Version.  
-
-Anschließend wählt er automatisch eines der passenden MediaMTX-Archive:
-
-- linux_amd64  
-- linux_arm64  
-- linux_armv6  
-- linux_armv7  
-
-Der Installer lädt Binary und vollständige `mediamtx.yml` aus demselben
-offiziellen Release-Archiv und prüft dessen SHA-256-Summe. 
-Er aktiviert, wenn nicht schon aktiv, API,
-RTSP und WebRTC und ergänzt ausschließlich die On-Demand-Vorschauregel.  
-
-## Installierte Komponenten und Pfade
-
-| Inhalt | Pfad |
-|---|---|
-| MediaMTX-Binary | `/usr/local/bin/mediamtx` |
-| MediaMTX-Konfiguration | `/usr/local/etc/mediamtx.yml` |
-| Monitor | `/opt/mediamtx-monitoring-backend` |
-| Monitor-Konfiguration | `/opt/mediamtx-monitoring-backend/config/collector.yaml` |
-| systemd-Units | `/etc/systemd/system/mediamtx*.service` |
-
-Zusätzlich installiert der Installer FFmpeg, Redis und eine Python-Venv mit den
-Monitor-Abhängigkeiten.
-
-## Version und Upgrade
-
-MediaMTX und der MediaMTX Monitor sind getrennte Komponenten mit getrennten
-Versionen und getrennten Upgrade-Wegen. Die beiden Wege werden nicht
-vermischt:
-
-| Komponente | Version prüfen | Aktualisieren | Wirkung |
-|---|---|---|---|
-| MediaMTX | `mediamtx --version` | `sudo mediamtx --upgrade` | aktualisiert **MediaMTX** |
-| MediaMTX Monitor | `mediamtx-monitor --version` | `sudo mediamtx-monitor --upgrade` | aktualisiert **mediamtxMonitor** |
-
-`sudo mediamtx --upgrade` ist ein Kommando von MediaMTX selbst und ersetzt
-dessen Programmdatei; der Monitor ist daran nicht beteiligt. Umgekehrt fasst
-`sudo mediamtx-monitor --upgrade` ausschließlich die Monitor-Installation an
-und verändert weder MediaMTX noch dessen Konfiguration. Nach einem
-MediaMTX-Upgrade muss MediaMTX kontrolliert neu gestartet werden, damit die
-laufende Runtime der installierten Programmdatei entspricht.
-
-Die installierte Monitor-Version und ein Produktions-Upgrade werden über das
-mitinstallierte Kommando verwaltet:
-
-```bash
-mediamtx-monitor --version
-sudo mediamtx-monitor --upgrade
-```
-
-Das Upgrade lädt den aktuellen Stand von `main` und vergleicht Version und
-Commit mit der Installation. Es aktualisiert, sobald sich eines davon
-unterscheidet, also auch nach einem Merge ohne Versionserhöhung; sind beide
-gleich, ändert es nichts. Den installierten Commit speichert es in `REVISION`
-neben `VERSION`; `mediamtx-monitor --version` und `--status` zeigen ihn gekürzt
-an. Eine Installation ohne `REVISION` (vor dieser Funktion oder direkt per
-`install.sh`) hat einen unbekannten Commit und wird beim nächsten Upgrade
-einmal aktualisiert. Auch ein Dev-Deployment mit `devtools/deploy-dev.sh`
-ändert `REVISION` nicht; das nächste Upgrade stellt deshalb wieder den Stand
-von `main` her. Eine installierte CLI aus der Zeit vor dieser Funktion
-vergleicht noch nur die Version; sie übernimmt den Vergleich erst mit der
-nächsten Versionserhöhung oder nach einem einmaligen Aufruf der aktuellen CLI
-aus einem Checkout (`sudo ./mediamtx-monitor --upgrade`).
-
-Das Upgrade baut Programmcode und eine neue venv zunächst neben der
-Installation (`…/mediamtx-monitoring-backend.upgrade-*`) und prüft dort
-Abhängigkeiten, Python-Syntax und die vorhandene `collector.yaml`. Erst dann
-tauscht es Programmcode, venv, Versions- und Commit-Datei sowie die drei
-systemd-Units aus und startet nur die Monitor-Dienste neu, die vorher liefen;
-gestoppte Dienste und der Autostart bleiben unverändert. Schlägt der Austausch
-oder ein Neustart fehl, stellt es den vorherigen Stand und die Dienstzustände
-wieder her. Die CLI wird erst nach Erfolg ersetzt. MediaMTX und Redis-Daten
-fasst das Upgrade nicht an. Die lokale `config/collector.yaml` bleibt absichtlich
-unverändert: Sie ist die betreiberspezifische Laufzeitkonfiguration und gehört
-dem Betreiber. Dieses Kompatibilitätsprinzip orientiert sich am Umgang von
-MediaMTX mit der lokalen `mediamtx.yml`: Ein Upgrade ersetzt die vorhandene
-lokale Konfiguration nicht durch die Konfigurationsvorlage einer neuen Version.
-
-Neue optionale Monitor-Einstellungen müssen deshalb mit rückwärtskompatiblen
-Standardwerten eingeführt werden. Bewusst gesetzter technischer Ausgangspunkt
-des unterstützten MediaMTX-Daten- und Konfigurationsmodells ist MediaMTX
-v1.21.0. Eine automatische Migration oder Ersetzung der `collector.yaml` ist
-im Rahmen dieses Betreiber- und Kompatibilitätsprinzips nicht vorgesehen. Für
-eine Erstinstallation ist weiterhin `install.sh` zu verwenden.
-
-Das gilt auch für `redis.namespace` und `node.id`: Alte lokale Konfigurationen
-bleiben beim Upgrade unverändert und erhalten zur Laufzeit automatisch die
-Defaults `mediamtx-monitor:` beziehungsweise `local`. Die Vorlage für neue
-Installationen enthält beide Werte explizit.
-Die zwei bekannten alten Snapshot-Werte `mediamtx:streams:latest` und
-`mediamtx:system:latest` werden bei der Konfigurationsauflösung ausschließlich
-in ihre neuen fachlichen Namen übersetzt; alte Redis-Keys werden weder gelesen
-noch migriert.
-
-## Betriebsstatus anzeigen
-
-Zwei lesende Befehle mit getrennten Aufgaben:
-
-- `mediamtx-monitor --status` beantwortet: Läuft der Monitor, bekommt er
-  aktuelle Daten, und wo ist das Dashboard erreichbar?
-- `mediamtx-monitor --check-config` beantwortet: Ist die Konfiguration korrekt,
-  und welche Einstellungen gelten? (siehe nächster Abschnitt)
-
-```bash
-mediamtx-monitor --status
-```
-
-`--status` zeigt Monitor-Version und Hostname, die lokale Dashboard-URL samt
-Erreichbarkeit, mögliche Netzwerk-URLs aus den eigenen IPv4-Adressen und dem
-`listen_port`, den Zustand der drei Dienste, Adresse, Erreichbarkeit und
-Version der MediaMTX-API, Adresse und Erreichbarkeit von Redis sowie das Alter
-der letzten Stream- und Systemdaten. Netzwerk-URLs sind ausdrücklich nur
-mögliche Zugänge: Ob sie von außen erreichbar sind, entscheiden Firewall, NAT
-und Routing; der Befehl prüft das nicht und fragt keine externen Dienste ab.
-Bei `listen_host: 0.0.0.0` erscheint diese Bind-Adresse nie als Browser-Ziel.
-Nicht ermittelbare Werte heißen „unbekannt“ beziehungsweise „nicht prüfbar“.
-
-Der Befehl benötigt kein sudo, schreibt nichts nach Redis, ändert keine
-Konfiguration und startet keine Dienste. Zugangsdaten in URLs werden maskiert.
-Er endet mit 0, wenn alles in Ordnung ist, sonst mit 1 und konkreten Hinweisen,
-etwa auf einen inaktiven Dienst, nicht erreichbare Komponenten oder veraltete
-Daten (Streams älter als dreimal das Collector-Intervall, mindestens 10 s;
-Systemdaten älter als dreimal das Systemmonitor-Intervall).
-
-## Konfiguration prüfen
-
-`config/collector.yaml` konfiguriert trotz ihres historischen Namens die
-gesamte Anwendung: Collector, Systemmonitor, Monitor-API und Frontend. Eine
-Umbenennung ist nicht erforderlich. Die Prüfung liest die Datei, zeigt jeden
-wirksamen Wert mit seiner Herkunft (`Datei` oder `Default`) und den Diensten, die
-ihn lesen, und benennt Fehler und Warnungen:
-
-```bash
-mediamtx-monitor --check-config                  # installierte Konfiguration
-mediamtx-monitor --check-config /pfad/datei.yaml # ausdrücklich gewählte Datei
-```
-
-Die Prüfung schreibt keine Dateien oder Redis-Werte, startet keine Dienste,
-ändert MediaMTX nicht und benötigt kein Netzwerk; im Repository funktioniert sie
-auch direkt mit `python3 bin/config_check.py DATEI`. Zugangsdaten in URLs und
-Schlüssel, die nach Passwort, Token oder Secret klingen, werden maskiert.
-
-- **Fehler** (Rückgabecode 1): fehlende oder unlesbare Datei, ungültiges YAML,
-  doppelte Schlüssel, Abschnitte, die kein Mapping sind, sowie unzulässige Werte
-  (falscher Typ, Port außerhalb 1–65535, Intervalle ≤ 0, unbekannte
-  Log-Stufe, ungültige `node.id` oder `webrtc_base_url`).
-- **Warnungen** (Rückgabecode 0): unbekannte Schlüssel, die die Dienste
-  ignorieren.
-- Nicht gesetzte optionale Schlüssel sind kein Fehler; sie erhalten ihre
-  rückwärtskompatiblen Defaults.
-
-Das Laufzeitverhalten bleibt unverändert: Ohne lesbare Datei beenden sich
-Collector und Systemmonitor, die Monitor-API startet nach einer Warnung mit
-Defaults; einen Abschnitt, der kein Mapping ist, ersetzen die Dienste
-stillschweigend durch Defaults. Deshalb vor und nach jeder Änderung prüfen.
-
-Nach einer Änderung sind die Dienste neu zu starten, die den geänderten Wert
-lesen:
-
-| Schlüssel bzw. Abschnitt | Neustart |
-|---|---|
-| `collector`, `bitrate` | `mediamtx-collector.service` |
-| `api_base_url` | `mediamtx-collector.service`, `mediamtx-api.service` |
-| `system_monitor` | `mediamtx-system.service`, `mediamtx-api.service` |
-| `webrtc_base_url`, `api_server`, `logging`, `frontend` | `mediamtx-api.service` |
-| `redis`, `node` | alle drei Dienste |
-
-Zu sichern ist `config/collector.yaml` unter dem Installationsverzeichnis; alle
-übrigen Dateien stellt `mediamtx-monitor --upgrade` beziehungsweise der
-Installer wieder her. Ein Upgrade ersetzt diese Datei nicht.
-
-## Redis-Namespace und Node-ID
-
-Der Monitor verwendet weiterhin Redis DB 0. Sie darf gemeinsam mit anderen
-Anwendungen genutzt werden, weil die Zustände durch Anwendungs-Namespaces
-getrennt sind:
-
-```text
-Redis DB 0
-├── <andere-anwendung>:*                   andere Anwendung
-└── mediamtx-monitor:node:<node-id>:*      MediaMTX Monitor
-```
-
-`redis.namespace` legt den zentralen Anwendungs-Namespace fest und ist
-standardmäßig `mediamtx-monitor:`. `node.id` identifiziert die überwachte
-MediaMTX-Instanz; der Single-Node-Default ist `local`. Eine abweichende stabile
-ID wie `node-a` erzeugt beispielsweise
-`mediamtx-monitor:node:node-a:streams:latest`. Fachmodule erzeugen nur den Teil
-ab `streams:latest`; der vollständige Prefix wird zentral beim Redis-Zugriff
-ergänzt.
-
-Der Namespace wird getrimmt und intern auf genau einen abschließenden
-Doppelpunkt normalisiert. `node.id` wird ebenfalls getrimmt und muss dem Muster
-`[A-Za-z0-9._-]+` entsprechen. Fehlende Werte verwenden die Defaults; explizit
-leere oder ungültige Werte sind Konfigurationsfehler und verhindern den
-Dienststart.
-
-## Dienste und Benutzer
-
-| Dienst | Benutzer | Aufgabe |
-|---|---|---|
-| `mediamtx.service` | root (kein `User=` in der Unit) | Streamingserver |
-| `mediamtx-api.service` | `mediamtxmon` | Dashboard und Monitor-API |
-| `mediamtx-collector.service` | `mediamtxmon` | MediaMTX-Control-API abfragen |
-| `mediamtx-system.service` | `mediamtxmon` | Systemmetriken erfassen |
-| `redis-server.service` | Distributionseinstellung | Zwischenspeicher |
-
-Die mitgelieferte `mediamtx.service` enthält bewusst kein `User=` und folgt
-damit der [offiziellen systemd-Anleitung von MediaMTX](https://mediamtx.org/docs/features/start-on-boot),
-deren Vorlage ebenfalls kein `User=` enthält. Ohne diese Angabe läuft der
-Dienst unter systemd standardmäßig als root; MediaMTX Monitor trifft damit
-keine von MediaMTX abweichende Entscheidung über den Dienstbenutzer. Betreiber
-können MediaMTX eigenverantwortlich unter einem eingeschränkten Benutzer
-betreiben. Dabei müssen sie selbst alle benötigten Rechte berücksichtigen,
-unter anderem für Konfiguration, automatisch erzeugte oder verwendete
-Zertifikate, Aufzeichnungen, Logs, Hooks sowie weitere von der jeweiligen
-MediaMTX-Konfiguration verwendete Dateien und Verzeichnisse.
-
-Die Deinstallation der Monitor-Anwendung entfernt ausschließlich deren
-eigene Ressourcen. `mediamtx.service`, das MediaMTX-Binary und die globale
-`mediamtx.yml` bleiben erhalten; eine Entfernung gemeinsamer Infrastruktur ist
-eine separate Betreiberoperation.
-
-## Ports
-
-Standardports von MediaMTX v1.21 (unverändert in v1.21.3):
-
-| Port | Funktion |
-|---:|---|
-| 8554 | RTSP |
-| 1935 | RTMP |
-| 8888 | HLS |
-| 8889 | WebRTC und Monitor-Vorschau |
-| 8890 | SRT |
-| 9997 | MediaMTX-Control-API |
-| 8080/TCP | Dashboard und Monitor-API; HTTP ohne integrierte Authentifizierung, nicht ungeschützt öffentlich freigeben |
-| 6379/TCP | Redis; nur lokal beziehungsweise in einem geschützten Backend-Netz erreichbar machen |
-
-Die vollständige MediaMTX-Konfiguration stammt aus der gewählten Version; deren
-Werte bleiben mit Ausnahme der dokumentierten Monitor-Anpassungen maßgeblich.
+Anschließend das Dashboard unter `http://<server-ip>:8080/` öffnen.
+Unterstützte Systeme und Architekturen, die Wiederverwendung vorhandener
+MediaMTX-Installationen, Endpoints, Pfade, Dienste und Ports beschreibt
+[Installation und Betrieb](docs/INSTALLATION.md).
 
 ## Kurzer Funktionstest
 
@@ -469,6 +92,23 @@ curl -fsS http://127.0.0.1:8080/api/streams | python3 -m json.tool
 ```
 
 Dashboard: `http://<server-ip>:8080/`
+
+## Verwaltung
+
+| Befehl | Zweck |
+|---|---|
+| `mediamtx-monitor --version` | installierte Monitor-Version mit Commit |
+| `mediamtx-monitor --status` | Dienste, Datenalter, Erreichbarkeit von MediaMTX und Redis, Dashboard-URLs; ohne sudo |
+| `mediamtx-monitor --check-config [DATEI]` | Konfiguration prüfen und wirksame Werte mit Herkunft anzeigen |
+| `sudo mediamtx-monitor --upgrade` | Monitor auf den aktuellen Stand von `main` aktualisieren; gleicher Stand ändert nichts |
+| `sudo ./uninstall.sh` | Monitor entfernen; MediaMTX und seine Konfiguration bleiben |
+
+MediaMTX selbst wird getrennt mit `sudo mediamtx --upgrade` aktualisiert; der
+Monitor verändert weder MediaMTX noch dessen Konfiguration. Die lokale
+`config/collector.yaml` gehört dem Betreiber und bleibt bei Upgrades erhalten.
+Details: [Version und Upgrade](docs/INSTALLATION.md#version-und-upgrade),
+[Betriebsstatus](docs/INSTALLATION.md#betriebsstatus-anzeigen),
+[Konfiguration prüfen](docs/INSTALLATION.md#konfiguration-prüfen).
 
 ## Entwicklung und Tests
 
@@ -491,12 +131,28 @@ Gemeinsamer lokaler Prüfpfad:
 
 ## Dokumentation
 
+- [Installation und Betrieb](docs/INSTALLATION.md)
 - [Architektur und schrittweises Zielbild](docs/ARCHITECTURE.md)
 - [Coding- und Dokumentationsstandard](docs/CODING_STYLE.md)
 - [MediaMTX-v1.21+-Datenmodell](docs/MEDIAMTX_V1_21_DATA.md)
 - [Betrieb und Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Entwicklungs-Deployment](devtools/README.md)
 
+## Mitmachen
+
+Fehler, Wünsche und Erfahrungen aus dem Betrieb bitte als
+[Issue auf GitHub](https://github.com/richtertoralf/mediamtxMonitor/issues) melden.
+Für Code gelten der [Coding- und Dokumentationsstandard](docs/CODING_STYLE.md) und
+der gemeinsame Prüfpfad `./devtools/verify.sh`.
+
 ## Lizenz
 
 MediaMTX Monitor steht unter der [MIT-Lizenz](LICENSE).
+
+## RICHTER.PROJECTS
+
+**Möglichkeiten schaffen.** MediaMTX Monitor gehört zu RICHTER.PROJECTS. Wer
+Livestreams mit MediaMTX betreibt, sieht damit auf einen Blick, welche Streams
+laufen, wer sendet und empfängt und wie es um Bitraten und SRT-Verbindungen
+steht – mit einem schlanken Werkzeug, das ausschließlich liest und den
+Streamingbetrieb nicht beeinflusst.
