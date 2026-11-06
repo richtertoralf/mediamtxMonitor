@@ -5,6 +5,7 @@
  * - Spalte links: CPU (je Kern, Steal, CPU-Druck), Load, RAM, Swap
  * - Spalte rechts: Festplatte, Netzwerk, Temperatur, aktive Vorschauen
  * - darunter verständliche Hinweise auf CPU-Sättigung oder Host-Engpässe
+ * Host, Adressen und Datenalter stehen im Kopfband (topbar.js).
  *
  * Autor: snowgames.live
  * Lizenz: MIT
@@ -16,12 +17,7 @@ const CPU_HINTS = {
   pressure: "Hoher CPU-Druck (PSI): Prozesse warten spürbar auf einen freien Kern.",
 };
 
-export function renderSystemInfo(
-  systeminfo = {},
-  dataAgeText = "Datenalter: —",
-  dataAgeClass = "data-age-unknown",
-  previewPathCount = null,
-) {
+export function renderSystemInfo(systeminfo = {}, previewPathCount = null) {
   const container = document.getElementById("systeminfo");
   container.innerHTML = ""; // vorherigen Inhalt löschen
   const info = systeminfo || {};
@@ -29,25 +25,6 @@ export function renderSystemInfo(
   // 🧱 Haupt-Wrapper
   const section = document.createElement("section");
   section.className = "systeminfo";
-
-  const identity = document.createElement("div");
-  identity.className = "system-identity";
-  const identityLabel = document.createElement("span");
-  identityLabel.className = "system-identity-label";
-  identityLabel.textContent = "MediaMTX Server";
-  const identityValue = document.createElement("span");
-  identityValue.className = "system-identity-value";
-  const serverIps = Array.isArray(info.server_ips)
-    ? info.server_ips.filter(value => typeof value === "string" && value).slice(0, 3)
-    : [];
-  identityValue.textContent = `${info.host || "–"} · ${serverIps.join(" · ") || "–"}`;
-  const dataAge = document.createElement("span");
-  dataAge.className = `data-age ${dataAgeClass}`;
-  dataAge.setAttribute("aria-live", "polite");
-  dataAge.textContent = dataAgeText;
-  identity.appendChild(identityLabel);
-  identity.appendChild(identityValue);
-  identity.appendChild(dataAge);
 
   // 🔹 Linke Spalte – CPU, Load, RAM, Swap
   const leftColumn = document.createElement("div");
@@ -104,7 +81,6 @@ export function renderSystemInfo(
   }
 
   // 📦 Spalten zusammenführen
-  section.appendChild(identity);
   section.appendChild(leftColumn);
   section.appendChild(rightColumn);
   for (const hint of Array.isArray(cpu.hints) ? cpu.hints : []) {

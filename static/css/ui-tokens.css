@@ -1,0 +1,96 @@
+/* RICHTER.PROJECTS UI-Tokens · Referenzdatei zu docs/standards/ui.md · Version 1.0 (ADR-004, 2026-11-06)
+   Verwendung: Datei in das static-Verzeichnis der Anwendung kopieren, Versionskommentar behalten,
+   vorhandene Variablen darauf abbilden (z. B. --ok: var(--rp-ok)). Keine externen Schriften, keine Abhängigkeiten.
+   Modus:   <html data-mode="dark|light">   Standard ohne Attribut: dark (Betrieb, Monitoring, Diagnose)
+   Dichte:  <html data-density="compact|comfortable">   Standard ohne Attribut: compact (Betrieb)
+   Beide Attribute dürfen auch auf einem Wrapper-Element stehen (Referenzseite). */
+
+:root, [data-mode="dark"] {
+  color-scheme: dark;
+  /* Flächen */
+  --rp-bg: #14191e;        /* Seitenhintergrund */
+  --rp-panel: #1e252c;     /* Kachel, Karte, Kopfband */
+  --rp-panel-2: #252d35;   /* Eingabefeld, Schaltfläche neutral, Tally-Leiste */
+  --rp-line: #33404a;      /* Rahmen, Trennlinien */
+  /* Text */
+  --rp-fg: #e6ebef;
+  --rp-muted: #9aa8b3;
+  /* Akzent: ausgewählt, Ist-Schaltfläche, Links, Vorschau */
+  --rp-accent: #2fb4d8;
+  --rp-on-accent: #04171d;
+  /* Zustände (Bedeutung siehe ui.md Abschnitt 3) */
+  --rp-ok: #3fbf7a;        /* normal, verbunden: nur Punkt oder kurzes Wort */
+  --rp-wait: #5aa8e6;      /* wartet, erwarteter Übergang */
+  --rp-warn: #e0a83a;      /* Warnung, Handlungsbedarf, STALE */
+  --rp-bad: #ef6b6b;       /* Fehler, getrennt, OFFLINE, DEGRADED: Schrift und Rahmen */
+  --rp-unknown: #9aa8b3;   /* unbekannt, nicht geliefert */
+  --rp-tally: #d9363e;     /* LIVE, REC: Vollfläche mit weißem Text */
+  --rp-test: #7c3aed;      /* Testbetrieb: Band mit weißem Text */
+  --rp-on-tally: #ffffff;
+  --rp-focus: #e0a83a;     /* Fokusring */
+  --rp-shadow: none;
+}
+
+[data-mode="light"] {
+  color-scheme: light;
+  --rp-bg: #eef1f4;
+  --rp-panel: #ffffff;
+  --rp-panel-2: #f6f8fa;
+  --rp-line: #d3dadf;
+  --rp-fg: #16212b;
+  --rp-muted: #5c6b76;
+  --rp-accent: #00708f;
+  --rp-on-accent: #ffffff;
+  --rp-ok: #1f7a3e;
+  --rp-wait: #1f5fa8;
+  --rp-warn: #8a5300;
+  --rp-bad: #9c2932;
+  --rp-unknown: #55606b;
+  --rp-tally: #c62828;
+  --rp-test: #6d28d9;
+  --rp-on-tally: #ffffff;
+  --rp-focus: #b45309;
+  --rp-shadow: none;
+}
+
+/* Typografie und Raster: in beiden Modi gleich */
+:root, [data-mode] {
+  --rp-font: system-ui, -apple-system, "Segoe UI", Roboto, Arial, Helvetica, sans-serif;
+  --rp-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  --rp-s1: 4px;  --rp-s2: 8px;  --rp-s3: 12px;  --rp-s4: 16px;  --rp-s5: 24px;
+  --rp-radius: 4px;
+  --rp-line-w: 1px;
+}
+
+/* Dichte compact: Betrieb und Monitoring (Standard) */
+:root, [data-density="compact"] {
+  --rp-size: 14px;         /* Grundschrift */
+  --rp-size-sm: 13px;      /* Tabellen, Hinweise */
+  --rp-size-xs: 11px;      /* Beschriftungen in Versalien */
+  --rp-size-lg: 16px;      /* Betriebsanzeige, Zustandswort groß */
+  --rp-lh: 1.35;
+  --rp-pad: 8px;           /* Kachel innen vertikal */
+  --rp-pad-x: 10px;        /* Kachel innen horizontal */
+  --rp-gap: 6px;           /* Abstand zwischen Kacheln */
+  --rp-control-h: 30px;    /* Schaltflächen, Eingabefelder */
+  --rp-row-h: 26px;        /* Tabellenzeile */
+}
+
+/* Dichte comfortable: Einrichtung, Vorbereitung, Sprecheransicht */
+[data-density="comfortable"] {
+  --rp-size: 15px;
+  --rp-size-sm: 14px;
+  --rp-size-xs: 12px;
+  --rp-size-lg: 18px;
+  --rp-lh: 1.45;
+  --rp-pad: 12px;
+  --rp-pad-x: 14px;
+  --rp-gap: 12px;
+  --rp-control-h: 36px;
+  --rp-row-h: 32px;
+}
+
+/* Touch: Mindestgröße 44 px für Schaltflächen, unabhängig von Modus und Dichte */
+@media (pointer: coarse) {
+  :root, [data-density] { --rp-control-h: 44px; --rp-row-h: 40px; }
+}

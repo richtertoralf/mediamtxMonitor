@@ -20,8 +20,6 @@
 
 import { fetchStreamsFromApi } from "./api.js";
 import {
-  dataAgeStatusClass,
-  formatDataAge,
   isStreamActive,
   recordSnapshotTelemetry,
   renderMonitorTitle,
@@ -29,6 +27,7 @@ import {
   updateStreamCard,
 } from "./renderer.js";
 import { renderSystemInfo } from "./systeminfo.js";
+import { renderFooterVersion, renderTopBarConnection, renderTopBarContext } from "./topbar.js";
 
 const container = document.getElementById("streams");
 const noStreams = document.getElementById("no-streams");
@@ -42,14 +41,7 @@ async function updateUI() {
   const result = await fetchStreamsFromApi();
 
   renderMonitorTitle(pageTitle, result.monitor_version);
-
-  const ageText = formatDataAge(result.collected_at);
-  renderSystemInfo(
-    result.systeminfo || {},
-    ageText || "Datenalter: —",
-    dataAgeStatusClass(result.collected_at),
-    result.preview_path_count,
-  );
+  renderFooterVersion(result.monitor_version);
 
   const newInterval = result.streamlist_refresh_ms ?? 1000;
 
@@ -57,6 +49,9 @@ async function updateUI() {
   recordSnapshotTelemetry(streams, result.collected_at);
   // MediaMTX lists configured but inactive paths; only running streams get a card.
   const activeStreams = streams.filter(isStreamActive);
+  renderTopBarContext(result, activeStreams.length);
+  renderTopBarConnection(result.collected_at);
+  renderSystemInfo(result.systeminfo || {}, result.preview_path_count);
   const seen = new Set();
 
   for (const stream of activeStreams) {

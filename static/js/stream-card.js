@@ -18,12 +18,10 @@ export function isStreamActive(stream) {
   return stream?.available === true && stream?.online === true;
 }
 
-/** Render the monitor version in the page heading and browser tab. */
+/** Render application and version in the top bar and the browser tab. */
 export function renderMonitorTitle(titleElement, monitorVersion) {
   const version = typeof monitorVersion === "string" ? monitorVersion.trim() : "";
-  const title = version
-    ? `MediaMTX Stream Monitor · v${version} - richterprojects.com`
-    : "MediaMTX Stream Monitor - richterprojects.com";
+  const title = version ? `MediaMTX Monitor · v${version}` : "MediaMTX Monitor";
   if (titleElement) titleElement.textContent = title;
   document.title = title;
 }
@@ -186,13 +184,18 @@ function renderForwardMetrics(destination) {
   ]);
 }
 
-/** Render one MediaMTX forward destination as a permanent OUT block. */
+/**
+ * Render one MediaMTX forward destination as a permanent OUT block.
+ *
+ * Only a forward with evidence of data flowing (isForwardSending) carries
+ * the LIVE tally; any other state is shown as text only.
+ */
 export function renderForwardDestination(destination, index = 0) {
   const type = destination?.type;
   const state = destination?.state;
   return `
     <section class="reader-block forward-block${isForwardAnomalous(destination) ? " forward-block-warn" : ""}">
-      <h3>Forward ${index + 1}</h3>
+      <h3>Forward ${index + 1}${isForwardSending(destination) ? ' <span class="tally">LIVE</span>' : ""}</h3>
       <div class="connection-heading">
         <span>${escapeHtml(type ? String(type).toUpperCase() : "—")}</span>
         <span class="forward-state">· ${escapeHtml(state || "—")}</span>
@@ -238,8 +241,23 @@ export function isForwardAnomalous(destination) {
   return destination?.bitrate_mbps === 0;
 }
 
+/**
+ * Evidence for an outgoing transmission: MediaMTX reports the forward as
+ * forwarding and measured a data rate above zero. Only this state carries the
+ * LIVE tally; an unknown rate is not evidence.
+ */
+export function isForwardSending(destination) {
+  return destination?.state === "forwarding"
+    && typeof destination?.bitrate_mbps === "number" && destination.bitrate_mbps > 0;
+}
+
 function renderHeaderBadges(stream) {
   const badges = [];
+  const sending = (stream?.forwardDestinations || []).filter(isForwardSending);
+  if (sending.length) {
+    const targets = sending.map(item => String(item?.type || "forward").toUpperCase()).join(", ");
+    badges.push(`<span class="stream-badge tally" title="${escapeHtml(`Weiterleitung sendet: ${targets}`)}">LIVE · ${sending.length} Forward</span>`);
+  }
   const discards = streamDiscards60s(stream);
   if (discards > 0) {
     badges.push(`<span class="stream-badge stream-badge-warn" title="Von MediaMTX verworfene Frames bzw. Pakete aller OUT-Verbindungen in den letzten 60 s">Discard 60s: ${discards}</span>`);
@@ -268,7 +286,7 @@ function renderHeaderContent(stream) {
   return `
     <div class="stream-name">${escapeHtml(stream?.name || "—")}${rule}${renderHeaderBadges(stream)}</div>
     <div class="stream-status${active ? "" : " stream-status-idle"}"${times ? ` title="${escapeHtml(times)}"` : ""}>
-      <span class="live-dot"></span>${active ? "LIVE" : "INAKTIV"}${since ? ` seit ${escapeHtml(since)}` : ""} · ${outCount} OUT
+      <span class="live-dot"></span>${active ? "AKTIV" : "INAKTIV"}${since ? ` seit ${escapeHtml(since)}` : ""} · ${outCount} OUT
     </div>
   `;
 }
