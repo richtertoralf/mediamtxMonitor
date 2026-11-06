@@ -36,10 +36,10 @@ const originalDocument = globalThis.document;
 const pageTitle = {textContent: ""};
 globalThis.document = {title: ""};
 renderMonitorTitle(pageTitle, "0.8.0");
-assert.equal(pageTitle.textContent, "MediaMTX Stream Monitor · v0.8.0 - richterprojects.com");
+assert.equal(pageTitle.textContent, "MediaMTX Monitor · v0.8.0");
 assert.equal(document.title, pageTitle.textContent);
 renderMonitorTitle(pageTitle, undefined);
-assert.equal(pageTitle.textContent, "MediaMTX Stream Monitor - richterprojects.com");
+assert.equal(pageTitle.textContent, "MediaMTX Monitor");
 assert.equal(document.title, pageTitle.textContent);
 globalThis.document = originalDocument;
 
@@ -164,7 +164,7 @@ const noReaderCard = renderStreamCard({
   media: {video: [{displayCodec: "H.264", width: 1920, height: 1080}]},
   readers: [],
 });
-assert.match(noReaderCard.innerHTML, /LIVE · 0 OUT/);
+assert.match(noReaderCard.innerHTML, /AKTIV · 0 OUT/);
 assert.match(noReaderCard.innerHTML, /Keine OUT-Verbindung/);
 assert.match(noReaderCard.innerHTML, /stream-left/);
 assert.match(noReaderCard.innerHTML, /stream-center/);
@@ -269,12 +269,13 @@ for (const state of [
   assert.equal(isStreamActive(state), false);
 }
 
-// Das LIVE-Badge spiegelt den realen Zustand und zaehlt Reader plus Forwards.
+// Die Zustandszeile zeigt AKTIV (laufender Pfad, kein Tally) und zaehlt Reader plus Forwards.
 const activeHeader = renderStreamCard(
   {name: "aktiv", available: true, online: true, readers: [], forwardDestinations: []},
   previewBase,
 ).innerHTML;
-assert.match(activeHeader, /<span class="live-dot"><\/span>LIVE · 0 OUT/);
+assert.match(activeHeader, /<span class="live-dot"><\/span>AKTIV · 0 OUT/);
+assert.doesNotMatch(activeHeader, /LIVE/);
 assert.doesNotMatch(activeHeader, /stream-status-idle/);
 
 const idleHeader = renderStreamCard(
@@ -283,7 +284,7 @@ const idleHeader = renderStreamCard(
 ).innerHTML;
 assert.match(idleHeader, /stream-status-idle/);
 assert.match(idleHeader, /<span class="live-dot"><\/span>INAKTIV · 0 OUT/);
-assert.doesNotMatch(idleHeader, /LIVE ·/);
+assert.doesNotMatch(idleHeader, /<\/span>AKTIV ·/);
 assert.match(rendererStyles, /\.stream-status-idle \.live-dot\s*\{[^}]*background:\s*var\(--text-muted\);/s);
 
 // Forward-/Push-Ziele erscheinen zusaetzlich zu den Readern unter OUT.
@@ -301,7 +302,9 @@ assert.match(forwardOnly.innerHTML, /<h3>Forward 1<\/h3>/);
 assert.match(forwardOnly.innerHTML, /<span>RTMP<\/span>/);
 assert.match(forwardOnly.innerHTML, /class="forward-state">· forwarding</);
 assert.doesNotMatch(forwardOnly.innerHTML, /Keine OUT-Verbindung/);
-assert.match(forwardOnly.innerHTML, /LIVE · 1 OUT/);
+assert.match(forwardOnly.innerHTML, /AKTIV · 1 OUT/);
+// Eine Weiterleitung ohne gemeldete Datenrate ist kein Nachweis: kein LIVE-Tally.
+assert.doesNotMatch(forwardOnly.innerHTML, /class="tally"/);
 
 const readersAndForwards = renderStreamCard({
   name: "beides",
@@ -317,7 +320,7 @@ const readersAndForwards = renderStreamCard({
 assert.equal((readersAndForwards.innerHTML.match(/<h3>Reader 1<\/h3>/g) || []).length, 1);
 assert.equal((readersAndForwards.innerHTML.match(/<h3>Forward [12]<\/h3>/g) || []).length, 2);
 assert.match(readersAndForwards.innerHTML, /class="forward-state">· error</);
-assert.match(readersAndForwards.innerHTML, /LIVE · 3 OUT/);
+assert.match(readersAndForwards.innerHTML, /AKTIV · 3 OUT/);
 assert.ok(
   readersAndForwards.innerHTML.indexOf("Reader 1")
     < readersAndForwards.innerHTML.indexOf("Forward 1"),
@@ -334,7 +337,7 @@ const readersOnly = renderStreamCard({
 assert.match(readersOnly.innerHTML, /<h3>Reader 1<\/h3>/);
 assert.doesNotMatch(readersOnly.innerHTML, /Forward/);
 assert.doesNotMatch(readersOnly.innerHTML, /Keine OUT-Verbindung/);
-assert.match(readersOnly.innerHTML, /LIVE · 1 OUT/);
+assert.match(readersOnly.innerHTML, /AKTIV · 1 OUT/);
 assert.match(
   renderStreamCard({name: "leer", available: true, online: true, readers: []}, previewBase).innerHTML,
   /Keine OUT-Verbindung/,
@@ -382,7 +385,7 @@ const multiReaderCard = renderStreamCard({
     {type: "srtConn", bitrate_mbps: 1, details: {}},
   ],
 });
-assert.match(multiReaderCard.innerHTML, /LIVE · 3 OUT/);
+assert.match(multiReaderCard.innerHTML, /AKTIV · 3 OUT/);
 assert.equal((multiReaderCard.innerHTML.match(/<h3>Reader [123]<\/h3>/g) || []).length, 3);
 assert.ok(
   multiReaderCard.innerHTML.indexOf("SRT") < multiReaderCard.innerHTML.indexOf("RTMP")
@@ -514,7 +517,7 @@ assert.doesNotMatch(staticSource, /<img\b/);
       details: {userAgent: "Mozilla/5.0", expiresAt, remoteAddr: "192.0.2.1:1"}}],
     forwardDestinations: [],
   }, "http://127.0.0.1:8889").innerHTML;
-  assert.match(card, /LIVE seit 5 min · 1 OUT/);
+  assert.match(card, /AKTIV seit 5 min · 1 OUT/);
   assert.match(card, /title="verfügbar seit [^"]+ · online seit [^"]+"/);
   assert.match(card, /class="stream-rule"[^>]*>Regel ~\^cam\/\.\*\$</);
   assert.match(card, /Agent: &lt;b&gt;OBS&lt;\/b&gt; 30/);
@@ -555,8 +558,15 @@ assert.doesNotMatch(staticSource, /<img\b/);
   assert.match(html, /stream-badge-warn[^>]*>Discard 60s: 10</);
   assert.match(html, /title="Zustand: error, forwarding"[^>]*>Forward auffällig: 2</);
   assert.match(html, /forward-block forward-block-warn/);
+  // LIVE-Tally nur für die sendende Weiterleitung (forwarding mit Datenrate), im Kopf und im Block.
+  assert.match(html, /class="stream-badge tally" title="Weiterleitung sendet: RTMP">LIVE · 1 Forward</);
+  assert.equal((html.match(/<h3>Forward \d <span class="tally">LIVE<\/span><\/h3>/g) || []).length, 1);
 
   const quiet = renderStreamCard({name: "ruhig", available: true, online: true, readers: [],
     forwardDestinations: [{id: "a", state: "forwarding", bitrate_mbps: 1}]}, "").innerHTML;
-  assert.doesNotMatch(quiet, /stream-badge/);
+  assert.doesNotMatch(quiet, /stream-badge-warn/);
+  assert.match(quiet, /LIVE · 1 Forward/);
+  const noForward = renderStreamCard({name: "still", available: true, online: true, readers: [],
+    forwardDestinations: []}, "").innerHTML;
+  assert.doesNotMatch(noForward, /stream-badge|tally|LIVE/);
 }

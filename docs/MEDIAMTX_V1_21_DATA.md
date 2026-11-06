@@ -76,7 +76,7 @@ Codec-Liste `tracks`. Außerdem erfasst er `inboundBytes`, `outboundBytes` und
 Path-Modell. `availableTime` und `onlineTime` (seit wann der Pfad verfügbar
 beziehungsweise online ist; `null` solange nicht) sowie `confName` (der
 Konfigurationseintrag, der den Pfad erzeugt hat, etwa ein Regex oder
-`all_others`) werden unverändert übernommen. Das Dashboard zeigt „LIVE seit …“
+`all_others`) werden unverändert übernommen. Das Dashboard zeigt „AKTIV seit …“
 und beide Zeitpunkte im Tooltip; `confName` erscheint sichtbar nur, wenn er vom
 Pfadnamen abweicht. Für Verbindungen zeigt es `userAgent` für alle Protokolle
 und `expiresAt` als „Session endet: in …“: Seit v1.21.3 schließt MediaMTX eine

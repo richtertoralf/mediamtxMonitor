@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" data-mode="dark" data-density="compact">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MediaMTX Stream Monitor - richterprojects.com</title>
+  <title>MediaMTX Monitor</title>
 
   <!-- 
     🧾 Projekt: Mediamtx Stream Monitor
@@ -20,15 +20,25 @@
     Lizenz: MIT
   -->
 
-  <!-- CSS-Datei einbinden -->
+  <!-- UI-Tokens (RICHTER.PROJECTS UI-Standard 1.0) vor dem eigenen Stylesheet -->
+  <link rel="stylesheet" href="/static/css/ui-tokens.css" />
   <link rel="stylesheet" href="/static/css/style.css" />
 </head>
 
 <body>
-  <h1 id="page-title">MediaMTX Stream Monitor - richterprojects.com</h1>
+  <header class="topbar">
+    <div class="topbar-brand" id="page-title">MediaMTX Monitor</div>
+    <div class="topbar-ctx" id="topbar-ctx"></div>
+    <div class="topbar-conn" id="topbar-conn"></div>
+  </header>
   <section id="systeminfo" aria-label="Systeminformationen"></section>
-  <div id="no-streams" style="display: none;">❌ Keine Streams aktiv.</div>
+  <div id="no-streams" style="display: none;">Keine Streams aktiv.</div>
   <div id="streams"></div>
+  <footer class="foot">
+    <span id="foot-version">MediaMTX Monitor</span>
+    <a href="/api/streams">Daten: /api/streams</a>
+    <a href="https://github.com/richtertoralf/mediamtxMonitor" rel="noopener">Dokumentation</a>
+  </footer>
 
   <!-- JavaScript-Module laden -->
   <script type="module" src="/static/js/main.js"></script>
