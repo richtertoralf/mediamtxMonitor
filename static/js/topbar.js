@@ -38,8 +38,9 @@ export function renderTopBarContext(result = {}, activeStreamCount = 0) {
     ? info.server_ips.filter(value => typeof value === "string" && value).slice(0, 3)
     : [];
   container.appendChild(item("Server", `${info.host || "–"} · ${serverIps.join(" · ") || "–"}`));
-  const version = typeof result?.mediamtx_version === "string" && result.mediamtx_version.trim()
-    ? `v${result.mediamtx_version.trim()}` : "unbekannt";
+  // MediaMTX reports its version with a leading "v" (e.g. "v1.21.3"); show it once.
+  const rawVersion = typeof result?.mediamtx_version === "string" ? result.mediamtx_version.trim() : "";
+  const version = rawVersion ? `v${rawVersion.replace(/^v/i, "")}` : "unbekannt";
   container.appendChild(item("MediaMTX", version));
   container.appendChild(item("Streams", `${activeStreamCount} aktiv`));
 }

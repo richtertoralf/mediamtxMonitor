@@ -53,6 +53,10 @@ assert.equal(contextTexts()[2], "Streams 0 aktiv");
 renderTopBarContext({}, 0);
 assert.equal(contextTexts()[0], "Server – · –");
 
+// MediaMTX liefert die Version mit führendem "v" (/v3/info); kein doppeltes Präfix.
+renderTopBarContext({mediamtx_version: "v1.21.3"}, 1);
+assert.equal(contextTexts()[1], "MediaMTX v1.21.3");
+
 const conn = elements["topbar-conn"];
 const connTexts = () => conn.children.map(child => child.textContent);
 const now = Date.UTC(2026, 10, 7, 9, 0, 10);
