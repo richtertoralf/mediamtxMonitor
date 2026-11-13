@@ -51,6 +51,27 @@ Die jeweils zuständige Grundlage vor einer Änderung lesen:
   temporäre Ressourcen und verändern keine laufende Umgebung. Ausdrücklich
   beauftragte Integrations- oder Runtime-Tests bleiben davon unberührt.
 
+## Gemeinsame Regeln
+
+- Der Monitor stellt MediaMTX und, auf MediaMTX-Hosts, Redis bereit. Ein
+  vorhandenes Redis wird wiederverwendet und nicht aktualisiert (#40).
+  Uninstall und Purge entfernen MediaMTX und Redis nie.
+- Verwaltung: `mediamtx-monitor --help | --version | --status | --upgrade |
+  --check (Alias zu --check-config) | --uninstall | --purge [--yes]`.
+  Rückgabecodes 0 in Ordnung, 1 technischer Fehler, 2 ungültige Parameter
+  oder Konfiguration; gestoppte Units und eine fehlende MediaMTX-API sind
+  kein Fehler. `--uninstall` erhält die Konfiguration; `--purge` entfernt
+  nach Bestätigung nur eindeutig eigene Dateien und ein nur für den Monitor
+  angelegtes Konto (#33). Kein `--source`; Entwicklungsstände über
+  `devtools/deploy-dev.sh` mit Buildinformation.
+- Releases: Tag `vX.Y.Z` und GitHub Release auf `main`; nicht jeder Commit
+  ist ein Release. `--version` nennt Version und Commit.
+- Oberfläche: gemeinsame Token-Datei und Statusfarben, Umschalter
+  Hell/Dunkel; LIVE nur mit Nachweis.
+- Zugang: interaktive Oberflächen mit Benutzername und Passwort; lesende
+  Schnittstellen ohne Geheimnisse und ohne Nebenwirkungen.
+- Neue technische Bezeichner englisch.
+
 ## Dokumentationsregel
 
 - Unnötige Duplikation zwischen Dokumentations- und Instruktionsquellen
