@@ -101,13 +101,34 @@ Dashboard: `http://<server-ip>:8080/`
 | `mediamtx-monitor --status` | Dienste, Datenalter, Erreichbarkeit von MediaMTX und Redis, Dashboard-URLs; ohne sudo |
 | `mediamtx-monitor --check-config [DATEI]` | Konfiguration prüfen und wirksame Werte mit Herkunft anzeigen |
 | `sudo mediamtx-monitor --upgrade` | Monitor auf den aktuellen Stand von `main` aktualisieren; gleicher Stand ändert nichts |
-| `sudo ./uninstall.sh` | Monitor entfernen; MediaMTX und seine Konfiguration bleiben |
+| `sudo ./uninstall.sh` | Monitor einschließlich `collector.yaml` und Dienstkonto entfernen; MediaMTX und seine Konfiguration bleiben |
 
-MediaMTX selbst wird getrennt mit `sudo mediamtx --upgrade` aktualisiert; der
-Monitor verändert weder MediaMTX noch dessen Konfiguration. Die lokale
-`config/collector.yaml` gehört dem Betreiber und bleibt bei Upgrades erhalten.
+MediaMTX selbst wird getrennt mit `sudo mediamtx --upgrade` aktualisiert.
+Betrieb und Upgrade des Monitors verändern weder MediaMTX noch dessen
+Konfiguration; nur eine Fresh-Installation legt die `mediamtx.yml` einmalig an.
 Details: [Version und Upgrade](docs/INSTALLATION.md#version-und-upgrade),
-[Betriebsstatus](docs/INSTALLATION.md#betriebsstatus-anzeigen),
+[Betriebsstatus](docs/INSTALLATION.md#betriebsstatus-anzeigen).
+
+## Konfiguration
+
+Eine Datei konfiguriert den ganzen Monitor:
+`/opt/mediamtx-monitoring-backend/config/collector.yaml`. Der Installer legt sie
+aus der Vorlage [`config/collector.yaml`](config/collector.yaml) an und trägt
+die Adressen der MediaMTX-Control-API und der Browser-Vorschau ein. Danach
+gehört sie dem Betreiber; Upgrades lassen sie unverändert, `uninstall.sh`
+löscht sie.
+
+```bash
+sudo editor /opt/mediamtx-monitoring-backend/config/collector.yaml
+mediamtx-monitor --check-config      # wirksame Werte mit Herkunft; 0 gültig, 1 Fehler
+sudo systemctl restart mediamtx-api mediamtx-collector mediamtx-system
+```
+
+Die Dienste lesen die Datei nur beim Start; welcher Dienst welchen Wert liest,
+steht in der ausführlichen Beschreibung. Dashboard und Monitor-API haben keine
+Anmeldung, die Vorlage bindet sie an alle Schnittstellen auf Port 8080. Alle
+Einstellungen mit Standardwerten, Wirksamkeit und Rechten:
+[Konfiguration](docs/INSTALLATION.md#konfiguration),
 [Konfiguration prüfen](docs/INSTALLATION.md#konfiguration-prüfen).
 
 ## Entwicklung und Tests

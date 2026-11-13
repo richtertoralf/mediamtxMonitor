@@ -109,6 +109,11 @@ systemd/mediamtx-system.service    → /etc/systemd/system/mediamtx-system.servi
 
 `__pycache__/` und `*.pyc` werden ignoriert.
 
+Weicht die installierte `collector.yaml` von der Vorlage des Checkouts ab,
+ersetzt das Skript sie vollständig. Damit gehen die Werte verloren, die der
+Installer eingetragen hat (`api_base_url`, `webrtc_base_url`), und alle
+übrigen lokalen Änderungen. `--dry-run` zeigt die Abweichung vorher an.
+
 Die drei projekt-eigenen Monitor-Units werden nur bei inhaltlichen Abweichungen
 installiert. Danach lädt das Skript systemd genau einmal neu. Bei Änderungen an
 Backend, `collector.yaml` oder einer Monitor-Unit werden die Monitoring-Dienste

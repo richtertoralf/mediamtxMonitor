@@ -270,11 +270,152 @@ etwa auf einen inaktiven Dienst, nicht erreichbare Komponenten oder veraltete
 Daten (Streams älter als dreimal das Collector-Intervall, mindestens 10 s;
 Systemdaten älter als dreimal das Systemmonitor-Intervall).
 
-## Konfiguration prüfen
+## Konfiguration
+
+Die Abschnitte folgen der Reihenfolge Überblick, Speicherorte, Einstellungen,
+Prioritäten, Einrichtung und Änderung, Wirksamkeit, Geheimnisse und
+Berechtigungen, Installation/Aktualisierung/Entfernen, Prüfung.
+
+### Überblick
 
 `config/collector.yaml` konfiguriert trotz ihres historischen Namens die
 gesamte Anwendung: Collector, Systemmonitor, Monitor-API und Frontend. Eine
-Umbenennung ist nicht erforderlich. Die Prüfung liest die Datei, zeigt jeden
+Umbenennung ist nicht erforderlich. Die Datei gehört dem Betreiber und gilt
+dauerhaft für die Installation; sie hat keinen Bezug zu einzelnen
+Veranstaltungen. Daneben legt nur eine Fresh-Installation einmalig die
+globale MediaMTX-Konfiguration an ([MediaMTX-Endpoints](#mediamtx-endpoints),
+[Installation im Detail](#installation-im-detail)). Danach verwaltet der
+Monitor die `mediamtx.yml` nicht.
+
+### Speicherorte
+
+| Ort | Inhalt | Angelegt von | Geändert von |
+|---|---|---|---|
+| `/opt/mediamtx-monitoring-backend/config/collector.yaml` | Monitor-Konfiguration | `install.sh` als Kopie von `config/collector.yaml`, mit den ermittelten Werten für `api_base_url` und `webrtc_base_url` | Betreiber |
+| `/usr/local/etc/mediamtx.yml` | MediaMTX-Konfiguration | nur Fresh-Installation | MediaMTX-Betreiber |
+| Redis DB 0, `mediamtx-monitor:node:<node-id>:*` | Laufzeitzustand, keine Konfiguration | Monitor-Dienste | Monitor-Dienste |
+
+Der Pfad der `collector.yaml` ist fest; es gibt keine Umgebungsvariable und
+keinen Startparameter der Dienste, die ihn ändern.
+
+### Einstellungen
+
+Spalte „Standard“: gilt, wenn der Schlüssel in der Datei fehlt. Spalte
+„Vorlage“: Wert in `config/collector.yaml`, nur wenn er abweicht oder die
+Vorlage den Schlüssel nicht enthält.
+
+| Schlüssel | Bedeutung | Zulässige Werte | Standard | Vorlage |
+|---|---|---|---|---|
+| `api_base_url` | Control-API von MediaMTX für Collector und Monitor-API | Zeichenkette; der Installer verlangt eine HTTP(S)-URL ohne Zugangsdaten, Query und Fragment | `http://localhost:9997` | setzt der Installer |
+| `webrtc_base_url` | vom Browser erreichbare Basis der Vorschau | leer oder `http://`/`https://` mit Host, ohne Zugangsdaten, Query und Fragment | leer: beim Start abgeleitet ([MediaMTX-Endpoints](#mediamtx-endpoints)) | setzt der Installer |
+| `redis.host`, `redis.port` | Redis-Server | Zeichenkette; Port 1–65535 | `localhost`, `6379` | |
+| `redis.namespace` | Anwendungs-Namespace | nicht leer | `mediamtx-monitor:` | |
+| `redis.key` | Name des Stream-Snapshots | Zeichenkette | `streams:latest` | |
+| `node.id` | Kennung der überwachten MediaMTX-Instanz | `[A-Za-z0-9._-]+` | `local` | |
+| `collector.interval_seconds` | Abfragetakt der Control-API | ganze Zahl > 0 | `1` | |
+| `collector.forward_refresh_seconds`, `static_source_refresh_seconds`, `output_refresh_seconds` | Takte für Weiterleitungen, statische Quellen und Ausgänge | ganze Zahl > 0 | `5` | |
+| `collector.ignore_path_prefixes` | nicht angezeigte Pfade | Liste von Zeichenketten | `["__preview__/"]` | |
+| `collector.output_json_path` | JSON-Kopie des Stream-Snapshots | Pfad | `/tmp/mediamtx_streams.json` | |
+| `bitrate.smooth_alpha` | Glättung der Bitrate | > 0 und ≤ 1, oder `null` | `0.5` | |
+| `bitrate.smooth_reference_seconds` | Bezugszeit der Glättung | Zahl > 0 | `5` | |
+| `bitrate.min_dt`, `bitrate.ttl`, `bitrate.ignore_loopback` | Mindestabstand zweier Messungen (s), Lebensdauer des Zustands (s), Loopback-Verbindungen ignorieren | ≥ 0; > 0; `true`/`false` | `0.5`, `300`, `true` | nicht enthalten |
+| `system_monitor.interval_seconds` | Takt der Systemmetriken | ganze Zahl > 0 | `10` | |
+| `system_monitor.redis_key`, `system_monitor.output_json_path` | Snapshot-Name, JSON-Kopie | Zeichenkette, Pfad | `system:latest`, `/tmp/mediamtx_system.json` | |
+| `system_monitor.saturation_idle_percent`, `steal_hint_percent`, `pressure_hint_percent` | Schwellen der CPU-Hinweise ([CPU-Anzeige](TROUBLESHOOTING.md#cpu-anzeige-und-hinweise)) | Zahl | `5`, `10`, `20` | nicht enthalten |
+| `api_server.listen_host` | Bind-Adresse von Dashboard und Monitor-API | Zeichenkette | `127.0.0.1` | `0.0.0.0` (alle Schnittstellen) |
+| `api_server.listen_port` | Port von Dashboard und Monitor-API | 1–65535 | `8080` | |
+| `api_server.static_dir`, `api_server.index_file` | Dateien des Dashboards | Pfad, Dateiname | Installationsverzeichnis, `index.html` | |
+| `logging.level` | Log-Stufe der Monitor-API | `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` | `INFO` | |
+| `frontend.snapshot_refresh_ms`, `frontend.streamlist_refresh_ms` | Aktualisierungstakt im Browser | ganze Zahl > 0 | `1000` | |
+
+Einzelheiten zu Namespace und Node-ID: [Redis-Namespace und Node-ID](#redis-namespace-und-node-id).
+Keine Einstellung enthält heute ein Geheimnis.
+
+### Prioritäten
+
+Es gibt zwei Ebenen: Standardwert im Programm, darüber der Wert in
+`collector.yaml`. Fehlende Schlüssel erhalten den Standard. Ausnahmen:
+
+- Ein Abschnitt, der kein Mapping ist, wird zur Laufzeit stillschweigend
+  vollständig durch Standards ersetzt; `--check-config` meldet ihn als Fehler.
+- Ein leeres `webrtc_base_url` wird beim Start der Monitor-API aus der
+  Hostadresse und dem WebRTC-Listener von MediaMTX abgeleitet; ein gesetzter
+  Wert hat Vorrang.
+- Die alten Snapshot-Namen `mediamtx:streams:latest` und
+  `mediamtx:system:latest` werden auf die neuen Namen abgebildet
+  ([Version und Upgrade](#version-und-upgrade)).
+
+### Einrichtung und Änderung
+
+Bei der Installation setzt `install.sh` die beiden Endpoints aus seinen
+Optionen bzw. der Erkennung ([MediaMTX-Endpoints](#mediamtx-endpoints)). Alle
+übrigen Werte kommen aus der Vorlage. Später ändert der Betreiber die Datei
+von Hand:
+
+```bash
+sudo editor /opt/mediamtx-monitoring-backend/config/collector.yaml
+mediamtx-monitor --check-config
+sudo systemctl restart <betroffene Dienste>   # siehe Wirksamkeit
+```
+
+Eine Weboberfläche oder ein Befehl zum Ändern einzelner Werte ist nicht
+vorhanden. Das Entwicklungswerkzeug `devtools/deploy-dev.sh` ersetzt eine
+abweichende installierte `collector.yaml` durch die Vorlage des Checkouts;
+danach fehlen die vom Installer gesetzten Endpoints
+([Dev-Deployment](../devtools/README.md)).
+
+### Wirksamkeit
+
+Alle drei Dienste lesen die Datei nur beim Start. Nach einer Änderung sind die
+Dienste neu zu starten, die den geänderten Wert lesen:
+
+| Schlüssel bzw. Abschnitt | Neustart |
+|---|---|
+| `collector`, `bitrate` | `mediamtx-collector.service` |
+| `api_base_url` | `mediamtx-collector.service`, `mediamtx-api.service` |
+| `system_monitor` | `mediamtx-system.service`, `mediamtx-api.service` |
+| `webrtc_base_url`, `api_server`, `logging`, `frontend` | `mediamtx-api.service` |
+| `redis`, `node` | alle drei Dienste |
+
+Ohne lesbare Datei beenden sich Collector und Systemmonitor, die Monitor-API
+startet nach einer Warnung mit Standards.
+
+### Geheimnisse und Berechtigungen
+
+`collector.yaml` enthält heute keine Zugangsdaten: kein Redis-Passwort und
+keine Anmeldung an der Control-API. Endpoints mit Zugangsdaten lehnt der
+Installer ab, ein `webrtc_base_url` mit Zugangsdaten auch der Dienst. Die Datei gehört `mediamtxmon:mediamtxmon` mit Modus `0644`.
+`--check-config` maskiert dennoch Werte von Schlüsseln, die nach Passwort,
+Token, Secret oder Credential klingen, und Zugangsdaten in URLs.
+
+Bekannte Grenzen:
+
+- Dashboard und Monitor-API haben keine Anmeldung. Die Vorlage bindet sie an
+  alle Schnittstellen (`listen_host: 0.0.0.0`); den Zugang begrenzen
+  Firewall, VPN oder ein vorgeschalteter Proxy ([Ports](#ports)).
+- Die bei einer Fresh-Installation angelegte `/usr/local/etc/mediamtx.yml`
+  ist für alle lokalen Konten lesbar (`root:root`, `0644`). Trägt der
+  Betreiber oder eine andere Anwendung dort Zugangsdaten oder Stream-Keys ein,
+  sind auch diese lesbar.
+
+### Installation, Aktualisierung, Entfernen
+
+| Vorgang | Wirkung auf die Konfiguration |
+|---|---|
+| `install.sh`, Fresh | legt `mediamtx.yml` aus dem offiziellen Release-Archiv an und setzt dort `api`, `rtsp`, `webrtc` (`true`), `apiAddress` (`127.0.0.1:<API-Port>`), `apiEncryption`, `webrtcAddress` (`:<WebRTC-Port>`), `webrtcEncryption` (`false`); fügt die `__preview__`-Regel vor `all_others` ein; legt `collector.yaml` an |
+| `install.sh`, Reuse | ändert `mediamtx.yml` nicht; legt `collector.yaml` an |
+| `install.sh` bei vorhandener Monitor-Installation | bricht ab, ohne etwas zu überschreiben |
+| Redis | `install.sh` installiert `redis-server` per apt und aktiviert den Dienst, auch wenn Redis schon vorhanden ist; die Redis-Konfiguration bleibt unverändert. Eine Prüfung auf vorhandenes Redis ist geplant (#40) |
+| `sudo mediamtx-monitor --upgrade` | `collector.yaml` bleibt unverändert; die neue Version prüft sie vorher und bricht ab, wenn sie nicht passt ([Version und Upgrade](#version-und-upgrade)) |
+| `sudo ./uninstall.sh` | entfernt das gesamte Installationsverzeichnis **einschließlich `collector.yaml`**, das Kommando, die Units und das Dienstkonto; MediaMTX und Redis bleiben |
+
+Vor einer Deinstallation `collector.yaml` sichern, wenn sie später wieder
+gebraucht wird. Eine Deinstallation, die die Konfiguration erhält, und ein
+getrenntes vollständiges Entfernen sind noch nicht vorhanden, geplant (#33).
+
+### Konfiguration prüfen
+
+Die Prüfung liest die Datei, zeigt jeden
 wirksamen Wert mit seiner Herkunft (`Datei` oder `Default`) und den Diensten, die
 ihn lesen, und benennt Fehler und Warnungen:
 
@@ -296,22 +437,15 @@ Schlüssel, die nach Passwort, Token oder Secret klingen, werden maskiert.
   ignorieren.
 - Nicht gesetzte optionale Schlüssel sind kein Fehler; sie erhalten ihre
   rückwärtskompatiblen Defaults.
+- Ein Aufruf mit falschen Parametern endet mit Rückgabecode 2.
 
 Das Laufzeitverhalten bleibt unverändert: Ohne lesbare Datei beenden sich
 Collector und Systemmonitor, die Monitor-API startet nach einer Warnung mit
 Defaults; einen Abschnitt, der kein Mapping ist, ersetzen die Dienste
 stillschweigend durch Defaults. Deshalb vor und nach jeder Änderung prüfen.
-
-Nach einer Änderung sind die Dienste neu zu starten, die den geänderten Wert
-lesen:
-
-| Schlüssel bzw. Abschnitt | Neustart |
-|---|---|
-| `collector`, `bitrate` | `mediamtx-collector.service` |
-| `api_base_url` | `mediamtx-collector.service`, `mediamtx-api.service` |
-| `system_monitor` | `mediamtx-system.service`, `mediamtx-api.service` |
-| `webrtc_base_url`, `api_server`, `logging`, `frontend` | `mediamtx-api.service` |
-| `redis`, `node` | alle drei Dienste |
+Die wirksame Preview-Basis protokolliert die Monitor-API beim Start
+(`journalctl -u mediamtx-api`). Ob die Dienste laufen und aktuelle Daten
+liefern, zeigt [`mediamtx-monitor --status`](#betriebsstatus-anzeigen).
 
 Zu sichern ist `config/collector.yaml` unter dem Installationsverzeichnis; alle
 übrigen Dateien stellt `mediamtx-monitor --upgrade` beziehungsweise der
@@ -365,7 +499,9 @@ Zertifikate, Aufzeichnungen, Logs, Hooks sowie weitere von der jeweiligen
 MediaMTX-Konfiguration verwendete Dateien und Verzeichnisse.
 
 Die Deinstallation der Monitor-Anwendung entfernt ausschließlich deren
-eigene Ressourcen. `mediamtx.service`, das MediaMTX-Binary und die globale
+eigene Ressourcen, dazu gehören auch `collector.yaml` und das Dienstkonto
+`mediamtxmon` ([Installation, Aktualisierung, Entfernen](#installation-aktualisierung-entfernen)).
+`mediamtx.service`, das MediaMTX-Binary und die globale
 `mediamtx.yml` bleiben erhalten; eine Entfernung gemeinsamer Infrastruktur ist
 eine separate Betreiberoperation.
 
