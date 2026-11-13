@@ -53,24 +53,33 @@ Die jeweils zuständige Grundlage vor einer Änderung lesen:
 
 ## Gemeinsame Regeln
 
-- Der Monitor stellt MediaMTX und, auf MediaMTX-Hosts, Redis bereit. Ein
-  vorhandenes Redis wird wiederverwendet und nicht aktualisiert (#40).
-  Uninstall und Purge entfernen MediaMTX und Redis nie.
-- Verwaltung: `mediamtx-monitor --help | --version | --status | --upgrade |
-  --check (Alias zu --check-config) | --uninstall | --purge [--yes]`.
-  Rückgabecodes 0 in Ordnung, 1 technischer Fehler, 2 ungültige Parameter
-  oder Konfiguration; gestoppte Units und eine fehlende MediaMTX-API sind
-  kein Fehler. `--uninstall` erhält die Konfiguration; `--purge` entfernt
-  nach Bestätigung nur eindeutig eigene Dateien und ein nur für den Monitor
-  angelegtes Konto (#33). Kein `--source`; Entwicklungsstände über
-  `devtools/deploy-dev.sh` mit Buildinformation.
-- Releases: Tag `vX.Y.Z` und GitHub Release auf `main`; nicht jeder Commit
-  ist ein Release. `--version` nennt Version und Commit.
-- Oberfläche: gemeinsame Token-Datei und Statusfarben, Umschalter
-  Hell/Dunkel; LIVE nur mit Nachweis.
-- Zugang: interaktive Oberflächen mit Benutzername und Passwort; lesende
+Gemeinsam beschlossene Regeln der Produktfamilie. **Heute** beschreibt den
+vorhandenen Stand, **Ziel** eine beschlossene, noch offene Umsetzung mit
+Issue. Ein Ziel ist kein Auftrag, es nebenbei oder im Vorgriff umzusetzen.
+
+- Zuständigkeit: Der Monitor stellt MediaMTX und, auf MediaMTX-Hosts, Redis
+  bereit (Installation und globale Basiskonfiguration). Uninstall und Purge
+  entfernen beide nie. Ziel: ein vorhandenes Redis nicht aktualisieren (#40).
+- Monitoring liest MediaMTX über die Control API. Pfadabschnitte anderer
+  Anwendungen in der MediaMTX-Konfiguration bleiben unangetastet.
+- Verwaltung heute: `mediamtx-monitor --version | --status | --upgrade |
+  --check-config [DATEI]`; Deinstallation mit `sudo ./uninstall.sh` in einer
+  Stufe. Kein `--source`. Ziel (#33, #34): `--help`, `--check` als Alias,
+  `--uninstall` erhält die Konfiguration, `--uninstall --purge` nach
+  Bestätigung; Rückgabecodes 0 in Ordnung, 1 technischer Fehler, 2 ungültige
+  Parameter oder Konfiguration, gestoppte Units sind kein Fehler.
+- Releases: Bei einem beauftragten Release erhält der `main`-Commit einen
+  unveränderlichen Tag `vX.Y.Z` und ein GitHub Release; nicht jeder Commit ist
+  ein Release. Versionsquelle und Badge ändern sich im selben Commit.
+  `--upgrade` darf weiterhin neue Commits des vorgesehenen Branches
+  übernehmen; `--version` nennt Version und Commit.
+- Oberfläche heute: gemeinsame Token-Datei, LIVE nur mit Nachweis. Ziel:
+  Umschalter Hell/Dunkel.
+- Zugang: Ziel ist eine Anmeldung für interaktive Oberflächen; lesende
   Schnittstellen ohne Geheimnisse und ohne Nebenwirkungen.
-- Neue technische Bezeichner englisch.
+  Die Einzelheiten sind noch nicht entschieden; nicht im Vorgriff umsetzen.
+- Neue technische Bezeichner englisch; vorhandene deutsche Bezeichner nur in
+  getesteten Überarbeitungen umbenennen, keine Massenumbenennung.
 
 ## Dokumentationsregel
 
