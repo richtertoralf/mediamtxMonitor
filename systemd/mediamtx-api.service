@@ -1,9 +1,11 @@
 [Unit]
 Description=Mediamtx Monitoring API (FastAPI)
 # Ordering only: the API derives the preview base from MediaMTX at startup.
-# No Wants=/Requires=, so the monitor neither starts nor owns mediamtx.service.
+# No Wants=/Requires= on mediamtx.service: the monitor neither starts nor owns it.
 After=network.target redis-server.service mediamtx.service
-Requires=redis-server.service
+# Wants=, not Requires=: stopping redis-server must not stop this service;
+# it keeps running and reconnects when Redis is back.
+Wants=redis-server.service
 
 [Service]
 User=mediamtxmon

@@ -46,7 +46,27 @@ class MonitorUnitTests(unittest.TestCase):
                 if line.startswith(("Wants=", "Requires=", "BindsTo=", "PartOf="))
             ),
         )
-        self.assertIn("Requires=redis-server.service", directives)
+
+    def test_redis_stop_does_not_stop_the_monitor_units(self):
+        # systemd passes an explicit stop of redis-server on to Requires=,
+        # BindsTo= and PartOf= dependents but never starts them again; the
+        # processes reconnect to Redis on their own.
+        for unit in MONITOR_UNITS:
+            with self.subTest(unit=unit):
+                directives = unit_section(unit, "[Unit]")
+                self.assertIn("Wants=redis-server.service", directives)
+                after = [
+                    line.removeprefix("After=").split()
+                    for line in directives if line.startswith("After=")
+                ]
+                self.assertIn("redis-server.service", sum(after, []))
+                lifecycle = " ".join(
+                    line for line in directives
+                    if line.startswith(
+                        ("Requires=", "Requisite=", "BindsTo=", "PartOf=")
+                    )
+                )
+                self.assertNotIn("redis-server.service", lifecycle)
 
     def test_monitor_units_never_start_or_restart_mediamtx(self):
         for unit in MONITOR_UNITS:

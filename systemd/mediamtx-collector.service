@@ -1,7 +1,9 @@
 [Unit]
 Description=Mediamtx Monitoring Collector
 After=network.target redis-server.service
-Requires=redis-server.service
+# Wants=, not Requires=: stopping redis-server must not stop this service;
+# it keeps running and reconnects when Redis is back.
+Wants=redis-server.service
 
 [Service]
 User=mediamtxmon
