@@ -97,6 +97,17 @@ class RedisStore:
         payload = json.dumps(snapshot)
         self._redis.set(key, payload)
 
+    def write_snapshots(self, snapshots: dict[str, Any]) -> None:
+        """Store several snapshots in one transaction.
+
+        A Redis pipeline is a MULTI/EXEC transaction by default, so a reader
+        using one ``MGET`` sees either all old or all new values.
+        """
+        pipeline = self._redis.pipeline()
+        for key, snapshot in snapshots.items():
+            pipeline.set(key, json.dumps(snapshot))
+        pipeline.execute()
+
     def read_snapshot(self, key: str) -> Any:
         """Return a decoded snapshot, or ``None`` when the key does not exist."""
         payload = self._redis.get(key)

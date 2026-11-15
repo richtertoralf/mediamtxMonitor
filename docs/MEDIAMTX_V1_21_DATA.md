@@ -305,6 +305,13 @@ RTMP und MoQ nur mit Rate und Bytes. Die Intervallwerte laufen in dieselbe
 Kurzzeithistorie mit 10-s-/60-s-Fenstern; ein Zählerrücksprung erzeugt keinen
 negativen Wert. Es entstehen keine zusätzlichen API-Aufrufe.
 
+Aus `state` und dem Wachstum von `outboundBytes` zwischen zwei erfolgreichen
+Abfragen bewertet der Collector je Ziel einen Übertragungsbeleg
+(`transmission`). Je Pfad sagt `forward_observation`, ob die Liste erfolgreich
+abgefragt wurde; eine fehlgeschlagene Abfrage erscheint als `error` und nicht
+als leere Liste. Regeln und Felder:
+[Redis-Vertrag](ARCHITECTURE.md#redis-vertrag-für-lesende-konsumenten).
+
 Das Dashboard stellt diese Forward-/Push-Ziele unter OUT neben den Readern
 dar. Grundlage sind ausschließlich die sanitisierten `forwardDestinations`;
 angezeigt werden nur die von MediaMTX gelieferten Runtime-Zustände. Ziel-URLs,

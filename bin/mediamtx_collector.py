@@ -4,7 +4,8 @@ MediaMTX Monitor - stream collection orchestrator.
 
 Polls raw MediaMTX data through the client boundary, normalizes paths and
 connections, enriches protocol and calculated metrics, updates short history
-and lifecycle state, and writes the current snapshot with its collection time.
+and lifecycle state, evaluates forward transmission evidence, and writes the
+current snapshot together with its contract meta in one Redis transaction.
 
 Does not implement Control API transport, Redis key construction, the monitoring
 API or frontend, or local host-system monitoring.
@@ -18,6 +19,7 @@ import json
 import logging
 import sys
 import time
+import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 from urllib.parse import quote
@@ -44,6 +46,7 @@ try:
         observe_connection_groups,
         remote_host,
     )
+    from .forward_transmission import TransmissionState, evaluate_transmission
     from .mediamtx_client import MediaMTXClient, MediaMTXError, MediaMTXHTTPError
     from .mediamtx_model import (
         DETAIL_ENDPOINTS,
@@ -79,6 +82,7 @@ try:
         reader_srt_health_key,
         rtmp_frame_discard_key,
         stream_snapshot_freshness_key,
+        stream_snapshot_meta_key,
     )
     from .redis_store import NamespacedRedis, RedisStore
     from .protocol_metrics import (
@@ -106,6 +110,7 @@ except ImportError:
         summarize_history,
     )
     from connection_lifecycle import observe_connection_groups, remote_host
+    from forward_transmission import TransmissionState, evaluate_transmission
     from mediamtx_client import MediaMTXClient, MediaMTXError, MediaMTXHTTPError
     from mediamtx_model import (
         DETAIL_ENDPOINTS,
@@ -141,6 +146,7 @@ except ImportError:
         reader_srt_health_key,
         rtmp_frame_discard_key,
         stream_snapshot_freshness_key,
+        stream_snapshot_meta_key,
     )
     from redis_store import NamespacedRedis, RedisStore
     from protocol_metrics import (
@@ -177,15 +183,30 @@ r = None
 snapshot_store = None
 mediamtx_client = None
 
+# Version of the snapshot and meta contract for Redis consumers.
+CONTRACT_VERSION = 1
+# A measured section stays valid for this many of its refresh intervals.
+VALIDITY_INTERVALS = 3
+FORWARD_LIST_ENDPOINT = "/v3/paths/forward-dests/list"
+
 
 @dataclass
 class PollCache:
     """Small in-process cache for data that does not belong in the 1 Hz path."""
 
+    # A new generation starts with every collector start or reconfiguration;
+    # no measurement state crosses it.
+    generation: str = field(default_factory=lambda: uuid.uuid4().hex)
+    sequence: int = 0
     next_forward_refresh: float = 0.0
     next_static_source_refresh: float = 0.0
     next_output_write: float = 0.0
     forward_destinations: Dict[str, Any] = field(default_factory=dict)
+    forward_refreshed_at: Optional[float] = None
+    forward_failed_paths: set[str] = field(default_factory=set)
+    forward_transmissions: Dict[tuple[str, str], TransmissionState] = field(
+        default_factory=dict
+    )
     static_sources: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     lifecycle_roles_by_path: Dict[str, set[tuple[str, str]]] = field(
         default_factory=dict
@@ -260,12 +281,13 @@ def fetch(
     params: Optional[Dict[str, str]] = None,
     *,
     required: bool = False,
+    failures: Optional[set[str]] = None,
 ) -> Dict[str, Any]:
     """Fetch one MediaMTX endpoint under the collector failure policy.
 
-    Optional requests degrade to an empty item list. Required current-state
-    requests propagate failures so they cannot replace the snapshot with empty
-    or partially stale data.
+    Optional requests degrade to an empty item list and record the endpoint
+    in ``failures``. Required current-state requests propagate failures so
+    they cannot replace the snapshot with empty or partially stale data.
     """
     url = mediamtx_client.build_url(endpoint)
     try:
@@ -283,6 +305,8 @@ def fetch(
         if required:
             raise
         logging.warning(f"⚠️ API-Fehler {url}: {e}")
+        if failures is not None:
+            failures.add(endpoint)
         return {"items": []}
 
 
@@ -560,6 +584,127 @@ def _enrich_rtmp_lifecycle(
     known_roles.update(current_roles)
 
 
+def _forward_window_seconds() -> float:
+    return VALIDITY_INTERVALS * COLLECTOR_CFG["forward_refresh_seconds"]
+
+
+def _refresh_forward_destinations(
+    paths: list[Dict[str, Any]],
+    now: float,
+    fetch_items: Callable[..., list[Any]],
+) -> None:
+    """Query, enrich, and evaluate the forward destinations of every path.
+
+    A failed query leaves the path without destinations and marks it failed,
+    so consumers can tell it from an authoritatively empty list. Its
+    transmission state is kept for the comparison after the next success.
+    """
+    destinations_by_path: Dict[str, list[Dict[str, Any]]] = {}
+    failed: set[str] = set()
+    transmissions: Dict[tuple[str, str], TransmissionState] = {}
+    for path in paths:
+        name = str(path.get("name", ""))
+        try:
+            raw = fetch_items(
+                FORWARD_LIST_ENDPOINT, params={"path": name}, required=True
+            )
+        except MediaMTXError as exc:
+            logging.warning(
+                "Forward-Ziele von %s konnten nicht gelesen werden: %s", name, exc
+            )
+            destinations_by_path[name] = []
+            failed.add(name)
+            transmissions.update({
+                key: state
+                for key, state in poll_cache.forward_transmissions.items()
+                if key[0] == name
+            })
+            continue
+        destinations = []
+        for destination in sanitize_forward_destinations(raw):
+            destination = _enrich_forward_destination(name, destination, now)
+            if destination.get("id"):
+                key = (name, str(destination["id"]))
+                state = evaluate_transmission(
+                    poll_cache.forward_transmissions.get(key),
+                    destination,
+                    now,
+                    _forward_window_seconds(),
+                )
+                transmissions[key] = state
+                destination["transmission"] = state.as_snapshot()
+            destinations.append(destination)
+        destinations_by_path[name] = destinations
+    poll_cache.forward_destinations = destinations_by_path
+    poll_cache.forward_failed_paths = failed
+    poll_cache.forward_transmissions = transmissions
+    poll_cache.forward_refreshed_at = now
+    poll_cache.next_forward_refresh = now + COLLECTOR_CFG["forward_refresh_seconds"]
+
+
+def _forward_observation(path: str) -> Dict[str, Any]:
+    """Describe whether the cached forward list of one path is authoritative."""
+    refreshed_at = poll_cache.forward_refreshed_at
+    if path in poll_cache.forward_failed_paths:
+        status = "error"
+    elif refreshed_at is None or path not in poll_cache.forward_destinations:
+        status = "pending"
+    else:
+        return {
+            "status": "ok",
+            "measured_at": refreshed_at,
+            "valid_until": refreshed_at + _forward_window_seconds(),
+        }
+    return {"status": status, "measured_at": None, "valid_until": None}
+
+
+def _snapshot_meta(
+    *,
+    now: float,
+    collected_at: float,
+    path_names: list[str],
+    detail_failures: set[str],
+    mediamtx_version: Any,
+    mediamtx_started: Any,
+) -> Dict[str, Any]:
+    """Build the contract, generation, and per-section freshness of a snapshot."""
+    valid_until = now + VALIDITY_INTERVALS * INTERVAL
+    refreshed_at = poll_cache.forward_refreshed_at
+    forwards_complete = all(
+        _forward_observation(name)["status"] == "ok" for name in path_names
+    )
+    return {
+        "contract_version": CONTRACT_VERSION,
+        "node_id": config["node"]["id"],
+        "generation": poll_cache.generation,
+        "sequence": poll_cache.sequence,
+        "collected_at": collected_at,
+        "valid_until": valid_until,
+        "mediamtx": {"version": mediamtx_version, "started": mediamtx_started},
+        "sections": {
+            "paths": {
+                "status": "ok",
+                "measured_at": now,
+                "valid_until": valid_until,
+            },
+            "details": {
+                "status": "incomplete" if detail_failures else "ok",
+                "measured_at": now,
+                "valid_until": valid_until,
+                "failed": sorted(detail_failures),
+            },
+            "forwards": {
+                "status": "ok" if forwards_complete else "incomplete",
+                "measured_at": refreshed_at,
+                "valid_until": (
+                    refreshed_at + _forward_window_seconds()
+                    if refreshed_at is not None else None
+                ),
+            },
+        },
+    }
+
+
 def collect_and_store() -> Dict[str, float]:
     """Collect, enrich, and persist one current MediaMTX monitoring snapshot."""
     cycle_started = time.perf_counter()
@@ -575,10 +720,13 @@ def collect_and_store() -> Dict[str, float]:
         params: Optional[Dict[str, str]] = None,
         *,
         required: bool = False,
+        failures: Optional[set[str]] = None,
     ) -> Dict[str, Any]:
         started = time.perf_counter()
         try:
-            return fetch(endpoint, params=params, required=required)
+            return fetch(
+                endpoint, params=params, required=required, failures=failures
+            )
         finally:
             metrics["api_duration_ms"] += (
                 time.perf_counter() - started
@@ -590,12 +738,13 @@ def collect_and_store() -> Dict[str, float]:
         params: Optional[Dict[str, str]] = None,
         *,
         required: bool = False,
+        failures: Optional[set[str]] = None,
     ) -> list[Any]:
         """Return all items of a list endpoint; MediaMTX pages after 100 items.
 
         Further pages are requested only when ``pageCount`` reports them.
         """
-        data = cycle_fetch(endpoint, params, required=required)
+        data = cycle_fetch(endpoint, params, required=required, failures=failures)
         items = list(data.get("items") or [])
         page_count = data.get("pageCount")
         if type(page_count) is int:
@@ -604,6 +753,7 @@ def collect_and_store() -> Dict[str, float]:
                     endpoint,
                     {**(params or {}), "page": str(page)},
                     required=required,
+                    failures=failures,
                 ).get("items") or [])
         return items
 
@@ -672,8 +822,11 @@ def collect_and_store() -> Dict[str, float]:
         ]
         if connection.get("type") in DETAIL_ENDPOINTS
     }
+    detail_failures: set[str] = set()
     details = index_details({
-        obj_type: cycle_fetch_items(DETAIL_ENDPOINTS[obj_type])
+        obj_type: cycle_fetch_items(
+            DETAIL_ENDPOINTS[obj_type], failures=detail_failures
+        )
         for obj_type in DETAIL_ENDPOINTS
         if obj_type in active_types
     })
@@ -681,29 +834,16 @@ def collect_and_store() -> Dict[str, float]:
     if "hlsSession" in active_types:
         hls_muxers = {
             str(item.get("path")): item
-            for item in cycle_fetch_items(HLS_MUXER_ENDPOINT)
+            for item in cycle_fetch_items(
+                HLS_MUXER_ENDPOINT, failures=detail_failures
+            )
             if isinstance(item, dict) and item.get("path") is not None
         }
 
     if now >= poll_cache.next_forward_refresh:
-        # Rates need the refresh interval; between refreshes the cache stays.
-        poll_cache.forward_destinations = {
-            str(path.get("name", "")): [
-                _enrich_forward_destination(
-                    str(path.get("name", "")), destination, now
-                )
-                for destination in sanitize_forward_destinations(
-                    cycle_fetch_items(
-                        "/v3/paths/forward-dests/list",
-                        params={"path": str(path.get("name", ""))},
-                    )
-                )
-            ]
-            for path in visible_paths
-        }
-        poll_cache.next_forward_refresh = (
-            now + COLLECTOR_CFG["forward_refresh_seconds"]
-        )
+        # Rates need the refresh interval; between refreshes the cache stays
+        # and keeps its own measurement time.
+        _refresh_forward_destinations(visible_paths, now, cycle_fetch_items)
 
     if now >= poll_cache.next_static_source_refresh:
         # MediaMTX has no list of static sources; ask only paths that pull.
@@ -732,6 +872,7 @@ def collect_and_store() -> Dict[str, float]:
             mediamtx_version,
             forward_destinations,
         )
+        entry["forward_observation"] = _forward_observation(name)
         source = entry["source"]
         src_type: Optional[str] = source["type"]
         if src_type in STATIC_SOURCE_CONNECTION_TYPES:
@@ -975,13 +1116,24 @@ def collect_and_store() -> Dict[str, float]:
         aggregated.append(entry)
 
     collected_at = time.time()
+    poll_cache.sequence += 1
+    meta = _snapshot_meta(
+        now=now,
+        collected_at=collected_at,
+        path_names=[str(path.get("name", "")) for path in visible_paths],
+        detail_failures=detail_failures,
+        mediamtx_version=mediamtx_version,
+        mediamtx_started=mediamtx_started,
+    )
     snapshot_started = time.perf_counter()
     try:
-        snapshot_store.write_snapshot(REDIS_KEY, aggregated)
-        snapshot_store.write_snapshot(
-            stream_snapshot_freshness_key(REDIS_KEY), collected_at
-        )
-        snapshot_store.write_snapshot(preview_paths_key(REDIS_KEY), preview_count)
+        # One transaction keeps snapshot and meta coherent for MGET readers.
+        snapshot_store.write_snapshots({
+            REDIS_KEY: aggregated,
+            stream_snapshot_freshness_key(REDIS_KEY): collected_at,
+            preview_paths_key(REDIS_KEY): preview_count,
+            stream_snapshot_meta_key(REDIS_KEY): meta,
+        })
         logging.info(
             f"✅ {len(aggregated)} Pfade in Redis gespeichert (Key: {REDIS_KEY})."
         )

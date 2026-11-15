@@ -39,6 +39,9 @@ class FakeRedis:
     def expire(self, key, seconds):
         self.expirations[key] = seconds
 
+    def pipeline(self):
+        return FakePipeline(self)
+
     def zrangebyscore(self, key, minimum, maximum):
         values = self.sorted_sets.get(key, {})
         return [
@@ -46,6 +49,20 @@ class FakeRedis:
             for member, score in sorted(values.items(), key=lambda item: item[1])
             if float(minimum) <= score <= float(maximum)
         ]
+
+
+class FakePipeline:
+    def __init__(self, redis_client):
+        self.redis = redis_client
+        self.operations = []
+
+    def set(self, key, value, ex=None):
+        self.operations.append((key, value, ex))
+        return self
+
+    def execute(self):
+        for key, value, ex in self.operations:
+            self.redis.set(key, value, ex=ex)
 
 
 class FakeMediaMTXClient:
@@ -305,6 +322,11 @@ class CollectorSrtHealthIntegrationTests(unittest.TestCase):
                         },
                     }
                 ],
+                "forward_observation": {
+                    "status": "ok",
+                    "measured_at": mock.ANY,
+                    "valid_until": mock.ANY,
+                },
             },
         )
 

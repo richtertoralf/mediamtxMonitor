@@ -61,6 +61,11 @@ def stream_snapshot_freshness_key(snapshot_key: str) -> str:
     return f"{snapshot_key}:collected_at"
 
 
+def stream_snapshot_meta_key(snapshot_key: str) -> str:
+    """Build the contract and freshness sidecar written with a stream snapshot."""
+    return f"{snapshot_key}:meta"
+
+
 def mediamtx_version_key(snapshot_key: str) -> str:
     """Build the last successfully observed MediaMTX-version sidecar."""
     return f"{snapshot_key}:mediamtx_version"

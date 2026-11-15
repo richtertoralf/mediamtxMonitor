@@ -45,6 +45,7 @@ FORWARD_METRIC_FIELDS = (
     "common",
     "protocol_metrics",
     "window_metrics",
+    "transmission",
 )
 # Target addresses identify the destination like its URL and stay hidden.
 FORWARD_HIDDEN_DETAILS = frozenset({"remoteAddr", "localCandidate", "remoteCandidate"})

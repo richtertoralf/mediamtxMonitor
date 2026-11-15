@@ -18,6 +18,7 @@ from bin.redis_keys import (
     rtmp_frame_discard_key,
     srt_counter_key,
     stream_snapshot_freshness_key,
+    stream_snapshot_meta_key,
 )
 
 
@@ -30,6 +31,11 @@ class SnapshotKeyTests(unittest.TestCase):
         self.assertEqual(
             stream_snapshot_freshness_key("streams:latest"),
             "streams:latest:collected_at",
+        )
+
+    def test_stream_meta_is_a_snapshot_sidecar(self):
+        self.assertEqual(
+            stream_snapshot_meta_key("streams:latest"), "streams:latest:meta"
         )
 
     def test_mediamtx_version_is_a_snapshot_sidecar(self):
