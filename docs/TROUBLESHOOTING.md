@@ -63,6 +63,18 @@ redis-cli -h 127.0.0.1 -p 6379 PING
 Erwartet wird `PONG`. Bei Redis-Ausfall können die drei Monitor-Dienste aufgrund
 ihrer erforderlichen Redis-Abhängigkeit ausfallen; MediaMTX bleibt unabhängig.
 
+Stand und Frische, wie lesende Anwendungen sie sehen (Default-Namespace):
+
+```bash
+redis-cli -h 127.0.0.1 -p 6379 GET mediamtx-monitor:node:local:streams:latest:meta \
+  | python3 -m json.tool
+```
+
+Liegt `valid_until` in der Vergangenheit, schreibt der Collector nicht mehr.
+`sections.forwards.status` `incomplete` zeigt fehlgeschlagene
+Forward-Abfragen; die betroffenen Pfade tragen `forward_observation.status`
+`error`. Felder: [Redis-Vertrag](ARCHITECTURE.md#redis-vertrag-für-lesende-konsumenten).
+
 ## Monitor-API
 
 ```bash

@@ -43,6 +43,9 @@ Der Collector aktualisiert den Stream-Snapshot standardmäßig ungefähr einmal
 pro Sekunde. Der Browser ruft `GET /api/streams` regelmäßig per HTTP-Polling
 ab; WebSockets werden nicht verwendet. Redis hält neben aktuellen Snapshots
 kurzlebigen Messzustand und eine Kurzzeithistorie für Verbindungsmetriken.
+Andere Anwendungen können den Stand mit Messzeiten und einem Übertragungsbeleg
+je Forward-Ziel lesend aus Redis übernehmen; den Vertrag beschreibt
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#redis-vertrag-für-lesende-konsumenten).
 
 ![MediaMTX Monitor Dashboard](MediamtxMonitor.png)
 

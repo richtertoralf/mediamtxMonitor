@@ -71,6 +71,36 @@ class RedisStoreTests(unittest.TestCase):
             "mediamtx-monitor:node:node-a:",
         )
 
+    def test_several_snapshots_are_written_in_one_namespaced_transaction(self):
+        raw = FakeRedis()
+        executed = []
+
+        class Pipeline:
+            def __init__(self):
+                self.operations = []
+
+            def set(self, key, value):
+                self.operations.append((key, value))
+
+            def execute(self):
+                executed.append(list(self.operations))
+                for key, value in self.operations:
+                    raw.set(key, value)
+
+        raw.pipeline = Pipeline
+        store = RedisStore(NamespacedRedis(raw, "mediamtx-monitor:", "local"))
+
+        store.write_snapshots({"streams:latest": [], "streams:latest:meta": {"v": 1}})
+
+        self.assertEqual(executed, [[
+            ("mediamtx-monitor:node:local:streams:latest", "[]"),
+            ("mediamtx-monitor:node:local:streams:latest:meta", '{"v": 1}'),
+        ]])
+        self.assertEqual(raw.set_calls, [
+            ("mediamtx-monitor:node:local:streams:latest", "[]"),
+            ("mediamtx-monitor:node:local:streams:latest:meta", '{"v": 1}'),
+        ])
+
     def test_write_serializes_snapshot_to_supplied_key_without_ttl(self):
         snapshot = {"streams": [{"name": "camera/main"}]}
 

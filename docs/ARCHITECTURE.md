@@ -292,15 +292,18 @@ diesem schnellen Pfad nur die Detaillisten der dort tatsächlich referenzierten
 Verbindungstypen ab. Der Current Snapshot wird nach jedem erfolgreichen
 Path-Poll vollständig ersetzt. Ein separater Redis-Wert `collected_at` zum
 Snapshot-Key macht den Zeitpunkt des letzten erfolgreichen Schreibens in der
-API sichtbar. Die zuletzt erfolgreich über `/v3/info` beobachtete
+API sichtbar; mit ihm schreibt der Collector in derselben Transaktion den
+Meta-Wert des [Redis-Vertrags](#redis-vertrag-für-lesende-konsumenten). Die zuletzt erfolgreich über `/v3/info` beobachtete
 MediaMTX-Version wird zusätzlich als eigener Sidecar-Wert gespeichert und von
 der API unabhängig von einer eventuell leeren Streamliste bereitgestellt. Die
 zugehörige `started`-Zeit wird ebenfalls separat gespeichert, damit ein
 MediaMTX-Neustart unmittelbar erkennbar bleibt.
 
-Path-Forward-Ziele und die optionale JSON-Diagnosedatei bleiben im seriellen
-Collector diagnostische Daten und werden alle 5 Sekunden aktualisiert. Die
-kleine `/v3/info`-Antwort wird in jedem Collector-Zyklus gelesen.
+Path-Forward-Ziele und die optionale JSON-Diagnosedatei werden im seriellen
+Collector alle 5 Sekunden aktualisiert; Forward-Ziele tragen dabei ihre eigene
+Messzeit, die ein späterer Snapshot nicht verjüngt. Details statischer Quellen
+werden ebenfalls seltener gelesen und sind reine Diagnose. Die kleine
+`/v3/info`-Antwort wird in jedem Collector-Zyklus gelesen.
 Für die oben definierte MediaMTX-Datenquellengrenze gilt insbesondere: Externe
 ICMP-Pings werden nicht ausgeführt, und Protokolle ohne von MediaMTX
 bereitgestellte native RTT besitzen keine RTT-Anzeige.
@@ -312,6 +315,68 @@ Connections werden gleichzeitig dargestellt. Kurzzeithistorien sind strikt vom
 Current State getrennt: Sie dürfen nach einem Disconnect bis zu ihrer TTL
 fortbestehen, werden aber weder zur Connection-Erkennung noch zur
 Snapshot-Zusammenführung verwendet.
+
+### Redis-Vertrag für lesende Konsumenten
+
+Andere Anwendungen dürfen den Stream-Snapshot lesend aus Redis übernehmen,
+statt MediaMTX selbst abzufragen. Der Monitor kennt diese Anwendungen nicht.
+Vertragsversion 1 (Keys ohne den Prefix aus dem folgenden Abschnitt):
+
+| Key | Inhalt |
+|---|---|
+| `streams:latest` | Liste der normalisierten Pfade |
+| `streams:latest:meta` | Vertrag, Generation und Messzeiten dieses Stands |
+| `streams:latest:collected_at` | Schreibzeitpunkt (älterer Einzelwert) |
+| `streams:latest:preview_paths` | Zahl aktiver Vorschaupfade |
+
+Der Collector schreibt die vier Werte in einer Redis-Transaktion. Wer
+`streams:latest` und `streams:latest:meta` mit einem `MGET` liest, erhält einen
+kohärenten Stand.
+
+`streams:latest:meta`:
+
+| Feld | Bedeutung |
+|---|---|
+| `contract_version` | `1`; steigt bei einer inkompatiblen Änderung |
+| `node_id` | `node.id` aus der Konfiguration |
+| `generation` | neu bei jedem Collector-Start und jeder Neukonfiguration; kein Messzustand überdauert sie |
+| `sequence` | steigt mit jedem geschriebenen Stand einer Generation; Lücken möglich |
+| `collected_at` | Schreibzeitpunkt, gleich `streams:latest:collected_at` |
+| `valid_until` | Messzeit der Pfadliste plus drei Collector-Intervalle |
+| `mediamtx` | `version` und `started` aus `/v3/info` |
+| `sections.paths` | `status`, `measured_at`, `valid_until` der Pfadliste |
+| `sections.details` | dasselbe für Verbindungsdetails und HLS-Muxer; `incomplete` mit den Endpunkten unter `failed`, wenn eine Abfrage fehlschlug |
+| `sections.forwards` | letzte Abfrage der Forward-Ziele, gültig drei Abfrageintervalle; `incomplete`, wenn ein Pfad fehlschlug oder noch nicht abgefragt ist |
+
+Zeiten sind Unix-Sekunden. Nach `valid_until` gilt ein Stand als veraltet:
+Collector, Redis-Schreiben oder MediaMTX liefern nicht. Eine fehlgeschlagene
+Pfadabfrage überschreibt nichts; der alte Stand läuft ab.
+
+Je Pfad steht `forward_observation`:
+
+| `status` | Bedeutung |
+|---|---|
+| `ok` | Liste mit `measured_at` und `valid_until` erfolgreich abgefragt; leer heißt: keine Forward-Ziele |
+| `error` | Abfrage fehlgeschlagen; Liste leer, Inhalt unbekannt |
+| `pending` | Pfad nach der letzten Abfrage aufgetaucht; Inhalt unbekannt |
+
+Je Forward-Ziel steht `transmission`, der bewertete Übertragungsbeleg:
+
+| Feld | Bedeutung |
+|---|---|
+| `status` | `sending`: Zustand `forwarding` und `outboundBytes` seit der vorigen erfolgreichen Abfrage gewachsen, Abstand höchstens drei Abfrageintervalle; `not_sending`: Zustand `idle` oder `error`, oder kein Wachstum; `unknown`: kein Beleg |
+| `reason` | `bytes_growing`, `state_idle`, `state_error`, `no_byte_growth`, `first_sample`, `sample_gap`, `counter_reset`, `no_byte_counter` oder `state_unknown` |
+| `since` | erste Abfrage der laufenden Übertragung, sonst `null` |
+| `since_observed` | `true`: Beginn beobachtet; `false`: lief schon bei der ersten Beobachtung, der echte Beginn ist früher und unbekannt |
+| `last_growth_at` | letzte Abfrage mit Wachstum |
+| `ended_at` | erste Abfrage ohne Übertragung nach dem letzten Wachstum; `null`, solange übertragen wird |
+
+Der Beleg sagt nur, dass MediaMTX Daten an das Ziel sendet, nicht, dass eine
+Plattform sie annimmt oder veröffentlicht. Fehlt ein Forward-Ziel in einer
+Liste mit `status: ok`, existiert es nicht mehr; sein Ende liegt zwischen der
+vorigen und dieser Abfrage. Der Bewertungszustand liegt im Speicher des
+Collectors (`bin/forward_transmission.py`) und beginnt mit jeder Generation
+neu.
 
 ### Redis Key Schema
 
@@ -465,6 +530,7 @@ bin/
 ├── redis_keys.py                # zentrales Key-Schema, falls separat sinnvoll
 ├── bitrate.py                   # Bitratenmetrik
 ├── connection_history.py        # 60-s-History und Fensterstatistiken
+├── forward_transmission.py      # Übertragungsbeleg je Forward-Ziel
 ├── srt_metrics.py               # SRT-Metriken; Bewertung später getrennt
 ├── health.py                    # erst bei konkreter Health-Bewertung
 └── system_metrics.py            # testbare Host-Erfassung, bei Extraktion
