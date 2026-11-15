@@ -60,8 +60,15 @@ kann trotzdem aktiv bleiben und den Verbindungsversuch wiederholen.
 redis-cli -h 127.0.0.1 -p 6379 PING
 ```
 
-Erwartet wird `PONG`. Bei Redis-Ausfall können die drei Monitor-Dienste aufgrund
-ihrer erforderlichen Redis-Abhängigkeit ausfallen; MediaMTX bleibt unabhängig.
+Erwartet wird `PONG`. Die drei Monitor-Dienste starten `redis-server.service`
+mit (`Wants=`), hängen aber nicht von dessen Lauf ab: Ein Stopp oder Absturz
+von Redis beendet sie nicht. Während des Ausfalls schreiben Collector und
+Systemmonitor nichts und protokollieren Redis-Fehler; `/api/streams` antwortet
+mit HTTP 500. Läuft Redis wieder, verbinden sich alle drei ohne Neustart neu;
+Collector und Systemmonitor schreiben spätestens im nächsten Erfassungsintervall
+frische Daten. Ist Redis beim Start eines Dienstes nicht erreichbar, beendet er
+sich mit einem Fehler, und systemd startet ihn nach 5 s erneut. MediaMTX bleibt
+unabhängig.
 
 Stand und Frische, wie lesende Anwendungen sie sehen (Default-Namespace):
 

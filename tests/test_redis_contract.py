@@ -44,6 +44,42 @@ class RecordingRedis(FakeRedis):
         return Pipeline()
 
 
+class OutageRedis(RecordingRedis):
+    """Fake Redis that refuses every command while ``down`` is set."""
+
+    def __init__(self):
+        super().__init__()
+        self.down = False
+
+    def _refuse_while_down(self):
+        if self.down:
+            raise mediamtx_collector.RedisError("Connection refused")
+
+    def get(self, key):
+        self._refuse_while_down()
+        return super().get(key)
+
+    def set(self, key, value, ex=None):
+        self._refuse_while_down()
+        return super().set(key, value, ex=ex)
+
+    def zadd(self, key, members):
+        self._refuse_while_down()
+        return super().zadd(key, members)
+
+    def zremrangebyscore(self, key, minimum, maximum):
+        self._refuse_while_down()
+        return super().zremrangebyscore(key, minimum, maximum)
+
+    def expire(self, key, seconds):
+        self._refuse_while_down()
+        return super().expire(key, seconds)
+
+    def zrangebyscore(self, key, minimum, maximum):
+        self._refuse_while_down()
+        return super().zrangebyscore(key, minimum, maximum)
+
+
 class ContractClient:
     def __init__(self):
         self.paths = ["cam", "master"]
@@ -241,6 +277,41 @@ class RedisContractTests(unittest.TestCase):
         # Nothing new was written; the old meta is past its validity.
         self.assertEqual(meta["collected_at"], 100.0)
         self.assertLess(meta["valid_until"], 110.0)
+
+    def test_redis_outage_skips_the_write_and_the_next_cycle_recovers(self):
+        # The units only want redis-server, so a Redis stop leaves the
+        # collector running; it must neither raise nor need a restart.
+        class GrowingClient(ContractClient):
+            polls = 0
+
+            def get_json(self, endpoint, params=None):
+                data = super().get_json(endpoint, params)
+                if endpoint == "/v3/paths/list":
+                    self.polls += 1
+                    for item in data["items"]:
+                        item["inboundBytes"] = 1_000_000 + 250_000 * self.polls
+                        item["inboundFramesInError"] = 0
+                return data
+
+        self.redis = OutageRedis()
+        mediamtx_collector.r = self.redis
+        mediamtx_collector.snapshot_store = RedisStore(self.redis)
+        mediamtx_collector.mediamtx_client = GrowingClient()
+        _, before = self.collect(100.0)
+
+        self.redis.down = True
+        with self.assertLogs(level="ERROR") as logs:
+            _, during = self.collect(101.0)
+        self.assertIn("Connection refused", "\n".join(logs.output))
+        self.assertEqual(during, before)
+
+        self.redis.down = False
+        streams, after = self.collect(102.0)
+        self.assertEqual(after["collected_at"], 102.0)
+        self.assertEqual(after["generation"], before["generation"])
+        self.assertGreater(after["sequence"], before["sequence"])
+        # The rate spans the outage from the last stored counter sample.
+        self.assertEqual(streams["cam"]["source"]["bitrate_mbps"], 2.0)
 
 
 if __name__ == "__main__":
