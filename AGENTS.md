@@ -78,6 +78,23 @@ Issue. Ein Ziel ist kein Auftrag, es nebenbei oder im Vorgriff umzusetzen.
 - Zugang: Ziel ist eine Anmeldung für interaktive Oberflächen; lesende
   Schnittstellen ohne Geheimnisse und ohne Nebenwirkungen.
   Die Einzelheiten sind noch nicht entschieden; nicht im Vorgriff umsetzen.
+- Python: Unterstützt werden Ubuntu 24.04 LTS mit Python 3.12 und Ubuntu 26.04
+  LTS mit Python 3.14; andere Versionen werden nicht eigens unterstützt oder
+  getestet. Nichts verwenden, was erst nach 3.12 eingeführt wurde, außer
+  ausdrücklich begründet. Bewährte, einfache Lösungen, möglichst wenige
+  Abhängigkeiten, keine experimentellen Frameworks. Die Funktion wird für
+  beide Zielplattformen nachgewiesen, vorzugsweise auf eigener Infrastruktur;
+  GitHub Actions ist keine Pflicht, keine weiteren Versionsmatrizen, keine
+  Mehrfachläufe nur wegen verschiedener GitHub-Ereignisse. Installer und
+  Upgrader prüfen die Python-Kompatibilität und verwalten die venv; die
+  System-Python-Version ersetzen sie nicht. Gilt für jede Änderung;
+  Bestehendes wird nicht allein deswegen umgebaut. Heute abweichend:
+  Installation zusätzlich auf Raspberry Pi OS (64 Bit) dokumentiert; Nachweis
+  für Ubuntu 26.04 mit Python 3.14 steht aus.
+- Tests heute: die Python-Unit-Tests und der JavaScript-Renderer-Test unter
+  `tests/` (Befehl noch nicht dokumentiert). Der Prüfbefehl läuft vor dem
+  Merge vollständig lokal; das Ergebnis steht im PR. Ein Nachweis für Ubuntu
+  26.04 mit Python 3.14 erfolgt vor Release und Feldeinsatz.
 - Neue technische Bezeichner englisch; vorhandene deutsche Bezeichner nur in
   getesteten Überarbeitungen umbenennen, keine Massenumbenennung.
 
