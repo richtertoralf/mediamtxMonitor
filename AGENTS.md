@@ -116,7 +116,8 @@ auf dem sie liegt.
 - Jede verbindliche Aussage hat einen Ort; andere Stellen verweisen darauf.
   Einen Inhalt erst durch einen Verweis ersetzen, wenn er am Zielort
   vollständig dokumentiert ist. Überholte Aussagen ersetzen oder entfernen;
-  gültige Informationen nicht ohne fachlichen Grund entfernen.
+  gültige Informationen nicht ohne fachlichen Grund entfernen, sondern bei
+  Bedarf nach `docs/` verschieben.
 - **Vor jedem Commit:** betroffene Dokumentation im selben Commit
   nachführen. Ist keine betroffen, entsteht keine künstliche Änderung.
 - **Vor jedem Merge:** Umsetzung gegen die betroffene Dokumentation und die
